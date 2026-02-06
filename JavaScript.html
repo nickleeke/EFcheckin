@@ -8,7 +8,9 @@ var appState = {
   dashboardData: [],
   currentStudentId: null,
   currentCheckIns: [],
-  editingCheckIn: null
+  editingCheckIn: null,
+  sortField: 'name',
+  sortAsc: true
 };
 
 // ─── Preloaded Options ───
@@ -76,6 +78,26 @@ function loadDashboard() {
     .getDashboardData();
 }
 
+function toggleSort(field) {
+  if (appState.sortField === field) {
+    appState.sortAsc = !appState.sortAsc;
+  } else {
+    appState.sortField = field;
+    appState.sortAsc = true;
+  }
+  renderDashboard(appState.dashboardData);
+}
+
+function sortIcon(field) {
+  var arrow = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>';
+  if (appState.sortField === field) {
+    arrow = appState.sortAsc
+      ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 14l5-5 5 5z"/></svg>'
+      : '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>';
+  }
+  return '<button class="btn-icon btn-sort" onclick="event.stopPropagation(); toggleSort(\'' + field + '\')" aria-label="Sort by ' + field + '">' + arrow + '</button>';
+}
+
 function renderDashboard(data) {
   var container = document.getElementById('dashboard-table-container');
 
@@ -88,14 +110,29 @@ function renderDashboard(data) {
     return;
   }
 
+  // Sort data
+  var sorted = data.slice().sort(function(a, b) {
+    var cmp = 0;
+    if (appState.sortField === 'name') {
+      cmp = String(a.lastName).localeCompare(String(b.lastName));
+      if (cmp === 0) cmp = String(a.firstName).localeCompare(String(b.firstName));
+    } else if (appState.sortField === 'grade') {
+      cmp = String(a.grade || '').localeCompare(String(b.grade || ''));
+      if (cmp === 0) cmp = String(a.lastName).localeCompare(String(b.lastName));
+    }
+    return appState.sortAsc ? cmp : -cmp;
+  });
+
   var html = '<table class="dashboard-table"><thead><tr>' +
-    '<th>Name</th><th>Grade</th>' +
+    '<th><span class="th-sortable">' + sortIcon('name') + 'Name</span></th>' +
+    '<th><span class="th-sortable">' + sortIcon('grade') + 'Grade</span></th>' +
     '<th>EF Avg</th><th>Trend</th><th>GPA</th>' +
     '<th>Missing</th><th>Last Check-In</th><th>Actions</th>' +
     '</tr></thead><tbody>';
 
-  data.forEach(function(s, index) {
-    html += '<tr onclick="openSidePanel(' + index + ')" title="Click for quick view">';
+  sorted.forEach(function(s, index) {
+    var origIndex = data.indexOf(s);
+    html += '<tr onclick="openSidePanel(' + origIndex + ')" title="Click for quick view">';
     html += '<td><strong>' + esc(s.firstName + ' ' + s.lastName) + '</strong></td>';
     html += '<td>' + esc(s.grade || '-') + '</td>';
 
