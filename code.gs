@@ -42,7 +42,7 @@ function getSS_() {
 function doGet() {
   const template = HtmlService.createTemplateFromFile('Index');
   return template.evaluate()
-    .setTitle('EF Weekly Check-In')
+    .setTitle('Richfield Public Schools | EF Check-In')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
