@@ -257,13 +257,14 @@ function getCheckIns(studentId) {
     if (data[i][1] === studentId) {
       const row = {};
       headers.forEach(function(h, idx) { row[h] = data[i][idx]; });
+      row.weekOf = formatDateValue_(row.weekOf);
       try { row.academicData = JSON.parse(row.academicDataJson || '[]'); }
       catch(e) { row.academicData = []; }
       results.push(row);
     }
   }
 
-  results.sort(function(a, b) { return String(b.weekOf).localeCompare(String(a.weekOf)); });
+  results.sort(function(a, b) { return b.weekOf.localeCompare(a.weekOf); });
   return results;
 }
 
@@ -294,6 +295,7 @@ function getDashboardData() {
     for (let i = 1; i < ciData.length; i++) {
       const r = {};
       ciHeaders.forEach(function(h, idx) { r[h] = ciData[i][idx]; });
+      r.weekOf = formatDateValue_(r.weekOf);
       try { r.academicData = JSON.parse(r.academicDataJson || '[]'); }
       catch(e) { r.academicData = []; }
       allCheckIns.push(r);
@@ -302,7 +304,7 @@ function getDashboardData() {
 
   const summary = students.map(function(s) {
     const checkIns = allCheckIns.filter(function(ci) { return ci.studentId === s.id; });
-    checkIns.sort(function(a, b) { return String(b.weekOf).localeCompare(String(a.weekOf)); });
+    checkIns.sort(function(a, b) { return b.weekOf.localeCompare(a.weekOf); });
 
     const latest = checkIns[0] || null;
     const totalCheckIns = checkIns.length;
@@ -374,6 +376,19 @@ function getDashboardData() {
 }
 
 // ───── Helpers ─────
+
+/** Normalize a value that may be a Date object into YYYY-MM-DD string */
+function formatDateValue_(val) {
+  if (!val) return '';
+  if (val instanceof Date) {
+    var y = val.getFullYear();
+    var m = ('0' + (val.getMonth() + 1)).slice(-2);
+    var d = ('0' + val.getDate()).slice(-2);
+    return y + '-' + m + '-' + d;
+  }
+  return String(val);
+}
+
 function initializeSheetsIfNeeded_() {
   const ss = getSS_();
   if (!ss.getSheetByName(SHEET_STUDENTS) || !ss.getSheetByName(SHEET_CHECKINS)) {
