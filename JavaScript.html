@@ -11,6 +11,13 @@ var appState = {
   editingCheckIn: null
 };
 
+// ─── Preloaded Options ───
+var PRELOADED_CLASSES = [
+  'Math', 'Lit Lab', 'Reading Tier', 'Numbers Lab', 'ELA',
+  'Science', 'Woodshop', 'PE', 'STEAM', 'Art',
+  'Photography', 'Choir', 'Band', 'Academic Skills'
+];
+
 // ─── Initialization ───
 document.addEventListener('DOMContentLoaded', function() {
   showLoading();
@@ -82,7 +89,7 @@ function renderDashboard(data) {
   }
 
   var html = '<table class="dashboard-table"><thead><tr>' +
-    '<th>Name</th><th>Grade</th><th>Period</th>' +
+    '<th>Name</th><th>Grade</th>' +
     '<th>EF Avg</th><th>Trend</th><th>GPA</th>' +
     '<th>Missing</th><th>Last Check-In</th><th>Actions</th>' +
     '</tr></thead><tbody>';
@@ -91,7 +98,6 @@ function renderDashboard(data) {
     html += '<tr ondblclick="openSidePanel(' + index + ')" title="Double-click for quick view">';
     html += '<td><strong>' + esc(s.firstName + ' ' + s.lastName) + '</strong></td>';
     html += '<td>' + esc(s.grade || '-') + '</td>';
-    html += '<td>' + esc(s.period || '-') + '</td>';
 
     // EF Average
     if (s.avgRating != null) {
@@ -150,11 +156,8 @@ function openSidePanel(index) {
   var content = '';
 
   // Student info subtitle
-  var infoItems = [];
-  if (s.grade) infoItems.push('Grade ' + esc(s.grade));
-  if (s.period) infoItems.push('Period ' + esc(s.period));
-  if (infoItems.length > 0) {
-    content += '<div class="sp-subtitle" style="margin-bottom:16px;">' + infoItems.join(' &middot; ') + '</div>';
+  if (s.grade) {
+    content += '<div class="sp-subtitle" style="margin-bottom:16px;">Grade ' + esc(s.grade) + '</div>';
   }
 
   // GPA
@@ -178,6 +181,14 @@ function openSidePanel(index) {
   }
   content += '</div>';
 
+  // IEP Goal
+  if (s.iepGoal) {
+    content += '<div class="sp-section">';
+    content += '<div class="sp-section-title">IEP Goal</div>';
+    content += '<div class="sp-goal-text">' + esc(s.iepGoal) + '</div>';
+    content += '</div>';
+  }
+
   // Classes & Grades
   content += '<div class="sp-section">';
   content += '<div class="sp-section-title">Classes &amp; Grades</div>';
@@ -186,8 +197,12 @@ function openSidePanel(index) {
     s.academicData.forEach(function(c) {
       var missingNum = Number(c.missing) || 0;
       var missingBadgeClass = missingNum > 0 ? '' : ' none';
+      var classLabel = c.className || 'Unknown';
+      // Find period from student's class list
+      var matchedClass = (s.classes || []).find(function(cl) { return cl.name === c.className; });
+      if (matchedClass && matchedClass.period) classLabel += ' (P' + matchedClass.period + ')';
       content += '<li class="sp-class-item">' +
-        '<span class="sp-class-name">' + esc(c.className || 'Unknown') + '</span>' +
+        '<span class="sp-class-name">' + esc(classLabel) + '</span>' +
         '<span class="sp-class-meta">' +
           '<span class="sp-class-grade">' + esc(c.grade || '--') + '</span>' +
           '<span class="sp-missing-badge' + missingBadgeClass + '">' + missingNum + ' missing</span>' +
@@ -374,10 +389,12 @@ function renderCheckInForm(student, checkIns, existingCheckIn) {
 
     classes.forEach(function(cls) {
       var className = cls.name || cls;
+      var classPeriod = cls.period || '';
+      var displayName = classPeriod ? className + ' (P' + classPeriod + ')' : className;
       var existing = editAcademic[className] || prevAcademic[className] || {};
 
       html += '<tr>' +
-        '<td class="class-name-col">' + esc(className) +
+        '<td class="class-name-col">' + esc(displayName) +
           '<input type="hidden" class="acad-class-name" value="' + esc(className) + '">' +
         '</td>' +
         '<td><select class="acad-grade">';
@@ -527,31 +544,41 @@ function renderStudentForm(student) {
   var html = '<div class="form-card">';
 
   // Basic Info
+  var gradeOptions = ['', '6', '7', '8'];
+  var gradeHtml = '<select id="st-grade">';
+  gradeOptions.forEach(function(g) {
+    var sel = (String(student.grade || '') === g) ? ' selected' : '';
+    gradeHtml += '<option value="' + g + '"' + sel + '>' + (g || '-- Select Grade --') + '</option>';
+  });
+  gradeHtml += '</select>';
+
   html += '<div class="form-section">' +
     '<div class="form-section-title">Basic Information</div>' +
     '<div class="form-row">' +
       '<div class="form-group"><label>First Name</label>' +
-        '<input type="text" id="st-firstName" value="' + esc(student.firstName || '') + '"></div>' +
+        '<input type="text" id="st-firstName" value="' + esc(student.firstName || '') + '" placeholder="First name"></div>' +
       '<div class="form-group"><label>Last Name</label>' +
-        '<input type="text" id="st-lastName" value="' + esc(student.lastName || '') + '"></div>' +
+        '<input type="text" id="st-lastName" value="' + esc(student.lastName || '') + '" placeholder="Last name"></div>' +
     '</div>' +
-    '<div class="form-row">' +
-      '<div class="form-group"><label>Grade Level</label>' +
-        '<input type="text" id="st-grade" value="' + esc(student.grade || '') + '"></div>' +
-      '<div class="form-group"><label>Period</label>' +
-        '<input type="text" id="st-period" value="' + esc(student.period || '') + '"></div>' +
-    '</div>' +
+    '<div class="form-group"><label>Grade Level</label>' + gradeHtml + '</div>' +
   '</div>';
 
   // Focus & Support
   html += '<div class="form-section">' +
     '<div class="form-section-title">Focus &amp; Support</div>' +
     '<div class="form-group"><label>Focus Goal</label>' +
-      '<input type="text" id="st-focusGoal" value="' + esc(student.focusGoal || '') + '"></div>' +
+      '<input type="text" id="st-focusGoal" value="' + esc(student.focusGoal || '') + '" placeholder="Executive function focus area"></div>' +
     '<div class="form-group"><label>Accommodations</label>' +
-      '<textarea id="st-accommodations">' + esc(student.accommodations || '') + '</textarea></div>' +
+      '<textarea id="st-accommodations" placeholder="IEP accommodations, 504 plan details, etc.">' + esc(student.accommodations || '') + '</textarea></div>' +
     '<div class="form-group"><label>Notes</label>' +
-      '<textarea id="st-notes">' + esc(student.notes || '') + '</textarea></div>' +
+      '<textarea id="st-notes" placeholder="Additional notes">' + esc(student.notes || '') + '</textarea></div>' +
+  '</div>';
+
+  // IEP Goal
+  html += '<div class="form-section">' +
+    '<div class="form-section-title">IEP Goal</div>' +
+    '<div class="form-group"><label>Current IEP Goal</label>' +
+      '<textarea id="st-iepGoal" placeholder="Enter the student\'s current IEP goal">' + esc(student.iepGoal || '') + '</textarea></div>' +
   '</div>';
 
   // Classes
@@ -592,18 +619,65 @@ function renderStudentForm(student) {
 }
 
 function renderClassRow(cls, idx) {
-  var name = (typeof cls === 'string') ? cls : (cls.name || '');
-  return '<div class="class-list-item" data-class-idx="' + idx + '">' +
-    '<input type="text" class="class-name-input" value="' + esc(name) + '" placeholder="Class name (e.g., Math)">' +
-    '<button type="button" class="btn-remove-class" onclick="removeClass(this)">&times;</button>' +
-  '</div>';
+  var name = '';
+  var period = '';
+  if (typeof cls === 'string') {
+    name = cls;
+  } else if (cls) {
+    name = cls.name || '';
+    period = cls.period || '';
+  }
+
+  var isOther = name !== '' && PRELOADED_CLASSES.indexOf(name) === -1;
+
+  var html = '<div class="class-list-item" data-class-idx="' + idx + '">';
+
+  // Class name select
+  html += '<select class="class-select" onchange="handleClassSelect(this)">';
+  html += '<option value="">-- Select Class --</option>';
+  PRELOADED_CLASSES.forEach(function(c) {
+    var sel = (name === c) ? ' selected' : '';
+    html += '<option value="' + esc(c) + '"' + sel + '>' + esc(c) + '</option>';
+  });
+  html += '<option value="__other__"' + (isOther ? ' selected' : '') + '>+ Add Other</option>';
+  html += '</select>';
+
+  // Other text input (hidden unless "Other" selected)
+  html += '<input type="text" class="class-other-input"' +
+    (isOther ? '' : ' style="display:none"') +
+    ' value="' + esc(isOther ? name : '') + '" placeholder="Enter class name">';
+
+  // Period select
+  html += '<select class="class-period-select">';
+  html += '<option value="">Period</option>';
+  for (var p = 1; p <= 7; p++) {
+    var pSel = (String(period) === String(p)) ? ' selected' : '';
+    html += '<option value="' + p + '"' + pSel + '>' + p + '</option>';
+  }
+  html += '</select>';
+
+  // Remove button
+  html += '<button type="button" class="btn-remove-class" onclick="removeClass(this)">&times;</button>';
+  html += '</div>';
+  return html;
+}
+
+function handleClassSelect(select) {
+  var otherInput = select.parentElement.querySelector('.class-other-input');
+  if (select.value === '__other__') {
+    otherInput.style.display = '';
+    otherInput.focus();
+  } else {
+    otherInput.style.display = 'none';
+    otherInput.value = '';
+  }
 }
 
 function addClass() {
   var container = document.getElementById('class-list-container');
   var idx = container.querySelectorAll('.class-list-item').length;
   var div = document.createElement('div');
-  div.innerHTML = renderClassRow('', idx);
+  div.innerHTML = renderClassRow({ name: '', period: '' }, idx);
   container.appendChild(div.firstChild);
 }
 
@@ -612,21 +686,28 @@ function removeClass(btn) {
 }
 
 function saveStudentForm() {
-  var classInputs = document.querySelectorAll('#class-list-container .class-name-input');
+  var classItems = document.querySelectorAll('#class-list-container .class-list-item');
   var classes = [];
-  classInputs.forEach(function(input) {
-    var val = input.value.trim();
-    if (val) classes.push({ name: val });
+  classItems.forEach(function(item) {
+    var select = item.querySelector('.class-select');
+    var otherInput = item.querySelector('.class-other-input');
+    var periodSelect = item.querySelector('.class-period-select');
+
+    var name = select.value === '__other__' ? otherInput.value.trim() : select.value;
+    var period = periodSelect.value;
+
+    if (name) classes.push({ name: name, period: period });
   });
 
   var profile = {
     id: appState.currentStudentId || null,
     firstName: document.getElementById('st-firstName').value.trim(),
     lastName: document.getElementById('st-lastName').value.trim(),
-    grade: document.getElementById('st-grade').value.trim(),
-    period: document.getElementById('st-period').value.trim(),
+    grade: document.getElementById('st-grade').value,
+    period: '',
     focusGoal: document.getElementById('st-focusGoal').value.trim(),
     accommodations: document.getElementById('st-accommodations').value.trim(),
+    iepGoal: document.getElementById('st-iepGoal').value.trim(),
     notes: document.getElementById('st-notes').value.trim(),
     classes: classes
   };

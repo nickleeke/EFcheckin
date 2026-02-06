@@ -56,7 +56,7 @@ function include(filename) {
 var STUDENT_HEADERS = [
   'id','firstName','lastName','grade','period',
   'focusGoal','accommodations','notes','classesJson',
-  'createdAt','updatedAt'
+  'createdAt','updatedAt','iepGoal'
 ];
 var CHECKIN_HEADERS = [
   'id','studentId','weekOf',
@@ -116,7 +116,7 @@ function seedDefaultStudents_(sheet) {
     const firstName = parts[0];
     const lastName = parts.slice(1).join(' ');
     const id = Utilities.getUuid();
-    sheet.appendRow([id, firstName, lastName, '', '', '', '', '', '[]', now, now]);
+    sheet.appendRow([id, firstName, lastName, '', '', '', '', '', '[]', now, now, '']);
   });
 }
 
@@ -182,6 +182,7 @@ function saveStudent(profile) {
         sheet.getRange(i+1, colIdx['accommodations']).setValue(profile.accommodations || '');
         sheet.getRange(i+1, colIdx['notes']).setValue(profile.notes || '');
         sheet.getRange(i+1, colIdx['classesJson']).setValue(classesJson);
+        sheet.getRange(i+1, colIdx['iepGoal']).setValue(profile.iepGoal || '');
         sheet.getRange(i+1, colIdx['updatedAt']).setValue(now);
         return { success: true, id: profile.id };
       }
@@ -193,7 +194,8 @@ function saveStudent(profile) {
     id, profile.firstName||'', profile.lastName||'',
     profile.grade||'', profile.period||'',
     profile.focusGoal||'', profile.accommodations||'',
-    profile.notes||'', classesJson, now, now
+    profile.notes||'', classesJson, now, now,
+    profile.iepGoal||''
   ]);
   return { success: true, id: id };
 }
@@ -381,6 +383,7 @@ function getDashboardData() {
       firstName: s.firstName, lastName: s.lastName,
       grade: s.grade, period: s.period,
       focusGoal: s.focusGoal,
+      iepGoal: s.iepGoal || '',
       classes: s.classes || [],
       totalCheckIns: totalCheckIns,
       latestWeek: latest ? latest.weekOf : null,
