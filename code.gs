@@ -135,6 +135,10 @@ function forceSeedStudents() {
 
 function getStudents() {
   initializeSheetsIfNeeded_();
+
+  var cached = getCache_('students');
+  if (cached) return cached;
+
   const ss = getSS_();
   const sheet = ss.getSheetByName(SHEET_STUDENTS);
   if (!sheet || sheet.getLastRow() <= 1) return [];
@@ -156,6 +160,7 @@ function getStudents() {
     return cmp !== 0 ? cmp : String(a.firstName).localeCompare(String(b.firstName));
   });
 
+  setCache_('students', students);
   return students;
 }
 
@@ -184,6 +189,7 @@ function saveStudent(profile) {
         sheet.getRange(i+1, colIdx['classesJson']).setValue(classesJson);
         sheet.getRange(i+1, colIdx['iepGoal']).setValue(profile.iepGoal || '');
         sheet.getRange(i+1, colIdx['updatedAt']).setValue(now);
+        invalidateCache_();
         return { success: true, id: profile.id };
       }
     }
@@ -197,6 +203,7 @@ function saveStudent(profile) {
     profile.notes||'', classesJson, now, now,
     profile.iepGoal||''
   ]);
+  invalidateCache_();
   return { success: true, id: id };
 }
 
@@ -216,6 +223,7 @@ function deleteStudent(studentId) {
       if (cData[i][1] === studentId) checkInsSheet.deleteRow(i + 1);
     }
   }
+  invalidateCache_();
   return { success: true };
 }
 
@@ -248,6 +256,7 @@ function saveCheckIn(data) {
         sheet.getRange(i+1, colIdx['microGoalCategory']).setValue(data.microGoalCategory || '');
         sheet.getRange(i+1, colIdx['teacherNotes']).setValue(data.teacherNotes || '');
         sheet.getRange(i+1, colIdx['academicDataJson']).setValue(academicJson);
+        invalidateCache_();
         return { success: true, id: data.id };
       }
     }
@@ -263,6 +272,7 @@ function saveCheckIn(data) {
     data.microGoal||'', data.microGoalCategory||'',
     data.teacherNotes||'', academicJson, now
   ]);
+  invalidateCache_();
   return { success: true, id: id };
 }
 
@@ -297,7 +307,7 @@ function deleteCheckIn(checkInId) {
   if (!sheet) return { success: false };
   const data = sheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
-    if (data[i][0] === checkInId) { sheet.deleteRow(i + 1); return { success: true }; }
+    if (data[i][0] === checkInId) { sheet.deleteRow(i + 1); invalidateCache_(); return { success: true }; }
   }
   return { success: false };
 }
@@ -305,6 +315,9 @@ function deleteCheckIn(checkInId) {
 // ───── Dashboard / Analytics ─────
 
 function getDashboardData() {
+  var cached = getCache_('dashboard');
+  if (cached) return cached;
+
   initializeSheetsIfNeeded_();
   const students = getStudents();
   const ss = getSS_();
@@ -396,7 +409,36 @@ function getDashboardData() {
     };
   });
 
+  setCache_('dashboard', summary);
   return summary;
+}
+
+// ───── Script Properties Cache ─────
+// Sheets = source of truth; Script Properties = fast read cache.
+// Pattern: read-through cache, invalidate on write.
+
+var CACHE_PREFIX = 'cache_';
+
+function getCache_(key) {
+  try {
+    var raw = PropertiesService.getScriptProperties().getProperty(CACHE_PREFIX + key);
+    if (raw) return JSON.parse(raw);
+  } catch(e) {}
+  return null;
+}
+
+function setCache_(key, data) {
+  try {
+    PropertiesService.getScriptProperties().setProperty(CACHE_PREFIX + key, JSON.stringify(data));
+  } catch(e) { /* exceeds 9KB property limit — skip silently */ }
+}
+
+function invalidateCache_() {
+  try {
+    var props = PropertiesService.getScriptProperties();
+    props.deleteProperty(CACHE_PREFIX + 'students');
+    props.deleteProperty(CACHE_PREFIX + 'dashboard');
+  } catch(e) {}
 }
 
 // ───── Helpers ─────
