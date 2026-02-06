@@ -1,0 +1,792 @@
+<script>
+/* ============================================================
+   EF Weekly Check-In — Client-Side JavaScript
+   ============================================================ */
+
+// ─── Application State ───
+var appState = {
+  dashboardData: [],
+  currentStudentId: null,
+  currentCheckIns: [],
+  editingCheckIn: null
+};
+
+// ─── Initialization ───
+document.addEventListener('DOMContentLoaded', function() {
+  showLoading();
+  google.script.run
+    .withSuccessHandler(function() { loadDashboard(); })
+    .withFailureHandler(function(err) {
+      hideLoading();
+      showToast('Error initializing: ' + err.message);
+    })
+    .initializeSheets();
+});
+
+// Close side panel on Escape key
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    closeSidePanel();
+    // Also close any confirmation dialogs
+    var overlay = document.querySelector('.confirm-overlay');
+    if (overlay) overlay.remove();
+  }
+});
+
+// ─── View Management ───
+function showView(viewId) {
+  document.querySelectorAll('.view').forEach(function(v) {
+    v.classList.remove('active');
+  });
+  document.getElementById(viewId).classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+// ─── Dashboard ───
+function showDashboard() {
+  showView('dashboard-view');
+  loadDashboard();
+}
+
+function loadDashboard() {
+  showLoading();
+  google.script.run
+    .withSuccessHandler(function(data) {
+      appState.dashboardData = data || [];
+      renderDashboard(data);
+      hideLoading();
+    })
+    .withFailureHandler(function(err) {
+      hideLoading();
+      showToast('Error loading dashboard: ' + err.message);
+    })
+    .getDashboardData();
+}
+
+function renderDashboard(data) {
+  var container = document.getElementById('dashboard-table-container');
+
+  if (!data || data.length === 0) {
+    container.innerHTML =
+      '<div class="empty-state">' +
+        '<h3>No Students Yet</h3>' +
+        '<p>Click "+ Add Student" to get started.</p>' +
+      '</div>';
+    return;
+  }
+
+  var html = '<table class="dashboard-table"><thead><tr>' +
+    '<th>Name</th><th>Grade</th><th>Period</th>' +
+    '<th>EF Avg</th><th>Trend</th><th>GPA</th>' +
+    '<th>Missing</th><th>Last Check-In</th><th>Actions</th>' +
+    '</tr></thead><tbody>';
+
+  data.forEach(function(s, index) {
+    html += '<tr ondblclick="openSidePanel(' + index + ')" title="Double-click for quick view">';
+    html += '<td><strong>' + esc(s.firstName + ' ' + s.lastName) + '</strong></td>';
+    html += '<td>' + esc(s.grade || '-') + '</td>';
+    html += '<td>' + esc(s.period || '-') + '</td>';
+
+    // EF Average
+    if (s.avgRating !== null) {
+      var efClass = s.avgRating >= 4 ? 'chip-green' : s.avgRating >= 3 ? 'chip-yellow' : 'chip-red';
+      html += '<td><span class="chip ' + efClass + '">' + s.avgRating.toFixed(1) + '</span></td>';
+    } else {
+      html += '<td><span class="chip chip-gray">--</span></td>';
+    }
+
+    // Trend
+    var trendMap = { up: '&#9650; Up', down: '&#9660; Down', flat: '&#9654; Flat', none: '--' };
+    var trendClass = s.trend === 'up' ? 'trend-up' : s.trend === 'down' ? 'trend-down' : 'trend-flat';
+    html += '<td><span class="' + trendClass + '">' + (trendMap[s.trend] || '--') + '</span></td>';
+
+    // GPA
+    if (s.gpa !== null) {
+      var gpaClass = s.gpa >= 3.5 ? 'chip-green' : s.gpa >= 2.5 ? 'chip-yellow' : 'chip-red';
+      html += '<td><span class="chip ' + gpaClass + '">' + s.gpa.toFixed(2) + '</span></td>';
+    } else {
+      html += '<td><span class="chip chip-gray">--</span></td>';
+    }
+
+    // Missing assignments
+    if (s.totalMissing > 0) {
+      var missingClass = s.totalMissing >= 4 ? 'chip-red' : 'chip-yellow';
+      html += '<td><span class="chip ' + missingClass + '">' + s.totalMissing + '</span></td>';
+    } else {
+      html += '<td><span class="chip chip-green">0</span></td>';
+    }
+
+    // Last check-in date
+    html += '<td>' + esc(s.latestWeek || 'Never') + '</td>';
+
+    // Action buttons
+    html += '<td><div class="action-btns">' +
+      '<button class="action-btn primary" onclick="event.stopPropagation(); startCheckIn(\'' + s.id + '\')">Check-In</button>' +
+      '<button class="action-btn" onclick="event.stopPropagation(); editStudent(\'' + s.id + '\')">Edit</button>' +
+      '</div></td>';
+
+    html += '</tr>';
+  });
+
+  html += '</tbody></table>';
+  html += '<p class="hint" style="margin-top:8px;">Double-click any row for a quick academic overview.</p>';
+
+  container.innerHTML = html;
+}
+
+// ─── Side Panel (Quick View on Double-Click) ───
+function openSidePanel(index) {
+  var s = appState.dashboardData[index];
+  if (!s) return;
+
+  document.getElementById('side-panel-title').textContent = s.firstName + ' ' + s.lastName;
+
+  var content = '';
+
+  // Student info subtitle
+  var infoItems = [];
+  if (s.grade) infoItems.push('Grade ' + esc(s.grade));
+  if (s.period) infoItems.push('Period ' + esc(s.period));
+  if (infoItems.length > 0) {
+    content += '<div class="sp-subtitle" style="margin-bottom:16px;">' + infoItems.join(' &middot; ') + '</div>';
+  }
+
+  // GPA
+  content += '<div class="sp-section">';
+  content += '<div class="sp-section-title">Current GPA</div>';
+  if (s.gpa !== null) {
+    var gpaClass = s.gpa >= 3.5 ? 'high' : s.gpa >= 2.5 ? 'mid' : 'low';
+    content += '<div class="sp-gpa ' + gpaClass + '">' + s.gpa.toFixed(2) + '</div>';
+  } else {
+    content += '<div class="sp-gpa none">No GPA data</div>';
+  }
+  content += '</div>';
+
+  // Goal
+  content += '<div class="sp-section">';
+  content += '<div class="sp-section-title">Current Goal</div>';
+  if (s.latestMicroGoal) {
+    content += '<div class="sp-goal-text">' + esc(s.latestMicroGoal) + '</div>';
+  } else {
+    content += '<div class="sp-goal-none">No goal set</div>';
+  }
+  content += '</div>';
+
+  // Classes & Grades
+  content += '<div class="sp-section">';
+  content += '<div class="sp-section-title">Classes &amp; Grades</div>';
+  if (s.academicData && s.academicData.length > 0) {
+    content += '<ul class="sp-class-list">';
+    s.academicData.forEach(function(c) {
+      var missingNum = Number(c.missing) || 0;
+      var missingBadgeClass = missingNum > 0 ? '' : ' none';
+      content += '<li class="sp-class-item">' +
+        '<span class="sp-class-name">' + esc(c.className || 'Unknown') + '</span>' +
+        '<span class="sp-class-meta">' +
+          '<span class="sp-class-grade">' + esc(c.grade || '--') + '</span>' +
+          '<span class="sp-missing-badge' + missingBadgeClass + '">' + missingNum + ' missing</span>' +
+        '</span>' +
+      '</li>';
+    });
+    content += '</ul>';
+  } else {
+    content += '<div class="sp-goal-none">No academic data from latest check-in</div>';
+  }
+  content += '</div>';
+
+  // Total missing
+  content += '<div class="sp-section">';
+  var totalMissing = s.totalMissing || 0;
+  var tmClass = totalMissing > 0 ? 'alert' : 'ok';
+  content += '<div class="sp-total-missing ' + tmClass + '">Total Missing Assignments: ' + totalMissing + '</div>';
+  content += '</div>';
+
+  // Action buttons
+  content += '<div class="sp-actions">' +
+    '<button class="btn btn-primary" onclick="closeSidePanel(); startCheckIn(\'' + s.id + '\')">New Check-In</button>' +
+    '<button class="btn btn-secondary" onclick="closeSidePanel(); editStudent(\'' + s.id + '\')">View Profile</button>' +
+  '</div>';
+
+  document.getElementById('side-panel-content').innerHTML = content;
+  document.getElementById('side-panel').classList.add('open');
+  document.getElementById('side-panel-overlay').classList.add('open');
+}
+
+function closeSidePanel() {
+  document.getElementById('side-panel').classList.remove('open');
+  document.getElementById('side-panel-overlay').classList.remove('open');
+}
+
+// ─── Check-In Form ───
+function startCheckIn(studentId, existingCheckIn) {
+  showLoading();
+  appState.currentStudentId = studentId;
+  appState.editingCheckIn = existingCheckIn || null;
+
+  google.script.run
+    .withSuccessHandler(function(students) {
+      var student = students.find(function(s) { return s.id === studentId; });
+      if (!student) { hideLoading(); showToast('Student not found'); return; }
+
+      google.script.run
+        .withSuccessHandler(function(checkIns) {
+          appState.currentCheckIns = checkIns || [];
+          renderCheckInForm(student, checkIns, existingCheckIn);
+          showView('checkin-view');
+          hideLoading();
+        })
+        .withFailureHandler(function(err) { hideLoading(); showToast('Error: ' + err.message); })
+        .getCheckIns(studentId);
+    })
+    .withFailureHandler(function(err) { hideLoading(); showToast('Error: ' + err.message); })
+    .getStudents();
+}
+
+function renderCheckInForm(student, checkIns, existingCheckIn) {
+  var title = 'Check-In: ' + student.firstName + ' ' + student.lastName;
+  document.getElementById('checkin-view-title').textContent = title;
+
+  var container = document.getElementById('checkin-form-container');
+  var html = '';
+
+  // ── Previous Goal Banner (top of form) ──
+  var lastCheckIn = null;
+  if (existingCheckIn) {
+    // When editing, show the goal from the check-in before this one
+    var others = checkIns.filter(function(ci) { return ci.id !== existingCheckIn.id; });
+    lastCheckIn = others.length > 0 ? others[0] : null;
+  } else {
+    // For new check-in, show the goal from the most recent check-in
+    lastCheckIn = checkIns.length > 0 ? checkIns[0] : null;
+  }
+
+  if (lastCheckIn && lastCheckIn.microGoal) {
+    html += '<div class="prev-goal-banner">' +
+      '<div class="banner-label">Previous Goal</div>' +
+      '<div class="banner-goal">' + esc(lastCheckIn.microGoal) + '</div>' +
+      '<div class="banner-date">Set on check-in: ' + esc(lastCheckIn.weekOf || 'Unknown date') + '</div>' +
+    '</div>';
+  } else {
+    html += '<div class="prev-goal-banner no-goal">' +
+      '<div class="banner-label">Previous Goal</div>' +
+      '<div class="banner-goal">No previous goal set</div>' +
+    '</div>';
+  }
+
+  // Pre-fill values from existing check-in (if editing)
+  var ci = existingCheckIn || {};
+  var today = new Date().toISOString().slice(0, 10);
+
+  html += '<div class="form-card">';
+
+  // Week Of
+  html += '<div class="form-section">' +
+    '<div class="form-group">' +
+      '<label>Week Of</label>' +
+      '<input type="date" id="ci-weekOf" value="' + esc(ci.weekOf || today) + '">' +
+    '</div>' +
+  '</div>';
+
+  // EF Ratings
+  html += '<div class="form-section">' +
+    '<div class="form-section-title">Executive Function Ratings</div>';
+
+  var efDimensions = [
+    { key: 'planningRating', label: 'Planning' },
+    { key: 'followThroughRating', label: 'Follow-Through' },
+    { key: 'regulationRating', label: 'Regulation' },
+    { key: 'focusGoalRating', label: 'Focus Goal' },
+    { key: 'effortRating', label: 'Effort' }
+  ];
+
+  efDimensions.forEach(function(dim) {
+    var currentVal = Number(ci[dim.key]) || 0;
+    html += '<div class="form-group">' +
+      '<label>' + dim.label + '</label>' +
+      '<div class="rating-group" data-field="' + dim.key + '">';
+    for (var r = 1; r <= 5; r++) {
+      var sel = (r === currentVal) ? ' selected' : '';
+      html += '<button type="button" class="rating-btn' + sel + '" data-value="' + r + '" onclick="selectRating(this)">' + r + '</button>';
+    }
+    html += '</div></div>';
+  });
+
+  html += '</div>';
+
+  // Reflection
+  html += '<div class="form-section">' +
+    '<div class="form-section-title">Reflection</div>' +
+    '<div class="form-group"><label>What went well?</label>' +
+      '<textarea id="ci-whatWentWell">' + esc(ci.whatWentWell || '') + '</textarea></div>' +
+    '<div class="form-group"><label>Barrier / Challenge</label>' +
+      '<textarea id="ci-barrier">' + esc(ci.barrier || '') + '</textarea></div>' +
+  '</div>';
+
+  // Micro Goal
+  html += '<div class="form-section">' +
+    '<div class="form-section-title">Micro Goal</div>' +
+    '<div class="form-group"><label>Goal for next week</label>' +
+      '<input type="text" id="ci-microGoal" value="' + esc(ci.microGoal || '') + '"></div>' +
+    '<div class="form-group"><label>Category</label>' +
+      '<select id="ci-microGoalCategory">';
+
+  var categories = [
+    '', 'Planning & Prioritization', 'Organization', 'Time Management',
+    'Task Initiation', 'Sustained Attention', 'Flexibility',
+    'Metacognition', 'Working Memory', 'Emotional Regulation', 'Other'
+  ];
+  categories.forEach(function(cat) {
+    var sel = ((ci.microGoalCategory || '') === cat) ? ' selected' : '';
+    html += '<option value="' + esc(cat) + '"' + sel + '>' + (cat || '-- Select --') + '</option>';
+  });
+
+  html += '</select></div></div>';
+
+  // Academic Snapshot
+  html += '<div class="form-section">' +
+    '<div class="form-section-title">Academic Snapshot</div>';
+
+  var classes = student.classes || [];
+
+  // Build lookup maps for pre-filling grades
+  var prevAcademic = {};
+  if (lastCheckIn && lastCheckIn.academicData) {
+    lastCheckIn.academicData.forEach(function(ad) { prevAcademic[ad.className] = ad; });
+  }
+  var editAcademic = {};
+  if (existingCheckIn && existingCheckIn.academicData) {
+    existingCheckIn.academicData.forEach(function(ad) { editAcademic[ad.className] = ad; });
+  }
+
+  if (classes.length > 0) {
+    var grades = ['', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'D-', 'F'];
+
+    html += '<table class="academic-table" id="academic-table">' +
+      '<thead><tr><th>Class</th><th>Grade</th><th>Missing</th></tr></thead><tbody>';
+
+    classes.forEach(function(cls) {
+      var className = cls.name || cls;
+      var existing = editAcademic[className] || prevAcademic[className] || {};
+
+      html += '<tr>' +
+        '<td class="class-name-col">' + esc(className) +
+          '<input type="hidden" class="acad-class-name" value="' + esc(className) + '">' +
+        '</td>' +
+        '<td><select class="acad-grade">';
+
+      grades.forEach(function(g) {
+        var sel = ((existing.grade || '') === g) ? ' selected' : '';
+        html += '<option value="' + g + '"' + sel + '>' + (g || '--') + '</option>';
+      });
+
+      html += '</select></td>' +
+        '<td><input type="number" class="acad-missing" min="0" value="' + (existing.missing || 0) + '"></td>' +
+      '</tr>';
+    });
+
+    html += '</tbody></table>';
+  } else {
+    html += '<p class="hint">No classes configured for this student. ' +
+      '<a href="#" onclick="goBackFromCheckIn(); editStudent(\'' + student.id + '\'); return false;">Add classes in the student profile</a>.</p>';
+  }
+
+  html += '</div>';
+
+  // Teacher Notes
+  html += '<div class="form-section">' +
+    '<div class="form-section-title">Teacher Notes</div>' +
+    '<div class="form-group"><label>Notes</label>' +
+      '<textarea id="ci-teacherNotes">' + esc(ci.teacherNotes || '') + '</textarea></div>' +
+  '</div>';
+
+  // Buttons
+  html += '<div style="display:flex;gap:8px;justify-content:flex-end;">' +
+    '<button class="btn btn-secondary" onclick="goBackFromCheckIn()">Cancel</button>' +
+    '<button class="btn btn-primary" onclick="saveCheckIn()">Save Check-In</button>' +
+  '</div>';
+
+  html += '</div>'; // form-card
+
+  container.innerHTML = html;
+}
+
+function selectRating(btn) {
+  var group = btn.parentElement;
+  group.querySelectorAll('.rating-btn').forEach(function(b) { b.classList.remove('selected'); });
+  btn.classList.add('selected');
+}
+
+function getSelectedRating(field) {
+  var group = document.querySelector('.rating-group[data-field="' + field + '"]');
+  if (!group) return '';
+  var selected = group.querySelector('.rating-btn.selected');
+  return selected ? selected.getAttribute('data-value') : '';
+}
+
+function getAcademicData() {
+  var table = document.getElementById('academic-table');
+  if (!table) return [];
+  var rows = table.querySelectorAll('tbody tr');
+  var result = [];
+  rows.forEach(function(row) {
+    result.push({
+      className: row.querySelector('.acad-class-name').value,
+      grade: row.querySelector('.acad-grade').value,
+      missing: Number(row.querySelector('.acad-missing').value) || 0
+    });
+  });
+  return result;
+}
+
+function saveCheckIn() {
+  var data = {
+    studentId: appState.currentStudentId,
+    weekOf: document.getElementById('ci-weekOf').value,
+    planningRating: getSelectedRating('planningRating'),
+    followThroughRating: getSelectedRating('followThroughRating'),
+    regulationRating: getSelectedRating('regulationRating'),
+    focusGoalRating: getSelectedRating('focusGoalRating'),
+    effortRating: getSelectedRating('effortRating'),
+    whatWentWell: document.getElementById('ci-whatWentWell').value,
+    barrier: document.getElementById('ci-barrier').value,
+    microGoal: document.getElementById('ci-microGoal').value,
+    microGoalCategory: document.getElementById('ci-microGoalCategory').value,
+    teacherNotes: document.getElementById('ci-teacherNotes').value,
+    academicData: getAcademicData()
+  };
+
+  if (appState.editingCheckIn) {
+    data.id = appState.editingCheckIn.id;
+  }
+
+  showLoading();
+  google.script.run
+    .withSuccessHandler(function(result) {
+      hideLoading();
+      if (result.success) {
+        showToast('Check-in saved');
+        showDashboard();
+      } else {
+        showToast('Error saving check-in');
+      }
+    })
+    .withFailureHandler(function(err) { hideLoading(); showToast('Error: ' + err.message); })
+    .saveCheckIn(data);
+}
+
+function goBackFromCheckIn() {
+  showDashboard();
+}
+
+// ─── Student Profile ───
+function showAddStudent() {
+  appState.currentStudentId = null;
+  renderStudentForm({});
+  document.getElementById('student-view-title').textContent = 'Add Student';
+  showView('student-view');
+}
+
+function editStudent(studentId) {
+  showLoading();
+  google.script.run
+    .withSuccessHandler(function(students) {
+      var student = students.find(function(s) { return s.id === studentId; });
+      if (!student) { hideLoading(); showToast('Student not found'); return; }
+
+      appState.currentStudentId = studentId;
+      document.getElementById('student-view-title').textContent =
+        'Edit: ' + student.firstName + ' ' + student.lastName;
+      renderStudentForm(student);
+
+      // Also load check-in history
+      google.script.run
+        .withSuccessHandler(function(checkIns) {
+          renderCheckInHistory(checkIns, student);
+          hideLoading();
+        })
+        .withFailureHandler(function() { hideLoading(); })
+        .getCheckIns(studentId);
+
+      showView('student-view');
+    })
+    .withFailureHandler(function(err) { hideLoading(); showToast('Error: ' + err.message); })
+    .getStudents();
+}
+
+function renderStudentForm(student) {
+  var container = document.getElementById('student-form-container');
+  var html = '<div class="form-card">';
+
+  // Basic Info
+  html += '<div class="form-section">' +
+    '<div class="form-section-title">Basic Information</div>' +
+    '<div class="form-row">' +
+      '<div class="form-group"><label>First Name</label>' +
+        '<input type="text" id="st-firstName" value="' + esc(student.firstName || '') + '"></div>' +
+      '<div class="form-group"><label>Last Name</label>' +
+        '<input type="text" id="st-lastName" value="' + esc(student.lastName || '') + '"></div>' +
+    '</div>' +
+    '<div class="form-row">' +
+      '<div class="form-group"><label>Grade Level</label>' +
+        '<input type="text" id="st-grade" value="' + esc(student.grade || '') + '"></div>' +
+      '<div class="form-group"><label>Period</label>' +
+        '<input type="text" id="st-period" value="' + esc(student.period || '') + '"></div>' +
+    '</div>' +
+  '</div>';
+
+  // Focus & Support
+  html += '<div class="form-section">' +
+    '<div class="form-section-title">Focus &amp; Support</div>' +
+    '<div class="form-group"><label>Focus Goal</label>' +
+      '<input type="text" id="st-focusGoal" value="' + esc(student.focusGoal || '') + '"></div>' +
+    '<div class="form-group"><label>Accommodations</label>' +
+      '<textarea id="st-accommodations">' + esc(student.accommodations || '') + '</textarea></div>' +
+    '<div class="form-group"><label>Notes</label>' +
+      '<textarea id="st-notes">' + esc(student.notes || '') + '</textarea></div>' +
+  '</div>';
+
+  // Classes
+  html += '<div class="form-section">' +
+    '<div class="form-section-title">Classes</div>' +
+    '<div id="class-list-container">';
+
+  var classes = student.classes || [];
+  classes.forEach(function(cls, idx) {
+    html += renderClassRow(cls, idx);
+  });
+
+  html += '</div>' +
+    '<button type="button" class="btn btn-sm btn-secondary" onclick="addClass()" style="margin-top:8px;">+ Add Class</button>' +
+  '</div>';
+
+  // Action buttons
+  html += '<div style="display:flex;gap:8px;justify-content:space-between;margin-top:24px;">' +
+    '<div>';
+  if (student.id) {
+    html += '<button class="btn btn-danger" onclick="confirmDeleteStudent(\'' + student.id + '\')">Delete Student</button>';
+  }
+  html += '</div>' +
+    '<div style="display:flex;gap:8px;">' +
+      '<button class="btn btn-secondary" onclick="showDashboard()">Cancel</button>' +
+      '<button class="btn btn-primary" onclick="saveStudentForm()">Save Student</button>' +
+    '</div>' +
+  '</div>';
+
+  html += '</div>'; // form-card
+
+  // Placeholder for check-in history (filled later)
+  if (student.id) {
+    html += '<div id="checkin-history-section"></div>';
+  }
+
+  container.innerHTML = html;
+}
+
+function renderClassRow(cls, idx) {
+  var name = (typeof cls === 'string') ? cls : (cls.name || '');
+  return '<div class="class-list-item" data-class-idx="' + idx + '">' +
+    '<input type="text" class="class-name-input" value="' + esc(name) + '" placeholder="Class name (e.g., Math)">' +
+    '<button type="button" class="btn-remove-class" onclick="removeClass(this)">&times;</button>' +
+  '</div>';
+}
+
+function addClass() {
+  var container = document.getElementById('class-list-container');
+  var idx = container.querySelectorAll('.class-list-item').length;
+  var div = document.createElement('div');
+  div.innerHTML = renderClassRow('', idx);
+  container.appendChild(div.firstChild);
+}
+
+function removeClass(btn) {
+  btn.parentElement.remove();
+}
+
+function saveStudentForm() {
+  var classInputs = document.querySelectorAll('#class-list-container .class-name-input');
+  var classes = [];
+  classInputs.forEach(function(input) {
+    var val = input.value.trim();
+    if (val) classes.push({ name: val });
+  });
+
+  var profile = {
+    id: appState.currentStudentId || null,
+    firstName: document.getElementById('st-firstName').value.trim(),
+    lastName: document.getElementById('st-lastName').value.trim(),
+    grade: document.getElementById('st-grade').value.trim(),
+    period: document.getElementById('st-period').value.trim(),
+    focusGoal: document.getElementById('st-focusGoal').value.trim(),
+    accommodations: document.getElementById('st-accommodations').value.trim(),
+    notes: document.getElementById('st-notes').value.trim(),
+    classes: classes
+  };
+
+  if (!profile.firstName || !profile.lastName) {
+    showToast('First and last name are required');
+    return;
+  }
+
+  showLoading();
+  google.script.run
+    .withSuccessHandler(function(result) {
+      hideLoading();
+      if (result.success) {
+        showToast('Student saved');
+        showDashboard();
+      }
+    })
+    .withFailureHandler(function(err) { hideLoading(); showToast('Error: ' + err.message); })
+    .saveStudent(profile);
+}
+
+function confirmDeleteStudent(studentId) {
+  var overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+  overlay.innerHTML =
+    '<div class="confirm-dialog">' +
+      '<h3>Delete Student?</h3>' +
+      '<p>This will permanently delete this student and all their check-in records.</p>' +
+      '<div class="confirm-actions">' +
+        '<button class="btn btn-secondary" onclick="this.closest(\'.confirm-overlay\').remove()">Cancel</button>' +
+        '<button class="btn btn-danger" onclick="doDeleteStudent(\'' + studentId + '\'); this.closest(\'.confirm-overlay\').remove()">Delete</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+}
+
+function doDeleteStudent(studentId) {
+  showLoading();
+  google.script.run
+    .withSuccessHandler(function() {
+      hideLoading();
+      showToast('Student deleted');
+      showDashboard();
+    })
+    .withFailureHandler(function(err) { hideLoading(); showToast('Error: ' + err.message); })
+    .deleteStudent(studentId);
+}
+
+// ─── Check-In History (inside student profile) ───
+function renderCheckInHistory(checkIns, student) {
+  var section = document.getElementById('checkin-history-section');
+  if (!section) return;
+
+  var html = '<div class="form-card" style="margin-top:20px;">' +
+    '<div class="form-section-title" style="display:flex;justify-content:space-between;align-items:center;">' +
+      '<span>Check-In History (' + checkIns.length + ')</span>' +
+      '<button class="btn btn-sm btn-primary" onclick="startCheckIn(\'' + student.id + '\')">New Check-In</button>' +
+    '</div>';
+
+  if (checkIns.length === 0) {
+    html += '<p class="hint" style="margin-top:12px;">No check-ins recorded yet.</p>';
+  } else {
+    checkIns.forEach(function(ci) {
+      var ratings = [
+        Number(ci.planningRating), Number(ci.followThroughRating),
+        Number(ci.regulationRating), Number(ci.focusGoalRating),
+        Number(ci.effortRating)
+      ].filter(function(r) { return !isNaN(r) && r > 0; });
+
+      var avg = ratings.length > 0
+        ? (ratings.reduce(function(a,b){ return a+b; }, 0) / ratings.length).toFixed(1)
+        : '--';
+      var avgClass = avg !== '--'
+        ? (avg >= 4 ? 'chip-green' : avg >= 3 ? 'chip-yellow' : 'chip-red')
+        : 'chip-gray';
+
+      html += '<div class="history-card" onclick="editCheckIn(\'' + ci.id + '\', \'' + student.id + '\')">' +
+        '<div class="history-card-header">' +
+          '<span class="history-card-date">' + esc(ci.weekOf || 'No date') + '</span>' +
+          '<span class="chip ' + avgClass + '">Avg: ' + avg + '</span>' +
+        '</div>' +
+        '<div class="history-ratings">' +
+          '<span class="history-rating-item">Plan: <span>' + (ci.planningRating || '-') + '</span></span>' +
+          '<span class="history-rating-item">Follow: <span>' + (ci.followThroughRating || '-') + '</span></span>' +
+          '<span class="history-rating-item">Reg: <span>' + (ci.regulationRating || '-') + '</span></span>' +
+          '<span class="history-rating-item">Focus: <span>' + (ci.focusGoalRating || '-') + '</span></span>' +
+          '<span class="history-rating-item">Effort: <span>' + (ci.effortRating || '-') + '</span></span>' +
+        '</div>';
+
+      if (ci.microGoal) {
+        html += '<div class="history-goal">Goal: ' + esc(ci.microGoal) + '</div>';
+      }
+
+      html += '<div style="margin-top:8px;text-align:right;">' +
+        '<button class="action-btn" onclick="event.stopPropagation(); confirmDeleteCheckIn(\'' + ci.id + '\', \'' + student.id + '\')">Delete</button>' +
+      '</div>';
+
+      html += '</div>';
+    });
+  }
+
+  html += '</div>';
+  section.innerHTML = html;
+}
+
+function editCheckIn(checkInId, studentId) {
+  showLoading();
+  google.script.run
+    .withSuccessHandler(function(checkIns) {
+      var ci = checkIns.find(function(c) { return c.id === checkInId; });
+      if (ci) {
+        startCheckIn(studentId, ci);
+      } else {
+        hideLoading();
+        showToast('Check-in not found');
+      }
+    })
+    .withFailureHandler(function(err) { hideLoading(); showToast('Error: ' + err.message); })
+    .getCheckIns(studentId);
+}
+
+function confirmDeleteCheckIn(checkInId, studentId) {
+  var overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+  overlay.innerHTML =
+    '<div class="confirm-dialog">' +
+      '<h3>Delete Check-In?</h3>' +
+      '<p>This check-in record will be permanently deleted.</p>' +
+      '<div class="confirm-actions">' +
+        '<button class="btn btn-secondary" onclick="this.closest(\'.confirm-overlay\').remove()">Cancel</button>' +
+        '<button class="btn btn-danger" onclick="doDeleteCheckIn(\'' + checkInId + '\', \'' + studentId + '\'); this.closest(\'.confirm-overlay\').remove()">Delete</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+}
+
+function doDeleteCheckIn(checkInId, studentId) {
+  showLoading();
+  google.script.run
+    .withSuccessHandler(function() {
+      hideLoading();
+      showToast('Check-in deleted');
+      editStudent(studentId);
+    })
+    .withFailureHandler(function(err) { hideLoading(); showToast('Error: ' + err.message); })
+    .deleteCheckIn(checkInId);
+}
+
+// ─── Utility Functions ───
+function showLoading() {
+  document.getElementById('loading-overlay').classList.remove('hidden');
+}
+
+function hideLoading() {
+  document.getElementById('loading-overlay').classList.add('hidden');
+}
+
+function showToast(message) {
+  var toast = document.getElementById('toast');
+  toast.textContent = message;
+  toast.classList.add('show');
+  setTimeout(function() { toast.classList.remove('show'); }, 3000);
+}
+
+function esc(str) {
+  if (str === null || str === undefined) return '';
+  var div = document.createElement('div');
+  div.textContent = String(str);
+  return div.innerHTML;
+}
+</script>
