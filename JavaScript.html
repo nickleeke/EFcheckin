@@ -672,7 +672,7 @@ function doDeleteStudent(studentId) {
       showToast('Student deleted');
       showDashboard();
     })
-    .withFailureHandler(function(err) { hideLoading(); showToast('Error: ' + err.message); })
+    .withFailureHandler(function(err) { hideLoading(); showToast('Error: ' + (err && err.message ? err.message : String(err))); })
     .deleteStudent(studentId);
 }
 
@@ -745,7 +745,7 @@ function editCheckIn(checkInId, studentId) {
         showToast('Check-in not found');
       }
     })
-    .withFailureHandler(function(err) { hideLoading(); showToast('Error: ' + err.message); })
+    .withFailureHandler(function(err) { hideLoading(); showToast('Error: ' + (err && err.message ? err.message : String(err))); })
     .getCheckIns(studentId);
 }
 
@@ -772,7 +772,7 @@ function doDeleteCheckIn(checkInId, studentId) {
       showToast('Check-in deleted');
       editStudent(studentId);
     })
-    .withFailureHandler(function(err) { hideLoading(); showToast('Error: ' + err.message); })
+    .withFailureHandler(function(err) { hideLoading(); showToast('Error: ' + (err && err.message ? err.message : String(err))); })
     .deleteCheckIn(checkInId);
 }
 
