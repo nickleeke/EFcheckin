@@ -95,7 +95,7 @@ function renderDashboard(data) {
     '</tr></thead><tbody>';
 
   data.forEach(function(s, index) {
-    html += '<tr ondblclick="openSidePanel(' + index + ')" title="Double-click for quick view">';
+    html += '<tr onclick="openSidePanel(' + index + ')" title="Click for quick view">';
     html += '<td><strong>' + esc(s.firstName + ' ' + s.lastName) + '</strong></td>';
     html += '<td>' + esc(s.grade || '-') + '</td>';
 
@@ -141,7 +141,7 @@ function renderDashboard(data) {
   });
 
   html += '</tbody></table>';
-  html += '<p class="hint" style="margin-top:8px;">Double-click any row for a quick academic overview.</p>';
+  html += '<p class="hint" style="margin-top:8px;">Click any row for a quick academic overview.</p>';
 
   container.innerHTML = html;
 }
@@ -266,8 +266,8 @@ function startCheckIn(studentId, existingCheckIn) {
 }
 
 function renderCheckInForm(student, checkIns, existingCheckIn) {
-  var title = 'Check-In: ' + student.firstName + ' ' + student.lastName;
-  document.getElementById('checkin-view-title').textContent = title;
+  document.getElementById('checkin-view-breadcrumb').textContent = 'Weekly Check-In';
+  document.getElementById('checkin-view-title').textContent = student.firstName + ' ' + student.lastName;
 
   var container = document.getElementById('checkin-form-container');
   var html = '';
@@ -411,8 +411,8 @@ function renderCheckInForm(student, checkIns, existingCheckIn) {
 
     html += '</tbody></table>';
   } else {
-    html += '<p class="hint">No classes configured for this student. ' +
-      '<a href="#" onclick="goBackFromCheckIn(); editStudent(\'' + student.id + '\'); return false;">Add classes in the student profile</a>.</p>';
+    html += '<p class="hint">No classes configured for this student.</p>' +
+      '<button class="btn-ghost btn-sm" onclick="goBackFromCheckIn(); editStudent(\'' + student.id + '\')">Add Classes</button>';
   }
 
   html += '</div>';
@@ -484,18 +484,21 @@ function saveCheckIn() {
     data.id = appState.editingCheckIn.id;
   }
 
-  showLoading();
+  // Optimistic UI: navigate immediately
+  showView('dashboard-view');
+  renderDashboard(appState.dashboardData);
+  showToast('Saving check-in\u2026');
+
   google.script.run
     .withSuccessHandler(function(result) {
-      hideLoading();
       if (result.success) {
         showToast('Check-in saved');
-        showDashboard();
+        loadDashboard();
       } else {
         showToast('Error saving check-in');
       }
     })
-    .withFailureHandler(function(err) { hideLoading(); showToast('Error: ' + (err && err.message ? err.message : String(err))); })
+    .withFailureHandler(function(err) { showToast('Error: ' + (err && err.message ? err.message : String(err))); })
     .saveCheckIn(data);
 }
 
@@ -507,7 +510,8 @@ function goBackFromCheckIn() {
 function showAddStudent() {
   appState.currentStudentId = null;
   renderStudentForm({});
-  document.getElementById('student-view-title').textContent = 'Add Student';
+  document.getElementById('student-view-breadcrumb').textContent = 'Students';
+  document.getElementById('student-view-title').textContent = 'New Student';
   showView('student-view');
 }
 
@@ -520,8 +524,9 @@ function editStudent(studentId) {
 
       try {
         appState.currentStudentId = studentId;
+        document.getElementById('student-view-breadcrumb').textContent = 'Student Profile';
         document.getElementById('student-view-title').textContent =
-          'Edit: ' + student.firstName + ' ' + student.lastName;
+          student.firstName + ' ' + student.lastName;
         renderStudentForm(student);
         showView('student-view');
       } catch(e) { hideLoading(); showToast('Render error: ' + e.message); return; }
@@ -717,16 +722,46 @@ function saveStudentForm() {
     return;
   }
 
-  showLoading();
+  // Optimistic UI: update local state and navigate immediately
+  if (profile.id) {
+    appState.dashboardData.forEach(function(s) {
+      if (s.id === profile.id) {
+        s.firstName = profile.firstName;
+        s.lastName = profile.lastName;
+        s.grade = profile.grade;
+        s.focusGoal = profile.focusGoal;
+        s.iepGoal = profile.iepGoal;
+        s.classes = profile.classes;
+      }
+    });
+  } else {
+    appState.dashboardData.push({
+      id: '__pending_' + Date.now(),
+      firstName: profile.firstName, lastName: profile.lastName,
+      grade: profile.grade, period: '',
+      focusGoal: profile.focusGoal, iepGoal: profile.iepGoal,
+      classes: profile.classes,
+      totalCheckIns: 0, latestWeek: null, latestMicroGoal: null,
+      avgRating: null, trend: 'none', gpa: null,
+      totalMissing: 0, academicData: []
+    });
+  }
+
+  renderDashboard(appState.dashboardData);
+  showView('dashboard-view');
+  showToast('Saving\u2026');
+
   google.script.run
     .withSuccessHandler(function(result) {
-      hideLoading();
       if (result.success) {
         showToast('Student saved');
-        showDashboard();
+        loadDashboard();
       }
     })
-    .withFailureHandler(function(err) { hideLoading(); showToast('Error: ' + (err && err.message ? err.message : String(err))); })
+    .withFailureHandler(function(err) {
+      showToast('Error: ' + (err && err.message ? err.message : String(err)));
+      loadDashboard();
+    })
     .saveStudent(profile);
 }
 
@@ -746,14 +781,21 @@ function confirmDeleteStudent(studentId) {
 }
 
 function doDeleteStudent(studentId) {
-  showLoading();
+  // Optimistic UI: remove from local state immediately
+  appState.dashboardData = appState.dashboardData.filter(function(s) { return s.id !== studentId; });
+  renderDashboard(appState.dashboardData);
+  showView('dashboard-view');
+  showToast('Deleting\u2026');
+
   google.script.run
     .withSuccessHandler(function() {
-      hideLoading();
       showToast('Student deleted');
-      showDashboard();
+      loadDashboard();
     })
-    .withFailureHandler(function(err) { hideLoading(); showToast('Error: ' + (err && err.message ? err.message : String(err))); })
+    .withFailureHandler(function(err) {
+      showToast('Error: ' + (err && err.message ? err.message : String(err)));
+      loadDashboard();
+    })
     .deleteStudent(studentId);
 }
 
@@ -846,14 +888,28 @@ function confirmDeleteCheckIn(checkInId, studentId) {
 }
 
 function doDeleteCheckIn(checkInId, studentId) {
-  showLoading();
+  // Optimistic UI: hide the card immediately
+  var cards = document.querySelectorAll('.history-card');
+  cards.forEach(function(card) {
+    if (card.getAttribute('onclick') && card.getAttribute('onclick').indexOf(checkInId) !== -1) {
+      card.style.opacity = '0.4';
+      card.style.pointerEvents = 'none';
+    }
+  });
+  showToast('Deleting check-in\u2026');
+
   google.script.run
     .withSuccessHandler(function() {
-      hideLoading();
       showToast('Check-in deleted');
       editStudent(studentId);
     })
-    .withFailureHandler(function(err) { hideLoading(); showToast('Error: ' + (err && err.message ? err.message : String(err))); })
+    .withFailureHandler(function(err) {
+      showToast('Error: ' + (err && err.message ? err.message : String(err)));
+      cards.forEach(function(card) {
+        card.style.opacity = '';
+        card.style.pointerEvents = '';
+      });
+    })
     .deleteCheckIn(checkInId);
 }
 

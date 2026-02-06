@@ -149,6 +149,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .view { display: none; }
 .view.active { display: block; }
 
+/* Dashboard view header (flat) */
 .view-header {
   display: flex; align-items: center; gap: 16px; margin-bottom: 20px;
 }
@@ -161,20 +162,77 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   color: var(--md-on-surface);
 }
 
-.btn-back {
-  /* M3 Text Button style */
-  background: none; border: none;
-  font-size: 16px;
-  color: var(--md-primary);
-  cursor: pointer;
-  padding: 8px 12px;
-  border-radius: var(--md-shape-full);
-  font-family: 'Roboto', sans-serif;
+/* ─── View Header Stack (Breadcrumb + Title hierarchy) ─── */
+.view-header-stack {
+  margin-bottom: 20px;
+}
+.view-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 2px;
+}
+.breadcrumb-label {
+  /* M3 Label Medium */
+  font-size: 12px;
   font-weight: 500;
+  line-height: 16px;
+  letter-spacing: 0.5px;
+  color: var(--md-on-surface-variant);
+  text-transform: uppercase;
+}
+.view-title {
+  /* M3 Headline Medium */
+  font-size: 28px;
+  font-weight: 400;
+  line-height: 36px;
+  letter-spacing: 0px;
+  color: var(--md-on-surface);
+  margin: 0;
+  padding-left: 44px; /* align with breadcrumb text (40px icon + 4px gap) */
+}
+
+/* ─── Icon Button (M3 Standard Icon Button) ─── */
+.btn-icon {
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: var(--md-shape-full);
+  cursor: pointer;
+  color: var(--md-on-surface-variant);
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+.btn-icon:hover { background: rgba(0,0,0,0.08); }
+.btn-icon:active { background: rgba(0,0,0,0.12); }
+
+/* ─── Ghost Button (M3 Text Button) ─── */
+.btn-ghost {
+  height: 40px;
+  padding: 0 12px;
+  background: none;
+  border: none;
+  border-radius: var(--md-shape-full);
+  cursor: pointer;
+  font-family: 'Roboto', sans-serif;
+  /* M3 Label Large */
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.1px;
+  line-height: 20px;
+  color: var(--md-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   transition: background 0.2s;
 }
-.btn-back:hover { background: rgba(196,30,58,0.08); }
-.btn-back:active { background: rgba(196,30,58,0.12); }
+.btn-ghost:hover { background: rgba(196,30,58,0.08); }
+.btn-ghost:active { background: rgba(196,30,58,0.12); }
+.btn-ghost.btn-sm { height: 32px; font-size: 12px; padding: 0 8px; }
 
 /* ─── Dashboard Data Table (M3 Table) ─── */
 .dashboard-table {
@@ -830,6 +888,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   .dashboard-table td { padding: 10px 12px; }
   .side-panel { width: 100%; right: -100%; border-radius: 0; }
   .view-header { flex-wrap: wrap; }
+  .view-title { font-size: 22px; line-height: 28px; padding-left: 44px; }
   .confirm-dialog { margin: 0 16px; }
 }
 </style>
