@@ -917,6 +917,239 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   font-style: italic;
 }
 
+/* ─── Missing Assignments View (slide-in child page) ─── */
+#missing-view.active {
+  animation: slideInRight 0.3s cubic-bezier(0.2, 0, 0, 1) forwards;
+}
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(60px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.missing-summary {
+  text-align: center;
+  padding: 24px;
+  border-radius: var(--md-shape-md);
+  margin-bottom: 24px;
+}
+.missing-summary.alert {
+  background: var(--md-error-container);
+  color: var(--md-on-error-container);
+}
+.missing-summary.ok {
+  background: #D6F5D6;
+  color: #1B5E20;
+}
+.missing-summary-count {
+  /* M3 Display Small */
+  font-size: 48px;
+  font-weight: 400;
+  line-height: 56px;
+}
+.missing-summary-label {
+  /* M3 Label Large */
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.1px;
+  margin-top: 4px;
+}
+
+.missing-class-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+.missing-class-card {
+  background: var(--md-surface);
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-md);
+  overflow: hidden;
+}
+.missing-class-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.missing-class-header:hover {
+  background: rgba(196,30,58,0.04);
+}
+.missing-class-header .expand-icon {
+  transition: transform 0.2s;
+  color: var(--md-on-surface-variant);
+  margin-left: 8px;
+}
+.missing-class-card.expanded .missing-class-header .expand-icon {
+  transform: rotate(180deg);
+}
+.missing-class-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.missing-class-name {
+  font-weight: 500;
+  font-size: 14px;
+}
+.missing-class-grade {
+  font-size: 14px;
+  color: var(--md-on-surface-variant);
+}
+.missing-class-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.missing-class-badge {
+  min-width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--md-shape-full);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 0 12px;
+}
+.missing-class-badge.badge-green  { background: #D6F5D6; color: #1B5E20; }
+.missing-class-badge.badge-yellow { background: #FFF3CD; color: #7A5900; }
+.missing-class-badge.badge-red    { background: var(--md-error-container); color: var(--md-on-error-container); }
+
+.missing-class-detail {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s cubic-bezier(0.2, 0, 0, 1);
+}
+.missing-class-card.expanded .missing-class-detail {
+  max-height: 600px;
+}
+
+.missing-detail-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.missing-detail-table th {
+  text-align: left;
+  padding: 10px 20px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--md-on-surface-variant);
+  background: var(--md-surface-container);
+  border-top: 1px solid var(--md-outline-variant);
+  border-bottom: 1px solid var(--md-outline-variant);
+}
+.missing-detail-table td {
+  padding: 12px 20px;
+  font-size: 14px;
+  border-bottom: 1px solid var(--md-outline-variant);
+}
+.missing-detail-table tr:last-child td { border-bottom: none; }
+
+.assignment-type {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: var(--md-shape-full);
+  font-size: 12px;
+  font-weight: 500;
+}
+.type-formative  { background: #E3F2FD; color: #1565C0; }
+.type-summative  { background: #F3E5F5; color: #7B1FA2; }
+
+.missing-none-msg,
+.missing-count-only {
+  padding: 16px 20px;
+  font-size: 14px;
+  color: var(--md-on-surface-variant);
+  font-style: italic;
+  border-top: 1px solid var(--md-outline-variant);
+}
+
+.missing-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* ─── Check-In Inline Missing Assignment Editor ─── */
+.missing-toggle {
+  cursor: pointer;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.missing-toggle .expand-chevron {
+  transition: transform 0.2s;
+}
+.acad-missing-row td {
+  padding: 0 !important;
+  border-bottom: 1px solid var(--md-outline-variant);
+}
+.ci-missing-container {
+  padding: 12px 16px;
+  background: var(--md-surface-container-low);
+}
+.ci-missing-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.ci-missing-item input[type="text"] {
+  flex: 2;
+  height: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--md-outline);
+  border-radius: var(--md-shape-xs);
+  font-size: 14px;
+  font-family: 'Roboto', sans-serif;
+  color: var(--md-on-surface);
+  background: var(--md-surface);
+  transition: border-color 0.2s;
+}
+.ci-missing-item select {
+  flex: 1;
+  height: 36px;
+  padding: 6px 10px;
+  border: 1px solid var(--md-outline);
+  border-radius: var(--md-shape-xs);
+  font-size: 14px;
+  font-family: 'Roboto', sans-serif;
+  color: var(--md-on-surface);
+  background: var(--md-surface);
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='%23534343' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 26px;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+.ci-missing-item input[type="text"]:focus,
+.ci-missing-item select:focus {
+  outline: none;
+  border-color: var(--md-primary);
+  border-width: 2px;
+  padding: 5px 9px;
+}
+.ci-missing-item select:focus { padding-right: 25px; }
+
+/* ─── Clickable Missing Badge on Dashboard ─── */
+.chip-clickable {
+  cursor: pointer;
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+.chip-clickable:hover {
+  box-shadow: var(--md-elevation-1);
+  transform: scale(1.05);
+}
+
 /* ─── Responsive ─── */
 @media (max-width: 768px) {
   nav {
@@ -935,5 +1168,11 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   .view-header { flex-wrap: wrap; }
   .view-title { font-size: 22px; line-height: 28px; padding-left: 44px; }
   .confirm-dialog { margin: 0 16px; }
+  .missing-class-header { padding: 12px 16px; }
+  .missing-detail-table th,
+  .missing-detail-table td { padding: 10px 16px; }
+  .ci-missing-item { flex-wrap: wrap; }
+  .ci-missing-item input[type="text"] { flex: 1 1 100%; }
+  .ci-missing-item select { flex: 1; }
 }
 </style>
