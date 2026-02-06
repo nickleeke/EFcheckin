@@ -53,39 +53,60 @@ function include(filename) {
 
 // ───── Initialization ─────
 
+var STUDENT_HEADERS = [
+  'id','firstName','lastName','grade','period',
+  'focusGoal','accommodations','notes','classesJson',
+  'createdAt','updatedAt'
+];
+var CHECKIN_HEADERS = [
+  'id','studentId','weekOf',
+  'planningRating','followThroughRating','regulationRating',
+  'focusGoalRating','effortRating',
+  'whatWentWell','barrier',
+  'microGoal','microGoalCategory',
+  'teacherNotes','academicDataJson','createdAt'
+];
+
 function initializeSheets() {
   const ss = getSS_();
 
   let studentsSheet = ss.getSheetByName(SHEET_STUDENTS);
   if (!studentsSheet) {
     studentsSheet = ss.insertSheet(SHEET_STUDENTS);
-    studentsSheet.appendRow([
-      'id','firstName','lastName','grade','period',
-      'focusGoal','accommodations','notes','classesJson',
-      'createdAt','updatedAt'
-    ]);
-    studentsSheet.getRange('1:1').setFontWeight('bold');
   }
+  ensureHeaders_(studentsSheet, STUDENT_HEADERS);
 
   let checkInsSheet = ss.getSheetByName(SHEET_CHECKINS);
   if (!checkInsSheet) {
     checkInsSheet = ss.insertSheet(SHEET_CHECKINS);
-    checkInsSheet.appendRow([
-      'id','studentId','weekOf',
-      'planningRating','followThroughRating','regulationRating',
-      'focusGoalRating','effortRating',
-      'whatWentWell','barrier',
-      'microGoal','microGoalCategory',
-      'teacherNotes','academicDataJson','createdAt'
-    ]);
-    checkInsSheet.getRange('1:1').setFontWeight('bold');
   }
+  ensureHeaders_(checkInsSheet, CHECKIN_HEADERS);
 
   if (studentsSheet.getLastRow() <= 1) {
     seedDefaultStudents_(studentsSheet);
   }
 
   return { success: true };
+}
+
+/** Verify row 1 has the expected headers; overwrite if not. */
+function ensureHeaders_(sheet, expectedHeaders) {
+  var needsWrite = false;
+  if (sheet.getLastRow() === 0) {
+    needsWrite = true;
+  } else {
+    var current = sheet.getRange(1, 1, 1, expectedHeaders.length).getValues()[0];
+    for (var i = 0; i < expectedHeaders.length; i++) {
+      if (String(current[i]).trim() !== expectedHeaders[i]) {
+        needsWrite = true;
+        break;
+      }
+    }
+  }
+  if (needsWrite) {
+    sheet.getRange(1, 1, 1, expectedHeaders.length).setValues([expectedHeaders]);
+    sheet.getRange('1:1').setFontWeight('bold');
+  }
 }
 
 function seedDefaultStudents_(sheet) {
