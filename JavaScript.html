@@ -11,7 +11,7 @@ var appState = {
   editingCheckIn: null,
   sortField: 'name',
   sortAsc: true,
-  missingViewStudentId: null
+  missingViewStudentId: null,
   feedbackLinks: null
 };
 
@@ -24,7 +24,7 @@ var PRELOADED_CLASSES = [
 
 // ─── Initialization ───
 document.addEventListener('DOMContentLoaded', function() {
-  showLoading();
+  showDashboardSkeleton();
   google.script.run
     .withSuccessHandler(function() {
       try {
@@ -33,10 +33,9 @@ document.addEventListener('DOMContentLoaded', function() {
           .withFailureHandler(function() { appState.feedbackLinks = {}; })
           .getFeedbackLinks();
         loadDashboard();
-      } catch(e) { hideLoading(); showToast('Error: ' + e.message); }
+      } catch(e) { showToast('Error: ' + e.message); }
     })
     .withFailureHandler(function(err) {
-      hideLoading();
       showToast('Error initializing: ' + (err && err.message ? err.message : String(err)));
     })
     .initializeSheets();
@@ -68,7 +67,7 @@ function showDashboard() {
 }
 
 function loadDashboard() {
-  showLoading();
+  showDashboardSkeleton();
   google.script.run
     .withSuccessHandler(function(data) {
       try {
@@ -77,10 +76,8 @@ function loadDashboard() {
       } catch(e) {
         showToast('Render error: ' + e.message);
       }
-      hideLoading();
     })
     .withFailureHandler(function(err) {
-      hideLoading();
       showToast('Error loading dashboard: ' + (err && err.message ? err.message : String(err)));
     })
     .getDashboardData();
@@ -295,28 +292,27 @@ function closeSidePanel() {
 
 // ─── Check-In Form ───
 function startCheckIn(studentId, existingCheckIn) {
-  showLoading();
   appState.currentStudentId = studentId;
   appState.editingCheckIn = existingCheckIn || null;
+  showCheckInSkeleton();
+  showView('checkin-view');
 
   google.script.run
     .withSuccessHandler(function(students) {
       var student = (students || []).find(function(s) { return s.id === studentId; });
-      if (!student) { hideLoading(); showToast('Student not found'); return; }
+      if (!student) { showToast('Student not found'); return; }
 
       google.script.run
         .withSuccessHandler(function(checkIns) {
           try {
             appState.currentCheckIns = checkIns || [];
             renderCheckInForm(student, checkIns, existingCheckIn);
-            showView('checkin-view');
           } catch(e) { showToast('Render error: ' + e.message); }
-          hideLoading();
         })
-        .withFailureHandler(function(err) { hideLoading(); showToast('Error: ' + (err && err.message ? err.message : String(err))); })
+        .withFailureHandler(function(err) { showToast('Error: ' + (err && err.message ? err.message : String(err))); })
         .getCheckIns(studentId);
     })
-    .withFailureHandler(function(err) { hideLoading(); showToast('Error: ' + (err && err.message ? err.message : String(err))); })
+    .withFailureHandler(function(err) { showToast('Error: ' + (err && err.message ? err.message : String(err))); })
     .getStudents();
 }
 
@@ -776,32 +772,34 @@ function showAddStudent() {
 }
 
 function editStudent(studentId) {
-  showLoading();
+  appState.currentStudentId = studentId;
+  document.getElementById('student-view-breadcrumb').textContent = 'Student Profile';
+  document.getElementById('student-view-title').textContent = 'Loading\u2026';
+  showStudentProfileSkeleton();
+  renderStudentMenu(studentId);
+  showView('student-view');
+
   google.script.run
     .withSuccessHandler(function(students) {
       var student = (students || []).find(function(s) { return s.id === studentId; });
-      if (!student) { hideLoading(); showToast('Student not found'); return; }
+      if (!student) { showToast('Student not found'); return; }
 
       try {
-        appState.currentStudentId = studentId;
-        document.getElementById('student-view-breadcrumb').textContent = 'Student Profile';
         document.getElementById('student-view-title').textContent =
           student.firstName + ' ' + student.lastName;
         renderStudentForm(student);
         renderStudentMenu(studentId);
-        showView('student-view');
-      } catch(e) { hideLoading(); showToast('Render error: ' + e.message); return; }
+      } catch(e) { showToast('Render error: ' + e.message); return; }
 
       // Also load check-in history
       google.script.run
         .withSuccessHandler(function(checkIns) {
           try { renderCheckInHistory(checkIns, student); } catch(e) { showToast('History error: ' + e.message); }
-          hideLoading();
         })
-        .withFailureHandler(function() { hideLoading(); })
+        .withFailureHandler(function() {})
         .getCheckIns(studentId);
     })
-    .withFailureHandler(function(err) { hideLoading(); showToast('Error: ' + (err && err.message ? err.message : String(err))); })
+    .withFailureHandler(function(err) { showToast('Error: ' + (err && err.message ? err.message : String(err))); })
     .getStudents();
 }
 
@@ -1118,18 +1116,18 @@ function renderCheckInHistory(checkIns, student) {
 }
 
 function editCheckIn(checkInId, studentId) {
-  showLoading();
+  showCheckInSkeleton();
+  showView('checkin-view');
   google.script.run
     .withSuccessHandler(function(checkIns) {
       var ci = checkIns.find(function(c) { return c.id === checkInId; });
       if (ci) {
         startCheckIn(studentId, ci);
       } else {
-        hideLoading();
         showToast('Check-in not found');
       }
     })
-    .withFailureHandler(function(err) { hideLoading(); showToast('Error: ' + (err && err.message ? err.message : String(err))); })
+    .withFailureHandler(function(err) { showToast('Error: ' + (err && err.message ? err.message : String(err))); })
     .getCheckIns(studentId);
 }
 
@@ -1293,14 +1291,149 @@ function saveFeedbackSetup() {
     .saveFeedbackLinks(links);
 }
 
-// ─── Utility Functions ───
-function showLoading() {
-  document.getElementById('loading-overlay').classList.remove('hidden');
+// ─── Skeleton Loading Functions ───
+function showDashboardSkeleton() {
+  var container = document.getElementById('dashboard-table-container');
+  var html = '<div class="skeleton-fade-in"><table class="skeleton-table"><thead><tr>' +
+    '<th><div class="skeleton skeleton-text w-50" style="margin:0;"></div></th>' +
+    '<th><div class="skeleton skeleton-text w-40" style="margin:0;"></div></th>' +
+    '<th><div class="skeleton skeleton-text w-30" style="margin:0;"></div></th>' +
+    '<th><div class="skeleton skeleton-text w-30" style="margin:0;"></div></th>' +
+    '<th><div class="skeleton skeleton-text w-25" style="margin:0;"></div></th>' +
+    '<th><div class="skeleton skeleton-text w-30" style="margin:0;"></div></th>' +
+    '<th><div class="skeleton skeleton-text w-40" style="margin:0;"></div></th>' +
+    '<th><div class="skeleton skeleton-text w-30" style="margin:0;"></div></th>' +
+  '</tr></thead><tbody>';
+  for (var i = 0; i < 6; i++) {
+    html += '<tr>' +
+      '<td><div class="skeleton skeleton-text w-75" style="margin:0;"></div></td>' +
+      '<td><div class="skeleton skeleton-text w-25" style="margin:0;"></div></td>' +
+      '<td><div class="skeleton skeleton-chip"></div></td>' +
+      '<td><div class="skeleton skeleton-text w-40" style="margin:0;"></div></td>' +
+      '<td><div class="skeleton skeleton-chip"></div></td>' +
+      '<td><div class="skeleton skeleton-chip"></div></td>' +
+      '<td><div class="skeleton skeleton-text w-50" style="margin:0;"></div></td>' +
+      '<td><div style="display:flex;gap:8px;"><div class="skeleton skeleton-btn"></div><div class="skeleton skeleton-btn" style="width:56px;"></div></div></td>' +
+    '</tr>';
+  }
+  html += '</tbody></table></div>';
+  container.innerHTML = html;
 }
 
-function hideLoading() {
-  document.getElementById('loading-overlay').classList.add('hidden');
+function showStudentProfileSkeleton() {
+  var container = document.getElementById('student-form-container');
+  var html = '<div class="skeleton-fade-in"><div class="form-card">';
+  // Basic Info section
+  html += '<div class="skeleton-section">' +
+    '<div class="skeleton skeleton-section-title"></div>' +
+    '<div style="display:flex;gap:16px;"><div style="flex:1;"><div class="skeleton skeleton-input"></div></div>' +
+    '<div style="flex:1;"><div class="skeleton skeleton-input"></div></div></div>' +
+    '<div class="skeleton skeleton-input" style="width:50%;"></div>' +
+  '</div>';
+  // Focus & Support section
+  html += '<div class="skeleton-section">' +
+    '<div class="skeleton skeleton-section-title" style="width:25%;"></div>' +
+    '<div class="skeleton skeleton-input"></div>' +
+    '<div class="skeleton skeleton-input" style="height:80px;"></div>' +
+    '<div class="skeleton skeleton-input" style="height:80px;"></div>' +
+  '</div>';
+  // IEP Goal section
+  html += '<div class="skeleton-section">' +
+    '<div class="skeleton skeleton-section-title" style="width:20%;"></div>' +
+    '<div class="skeleton skeleton-input" style="height:80px;"></div>' +
+  '</div>';
+  // Classes section
+  html += '<div class="skeleton-section">' +
+    '<div class="skeleton skeleton-section-title" style="width:15%;"></div>';
+  for (var i = 0; i < 3; i++) {
+    html += '<div style="display:flex;gap:8px;margin-bottom:10px;">' +
+      '<div class="skeleton" style="flex:2;height:44px;border-radius:4px;"></div>' +
+      '<div class="skeleton" style="width:100px;height:44px;border-radius:4px;"></div>' +
+      '<div class="skeleton" style="width:40px;height:40px;border-radius:50%;"></div>' +
+    '</div>';
+  }
+  html += '</div>';
+  // Buttons
+  html += '<div style="display:flex;gap:8px;justify-content:flex-end;">' +
+    '<div class="skeleton skeleton-btn" style="width:80px;height:40px;"></div>' +
+    '<div class="skeleton skeleton-btn" style="width:100px;height:40px;"></div>' +
+  '</div>';
+  html += '</div>';
+  // Check-in history skeleton
+  html += '<div class="form-card" style="margin-top:20px;">' +
+    '<div class="skeleton skeleton-section-title" style="width:35%;"></div>';
+  for (var j = 0; j < 2; j++) {
+    html += '<div class="skeleton-card">' +
+      '<div style="display:flex;justify-content:space-between;margin-bottom:12px;">' +
+        '<div class="skeleton skeleton-text w-25" style="margin:0;"></div>' +
+        '<div class="skeleton skeleton-chip"></div>' +
+      '</div>' +
+      '<div style="display:flex;gap:12px;flex-wrap:wrap;">' +
+        '<div class="skeleton skeleton-text w-20" style="margin:0;"></div>' +
+        '<div class="skeleton skeleton-text w-20" style="margin:0;"></div>' +
+        '<div class="skeleton skeleton-text w-20" style="margin:0;"></div>' +
+        '<div class="skeleton skeleton-text w-20" style="margin:0;"></div>' +
+      '</div>' +
+    '</div>';
+  }
+  html += '</div></div>';
+  container.innerHTML = html;
 }
+
+function showCheckInSkeleton() {
+  var container = document.getElementById('checkin-form-container');
+  var html = '<div class="skeleton-fade-in">';
+  // Previous goal banner skeleton
+  html += '<div style="background:var(--md-surface-container);border-radius:var(--md-shape-md);padding:16px 20px;margin-bottom:24px;border:1px solid var(--md-outline-variant);">' +
+    '<div class="skeleton skeleton-text w-20"></div>' +
+    '<div class="skeleton skeleton-text w-50"></div>' +
+    '<div class="skeleton skeleton-text w-30" style="height:10px;"></div>' +
+  '</div>';
+  html += '<div class="form-card">';
+  // Week Of
+  html += '<div class="skeleton-section">' +
+    '<div class="skeleton skeleton-input" style="width:200px;"></div>' +
+  '</div>';
+  // EF Ratings section
+  html += '<div class="skeleton-section">' +
+    '<div class="skeleton skeleton-section-title" style="width:40%;"></div>';
+  for (var i = 0; i < 5; i++) {
+    html += '<div style="margin-bottom:16px;">' +
+      '<div class="skeleton skeleton-text w-20" style="height:12px;"></div>' +
+      '<div style="display:flex;gap:0;">' +
+        '<div class="skeleton" style="width:48px;height:40px;border-radius:9999px 0 0 9999px;"></div>' +
+        '<div class="skeleton" style="width:48px;height:40px;border-radius:0;"></div>' +
+        '<div class="skeleton" style="width:48px;height:40px;border-radius:0;"></div>' +
+        '<div class="skeleton" style="width:48px;height:40px;border-radius:0;"></div>' +
+        '<div class="skeleton" style="width:48px;height:40px;border-radius:0 9999px 9999px 0;"></div>' +
+      '</div>' +
+    '</div>';
+  }
+  html += '</div>';
+  // Reflection section
+  html += '<div class="skeleton-section">' +
+    '<div class="skeleton skeleton-section-title" style="width:20%;"></div>' +
+    '<div class="skeleton skeleton-input" style="height:80px;"></div>' +
+    '<div class="skeleton skeleton-input" style="height:80px;"></div>' +
+  '</div>';
+  // Micro Goal section
+  html += '<div class="skeleton-section">' +
+    '<div class="skeleton skeleton-section-title" style="width:20%;"></div>' +
+    '<div class="skeleton skeleton-input"></div>' +
+    '<div class="skeleton skeleton-input"></div>' +
+  '</div>';
+  // Buttons
+  html += '<div style="display:flex;gap:8px;justify-content:flex-end;">' +
+    '<div class="skeleton skeleton-btn" style="width:72px;height:40px;"></div>' +
+    '<div class="skeleton skeleton-btn" style="width:110px;height:40px;"></div>' +
+  '</div>';
+  html += '</div></div>';
+  container.innerHTML = html;
+}
+
+// Legacy wrappers — now no-ops since we use per-view skeletons
+function showLoading() {}
+function hideLoading() {}
 
 function showToast(message) {
   var toast = document.getElementById('toast');
