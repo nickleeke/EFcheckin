@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <?!= include('Stylesheet'); ?>
+</head>
+<body>
+
+  <!-- Loading overlay -->
+  <div id="loading-overlay" class="loading-overlay">
+    <div class="spinner"></div>
+  </div>
+
+  <!-- Navigation -->
+  <nav id="navbar">
+    <div class="nav-brand">EF Weekly Check-In</div>
+    <div class="nav-actions">
+      <button onclick="showDashboard()" class="nav-btn">Dashboard</button>
+      <button onclick="showAddStudent()" class="nav-btn btn-outline">+ Add Student</button>
+    </div>
+  </nav>
+
+  <main id="main-content">
+
+    <!-- Dashboard View -->
+    <div id="dashboard-view" class="view active">
+      <div class="view-header">
+        <h2>Student Dashboard</h2>
+      </div>
+      <div id="dashboard-table-container"></div>
+    </div>
+
+    <!-- Student Profile View -->
+    <div id="student-view" class="view">
+      <div class="view-header">
+        <button onclick="showDashboard()" class="btn-back">&larr; Back</button>
+        <h2 id="student-view-title">Student Profile</h2>
+      </div>
+      <div id="student-form-container"></div>
+    </div>
+
+    <!-- Check-In Form View -->
+    <div id="checkin-view" class="view">
+      <div class="view-header">
+        <button onclick="goBackFromCheckIn()" class="btn-back">&larr; Back</button>
+        <h2 id="checkin-view-title">Weekly Check-In</h2>
+      </div>
+      <div id="checkin-form-container"></div>
+    </div>
+
+    <!-- Check-In History View -->
+    <div id="history-view" class="view">
+      <div class="view-header">
+        <button onclick="showDashboard()" class="btn-back">&larr; Back</button>
+        <h2 id="history-view-title">Check-In History</h2>
+      </div>
+      <div id="history-container"></div>
+    </div>
+
+  </main>
+
+  <!-- Side Panel Overlay -->
+  <div id="side-panel-overlay" class="side-panel-overlay" onclick="closeSidePanel()"></div>
+
+  <!-- Side Panel (Quick View) -->
+  <div id="side-panel" class="side-panel">
+    <div class="side-panel-header">
+      <h3 id="side-panel-title"></h3>
+      <button onclick="closeSidePanel()" class="btn-close">&times;</button>
+    </div>
+    <div id="side-panel-content" class="side-panel-content"></div>
+  </div>
+
+  <!-- Toast notification -->
+  <div id="toast" class="toast"></div>
+
+  <?!= include('JavaScript'); ?>
+</body>
+</html>
