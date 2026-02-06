@@ -10,7 +10,8 @@ var appState = {
   currentCheckIns: [],
   editingCheckIn: null,
   sortField: 'name',
-  sortAsc: true
+  sortAsc: true,
+  missingViewStudentId: null
 };
 
 // ─── Preloaded Options ───
@@ -167,12 +168,12 @@ function renderDashboard(data) {
       html += '<td><span class="chip chip-gray">--</span></td>';
     }
 
-    // Missing assignments
+    // Missing assignments (clickable badge)
     if (s.totalMissing > 0) {
       var missingClass = s.totalMissing >= 4 ? 'chip-red' : 'chip-yellow';
-      html += '<td><span class="chip ' + missingClass + '">' + s.totalMissing + '</span></td>';
+      html += '<td><span class="chip chip-clickable ' + missingClass + '" onclick="event.stopPropagation(); showMissingAssignments(\'' + s.id + '\')" title="View missing assignments">' + s.totalMissing + '</span></td>';
     } else {
-      html += '<td><span class="chip chip-green">0</span></td>';
+      html += '<td><span class="chip chip-clickable chip-green" onclick="event.stopPropagation(); showMissingAssignments(\'' + s.id + '\')" title="View missing assignments">0</span></td>';
     }
 
     // Last check-in date
@@ -262,11 +263,11 @@ function openSidePanel(index) {
   }
   content += '</div>';
 
-  // Total missing
+  // Total missing (clickable to open detail view)
   content += '<div class="sp-section">';
   var totalMissing = s.totalMissing || 0;
   var tmClass = totalMissing > 0 ? 'alert' : 'ok';
-  content += '<div class="sp-total-missing ' + tmClass + '">Total Missing Assignments: ' + totalMissing + '</div>';
+  content += '<div class="sp-total-missing ' + tmClass + '" onclick="closeSidePanel(); showMissingAssignments(\'' + s.id + '\')" style="cursor:pointer;" title="View missing assignments detail">Total Missing Assignments: ' + totalMissing + '</div>';
   content += '</div>';
 
   // Action buttons
@@ -434,13 +435,16 @@ function renderCheckInForm(student, checkIns, existingCheckIn) {
     html += '<table class="academic-table" id="academic-table">' +
       '<thead><tr><th>Class</th><th>Grade</th><th>Missing</th></tr></thead><tbody>';
 
-    classes.forEach(function(cls) {
+    classes.forEach(function(cls, clsIdx) {
       var className = cls.name || cls;
       var classPeriod = cls.period || '';
       var displayName = classPeriod ? className + ' (P' + classPeriod + ')' : className;
       var existing = editAcademic[className] || prevAcademic[className] || {};
+      var assignments = existing.missingAssignments || [];
+      var missingCount = assignments.length || (Number(existing.missing) || 0);
+      var badgeClass = missingCount === 0 ? 'chip-green' : missingCount <= 3 ? 'chip-yellow' : 'chip-red';
 
-      html += '<tr>' +
+      html += '<tr class="acad-row">' +
         '<td class="class-name-col">' + esc(displayName) +
           '<input type="hidden" class="acad-class-name" value="' + esc(className) + '">' +
         '</td>' +
@@ -452,7 +456,29 @@ function renderCheckInForm(student, checkIns, existingCheckIn) {
       });
 
       html += '</select></td>' +
-        '<td><input type="number" class="acad-missing" min="0" value="' + (existing.missing || 0) + '"></td>' +
+        '<td>' +
+          '<button type="button" class="missing-toggle chip ' + badgeClass + '" onclick="toggleCheckInMissing(' + clsIdx + ')">' +
+            '<span id="ci-missing-count-' + clsIdx + '">' + missingCount + '</span>' +
+            ' <svg class="expand-chevron" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>' +
+          '</button>' +
+        '</td>' +
+      '</tr>';
+
+      // Expandable missing assignments detail row
+      html += '<tr class="acad-missing-row" id="acad-missing-row-' + clsIdx + '" style="display:none;">' +
+        '<td colspan="3">' +
+          '<div class="ci-missing-container">' +
+            '<div class="ci-missing-list" id="ci-missing-list-' + clsIdx + '">';
+
+      // Render existing individual assignments
+      assignments.forEach(function(a) {
+        html += renderCheckInMissingItem(clsIdx, a.name || '', a.type || '');
+      });
+
+      html += '</div>' +
+            '<button type="button" class="btn-ghost btn-sm" onclick="addCheckInMissing(' + clsIdx + ')">+ Add Missing Assignment</button>' +
+          '</div>' +
+        '</td>' +
       '</tr>';
     });
 
@@ -495,16 +521,78 @@ function getSelectedRating(field) {
   return selected ? selected.getAttribute('data-value') : '';
 }
 
+// ─── Check-In Inline Missing Assignment Helpers ───
+function renderCheckInMissingItem(clsIdx, name, type) {
+  return '<div class="ci-missing-item" data-class-idx="' + clsIdx + '">' +
+    '<input type="text" class="ci-ma-name" value="' + esc(name) + '" placeholder="Assignment name">' +
+    '<select class="ci-ma-type">' +
+      '<option value=""' + (!type ? ' selected' : '') + '>-- Type --</option>' +
+      '<option value="Formative"' + (type === 'Formative' ? ' selected' : '') + '>Formative</option>' +
+      '<option value="Summative"' + (type === 'Summative' ? ' selected' : '') + '>Summative</option>' +
+    '</select>' +
+    '<button type="button" class="btn-remove-class" onclick="removeCheckInMissing(this, ' + clsIdx + ')">&times;</button>' +
+  '</div>';
+}
+
+function toggleCheckInMissing(clsIdx) {
+  var row = document.getElementById('acad-missing-row-' + clsIdx);
+  if (row.style.display === 'none') {
+    row.style.display = '';
+  } else {
+    row.style.display = 'none';
+  }
+}
+
+function addCheckInMissing(clsIdx) {
+  var list = document.getElementById('ci-missing-list-' + clsIdx);
+  var div = document.createElement('div');
+  div.innerHTML = renderCheckInMissingItem(clsIdx, '', '');
+  list.appendChild(div.firstChild);
+  updateCheckInMissingCount(clsIdx);
+  // Focus the new name input
+  var items = list.querySelectorAll('.ci-missing-item');
+  var last = items[items.length - 1];
+  if (last) last.querySelector('.ci-ma-name').focus();
+}
+
+function removeCheckInMissing(btn, clsIdx) {
+  btn.parentElement.remove();
+  updateCheckInMissingCount(clsIdx);
+}
+
+function updateCheckInMissingCount(clsIdx) {
+  var list = document.getElementById('ci-missing-list-' + clsIdx);
+  var count = list.querySelectorAll('.ci-missing-item').length;
+  var countEl = document.getElementById('ci-missing-count-' + clsIdx);
+  countEl.textContent = count;
+  // Update badge color
+  var btn = countEl.closest('.missing-toggle');
+  btn.className = 'missing-toggle chip ' +
+    (count === 0 ? 'chip-green' : count <= 3 ? 'chip-yellow' : 'chip-red');
+}
+
 function getAcademicData() {
   var table = document.getElementById('academic-table');
   if (!table) return [];
-  var rows = table.querySelectorAll('tbody tr');
+  var rows = table.querySelectorAll('tbody tr.acad-row');
   var result = [];
-  rows.forEach(function(row) {
+  rows.forEach(function(row, idx) {
+    var missingItems = [];
+    var list = document.getElementById('ci-missing-list-' + idx);
+    if (list) {
+      list.querySelectorAll('.ci-missing-item').forEach(function(item) {
+        var name = item.querySelector('.ci-ma-name').value.trim();
+        var type = item.querySelector('.ci-ma-type').value;
+        if (name) {
+          missingItems.push({ name: name, type: type });
+        }
+      });
+    }
     result.push({
       className: row.querySelector('.acad-class-name').value,
       grade: row.querySelector('.acad-grade').value,
-      missing: Number(row.querySelector('.acad-missing').value) || 0
+      missing: missingItems.length,
+      missingAssignments: missingItems
     });
   });
   return result;
@@ -550,6 +638,123 @@ function saveCheckIn() {
 }
 
 function goBackFromCheckIn() {
+  showDashboard();
+}
+
+// ─── Missing Assignments View (child page) ───
+function showMissingAssignments(studentId) {
+  var student = appState.dashboardData.find(function(s) { return s.id === studentId; });
+  if (!student) { showToast('Student not found'); return; }
+
+  appState.missingViewStudentId = studentId;
+
+  document.getElementById('missing-view-breadcrumb').textContent =
+    'Student Profile \u203A Missing Assignments';
+  document.getElementById('missing-view-title').textContent =
+    student.firstName + ' ' + student.lastName;
+
+  renderMissingView(student);
+  showView('missing-view');
+}
+
+function renderMissingView(student) {
+  var container = document.getElementById('missing-content-container');
+  var academicData = student.academicData || [];
+  var totalMissing = student.totalMissing || 0;
+  var html = '';
+
+  // Summary card
+  var summaryClass = totalMissing === 0 ? 'ok' : 'alert';
+  html += '<div class="missing-summary ' + summaryClass + '">' +
+    '<div class="missing-summary-count">' + totalMissing + '</div>' +
+    '<div class="missing-summary-label">Total Missing Assignments</div>' +
+  '</div>';
+
+  if (academicData.length === 0) {
+    html += '<div class="empty-state" style="padding:40px 20px;">' +
+      '<p>No academic data from the latest check-in.</p>' +
+    '</div>';
+  } else {
+    html += '<div class="missing-class-cards">';
+
+    academicData.forEach(function(c, idx) {
+      var missingNum = Number(c.missing) || 0;
+      var assignments = c.missingAssignments || [];
+      var badgeClass = missingNum === 0 ? 'badge-green' : missingNum <= 3 ? 'badge-yellow' : 'badge-red';
+      var classLabel = c.className || 'Unknown';
+
+      // Find period from student's class list
+      var matchedClass = (student.classes || []).find(function(cl) {
+        return cl.name === c.className;
+      });
+      if (matchedClass && matchedClass.period) classLabel += ' (P' + matchedClass.period + ')';
+
+      html += '<div class="missing-class-card" id="missing-card-' + idx + '">' +
+        '<div class="missing-class-header" onclick="toggleMissingClass(' + idx + ')">' +
+          '<div class="missing-class-info">' +
+            '<span class="missing-class-name">' + esc(classLabel) + '</span>' +
+            '<span class="missing-class-grade">' + esc(c.grade || '--') + '</span>' +
+          '</div>' +
+          '<div class="missing-class-right">' +
+            '<div class="missing-class-badge ' + badgeClass + '">' + missingNum + '</div>' +
+            '<svg class="expand-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>' +
+          '</div>' +
+        '</div>' +
+        '<div class="missing-class-detail" id="missing-class-detail-' + idx + '">';
+
+      if (missingNum === 0) {
+        html += '<div class="missing-none-msg">No missing assignments</div>';
+      } else if (assignments.length > 0) {
+        // Sort by name then type
+        var sorted = assignments.slice().sort(function(a, b) {
+          var nameComp = (a.name || '').localeCompare(b.name || '');
+          if (nameComp !== 0) return nameComp;
+          return (a.type || '').localeCompare(b.type || '');
+        });
+
+        html += '<table class="missing-detail-table">' +
+          '<thead><tr><th>Assignment Name</th><th>Type</th></tr></thead><tbody>';
+        sorted.forEach(function(a) {
+          var typeClass = a.type === 'Summative' ? 'type-summative' :
+                          a.type === 'Formative' ? 'type-formative' : '';
+          html += '<tr>' +
+            '<td>' + esc(a.name || 'Untitled') + '</td>' +
+            '<td><span class="assignment-type ' + typeClass + '">' +
+              esc(a.type || 'Unknown') + '</span></td>' +
+          '</tr>';
+        });
+        html += '</tbody></table>';
+      } else {
+        html += '<div class="missing-count-only">' + missingNum +
+          ' missing assignment' + (missingNum !== 1 ? 's' : '') +
+          ' recorded (no details available)</div>';
+      }
+
+      html += '</div></div>';
+    });
+
+    html += '</div>';
+  }
+
+  // Action buttons
+  html += '<div class="missing-actions">' +
+    '<button class="btn btn-primary" onclick="goBackFromMissing(); startCheckIn(\'' + student.id + '\')">New Check-In</button>' +
+    '<button class="btn btn-secondary" onclick="goBackFromMissing()">Back</button>' +
+  '</div>';
+
+  container.innerHTML = html;
+}
+
+function toggleMissingClass(idx) {
+  var card = document.getElementById('missing-card-' + idx);
+  if (card.classList.contains('expanded')) {
+    card.classList.remove('expanded');
+  } else {
+    card.classList.add('expanded');
+  }
+}
+
+function goBackFromMissing() {
   showDashboard();
 }
 
