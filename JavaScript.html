@@ -94,7 +94,7 @@ function renderDashboard(data) {
     html += '<td>' + esc(s.period || '-') + '</td>';
 
     // EF Average
-    if (s.avgRating !== null) {
+    if (s.avgRating != null) {
       var efClass = s.avgRating >= 4 ? 'chip-green' : s.avgRating >= 3 ? 'chip-yellow' : 'chip-red';
       html += '<td><span class="chip ' + efClass + '">' + s.avgRating.toFixed(1) + '</span></td>';
     } else {
@@ -107,7 +107,7 @@ function renderDashboard(data) {
     html += '<td><span class="' + trendClass + '">' + (trendMap[s.trend] || '--') + '</span></td>';
 
     // GPA
-    if (s.gpa !== null) {
+    if (s.gpa != null) {
       var gpaClass = s.gpa >= 3.5 ? 'chip-green' : s.gpa >= 2.5 ? 'chip-yellow' : 'chip-red';
       html += '<td><span class="chip ' + gpaClass + '">' + s.gpa.toFixed(2) + '</span></td>';
     } else {
@@ -160,7 +160,7 @@ function openSidePanel(index) {
   // GPA
   content += '<div class="sp-section">';
   content += '<div class="sp-section-title">Current GPA</div>';
-  if (s.gpa !== null) {
+  if (s.gpa != null) {
     var gpaClass = s.gpa >= 3.5 ? 'high' : s.gpa >= 2.5 ? 'mid' : 'low';
     content += '<div class="sp-gpa ' + gpaClass + '">' + s.gpa.toFixed(2) + '</div>';
   } else {
