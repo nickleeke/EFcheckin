@@ -447,6 +447,17 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   color: var(--md-on-surface);
   background: var(--md-surface);
   transition: border-color 0.2s, box-shadow 0.2s;
+  /* Remove browser defaults */
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+}
+.form-group select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23534343' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 40px;
+  cursor: pointer;
 }
 .form-group input:focus,
 .form-group textarea:focus,
@@ -457,7 +468,9 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   padding: 11px 15px; /* compensate for 2px border */
   box-shadow: none;
 }
+.form-group select:focus { padding-right: 39px; }
 .form-group textarea { min-height: 80px; resize: vertical; }
+.form-group input::placeholder { color: var(--md-outline); }
 
 .form-row { display: flex; gap: 16px; }
 .form-row .form-group { flex: 1; }
@@ -513,31 +526,76 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   border-bottom: 1px solid var(--md-outline-variant);
 }
 .academic-table .class-name-col { font-weight: 500; }
-.academic-table select {
-  padding: 8px 10px;
-  border: 1px solid var(--md-outline);
-  border-radius: var(--md-shape-xs);
-  font-size: 14px;
-  font-family: 'Roboto', sans-serif;
-  width: 80px;
-  background: var(--md-surface);
-  color: var(--md-on-surface);
-}
+.academic-table select,
 .academic-table input[type="number"] {
   padding: 8px 10px;
   border: 1px solid var(--md-outline);
   border-radius: var(--md-shape-xs);
   font-size: 14px;
   font-family: 'Roboto', sans-serif;
-  width: 64px;
   color: var(--md-on-surface);
+  background: var(--md-surface);
+  appearance: none;
+  -webkit-appearance: none;
+  transition: border-color 0.2s;
 }
+.academic-table select {
+  width: 80px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='%23534343' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 26px;
+  cursor: pointer;
+}
+.academic-table input[type="number"] { width: 64px; }
+.academic-table select:focus,
+.academic-table input[type="number"]:focus {
+  outline: none;
+  border-color: var(--md-primary);
+  border-width: 2px;
+  padding: 7px 9px;
+}
+.academic-table select:focus { padding-right: 25px; }
 
 /* ─── Class Management (Student Profile) ─── */
-.class-list-item { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.class-list-item input { flex: 1; }
+.class-list-item {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.class-list-item select,
+.class-list-item input {
+  height: 44px;
+  padding: 10px 14px;
+  border: 1px solid var(--md-outline);
+  border-radius: var(--md-shape-xs);
+  font-family: 'Roboto', sans-serif;
+  font-size: 14px;
+  color: var(--md-on-surface);
+  background: var(--md-surface);
+  appearance: none;
+  -webkit-appearance: none;
+  transition: border-color 0.2s;
+}
+.class-list-item select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23534343' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 32px;
+  cursor: pointer;
+}
+.class-list-item select:focus,
+.class-list-item input:focus {
+  outline: none;
+  border-color: var(--md-primary);
+  border-width: 2px;
+  padding: 9px 13px;
+}
+.class-list-item select:focus { padding-right: 31px; }
+.class-select { flex: 2; min-width: 120px; }
+.class-other-input { flex: 2; min-width: 120px; }
+.class-period-select { width: 100px; flex-shrink: 0; }
 .btn-remove-class {
-  width: 40px; height: 40px;
+  width: 40px; height: 40px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
   background: none;
   color: var(--md-error);
