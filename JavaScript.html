@@ -15,10 +15,12 @@ var appState = {
 document.addEventListener('DOMContentLoaded', function() {
   showLoading();
   google.script.run
-    .withSuccessHandler(function() { loadDashboard(); })
+    .withSuccessHandler(function() {
+      try { loadDashboard(); } catch(e) { hideLoading(); showToast('Error: ' + e.message); }
+    })
     .withFailureHandler(function(err) {
       hideLoading();
-      showToast('Error initializing: ' + err.message);
+      showToast('Error initializing: ' + (err && err.message ? err.message : String(err)));
     })
     .initializeSheets();
 });
@@ -52,13 +54,17 @@ function loadDashboard() {
   showLoading();
   google.script.run
     .withSuccessHandler(function(data) {
-      appState.dashboardData = data || [];
-      renderDashboard(data);
+      try {
+        appState.dashboardData = data || [];
+        renderDashboard(data);
+      } catch(e) {
+        showToast('Render error: ' + e.message);
+      }
       hideLoading();
     })
     .withFailureHandler(function(err) {
       hideLoading();
-      showToast('Error loading dashboard: ' + err.message);
+      showToast('Error loading dashboard: ' + (err && err.message ? err.message : String(err)));
     })
     .getDashboardData();
 }
@@ -225,20 +231,22 @@ function startCheckIn(studentId, existingCheckIn) {
 
   google.script.run
     .withSuccessHandler(function(students) {
-      var student = students.find(function(s) { return s.id === studentId; });
+      var student = (students || []).find(function(s) { return s.id === studentId; });
       if (!student) { hideLoading(); showToast('Student not found'); return; }
 
       google.script.run
         .withSuccessHandler(function(checkIns) {
-          appState.currentCheckIns = checkIns || [];
-          renderCheckInForm(student, checkIns, existingCheckIn);
-          showView('checkin-view');
+          try {
+            appState.currentCheckIns = checkIns || [];
+            renderCheckInForm(student, checkIns, existingCheckIn);
+            showView('checkin-view');
+          } catch(e) { showToast('Render error: ' + e.message); }
           hideLoading();
         })
-        .withFailureHandler(function(err) { hideLoading(); showToast('Error: ' + err.message); })
+        .withFailureHandler(function(err) { hideLoading(); showToast('Error: ' + (err && err.message ? err.message : String(err))); })
         .getCheckIns(studentId);
     })
-    .withFailureHandler(function(err) { hideLoading(); showToast('Error: ' + err.message); })
+    .withFailureHandler(function(err) { hideLoading(); showToast('Error: ' + (err && err.message ? err.message : String(err))); })
     .getStudents();
 }
 
@@ -470,7 +478,7 @@ function saveCheckIn() {
         showToast('Error saving check-in');
       }
     })
-    .withFailureHandler(function(err) { hideLoading(); showToast('Error: ' + err.message); })
+    .withFailureHandler(function(err) { hideLoading(); showToast('Error: ' + (err && err.message ? err.message : String(err))); })
     .saveCheckIn(data);
 }
 
@@ -490,26 +498,27 @@ function editStudent(studentId) {
   showLoading();
   google.script.run
     .withSuccessHandler(function(students) {
-      var student = students.find(function(s) { return s.id === studentId; });
+      var student = (students || []).find(function(s) { return s.id === studentId; });
       if (!student) { hideLoading(); showToast('Student not found'); return; }
 
-      appState.currentStudentId = studentId;
-      document.getElementById('student-view-title').textContent =
-        'Edit: ' + student.firstName + ' ' + student.lastName;
-      renderStudentForm(student);
+      try {
+        appState.currentStudentId = studentId;
+        document.getElementById('student-view-title').textContent =
+          'Edit: ' + student.firstName + ' ' + student.lastName;
+        renderStudentForm(student);
+        showView('student-view');
+      } catch(e) { hideLoading(); showToast('Render error: ' + e.message); return; }
 
       // Also load check-in history
       google.script.run
         .withSuccessHandler(function(checkIns) {
-          renderCheckInHistory(checkIns, student);
+          try { renderCheckInHistory(checkIns, student); } catch(e) { showToast('History error: ' + e.message); }
           hideLoading();
         })
         .withFailureHandler(function() { hideLoading(); })
         .getCheckIns(studentId);
-
-      showView('student-view');
     })
-    .withFailureHandler(function(err) { hideLoading(); showToast('Error: ' + err.message); })
+    .withFailureHandler(function(err) { hideLoading(); showToast('Error: ' + (err && err.message ? err.message : String(err))); })
     .getStudents();
 }
 
@@ -636,7 +645,7 @@ function saveStudentForm() {
         showDashboard();
       }
     })
-    .withFailureHandler(function(err) { hideLoading(); showToast('Error: ' + err.message); })
+    .withFailureHandler(function(err) { hideLoading(); showToast('Error: ' + (err && err.message ? err.message : String(err))); })
     .saveStudent(profile);
 }
 
