@@ -114,11 +114,16 @@ function renderDashboard(data) {
   var sorted = data.slice().sort(function(a, b) {
     var cmp = 0;
     if (appState.sortField === 'name') {
-      cmp = String(a.lastName).localeCompare(String(b.lastName));
-      if (cmp === 0) cmp = String(a.firstName).localeCompare(String(b.firstName));
-    } else if (appState.sortField === 'grade') {
-      cmp = String(a.grade || '').localeCompare(String(b.grade || ''));
+      cmp = String(a.firstName).localeCompare(String(b.firstName));
       if (cmp === 0) cmp = String(a.lastName).localeCompare(String(b.lastName));
+    } else if (appState.sortField === 'grade') {
+      var ag = a.grade || '', bg = b.grade || '';
+      // Push empty grades to the bottom regardless of direction
+      if (!ag && !bg) cmp = 0;
+      else if (!ag) return 1;
+      else if (!bg) return -1;
+      else cmp = ag.localeCompare(bg);
+      if (cmp === 0) cmp = String(a.firstName).localeCompare(String(b.firstName));
     }
     return appState.sortAsc ? cmp : -cmp;
   });
