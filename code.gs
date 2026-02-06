@@ -441,6 +441,23 @@ function invalidateCache_() {
   } catch(e) {}
 }
 
+// ───── Teacher Feedback Links ─────
+
+function getFeedbackLinks() {
+  var props = PropertiesService.getScriptProperties();
+  return {
+    formUrl: props.getProperty('feedback_form_url') || '',
+    sheetUrl: props.getProperty('feedback_sheet_url') || ''
+  };
+}
+
+function saveFeedbackLinks(links) {
+  var props = PropertiesService.getScriptProperties();
+  props.setProperty('feedback_form_url', links.formUrl || '');
+  props.setProperty('feedback_sheet_url', links.sheetUrl || '');
+  return { success: true };
+}
+
 // ───── Helpers ─────
 
 /** Normalize a value that may be a Date object into YYYY-MM-DD string */

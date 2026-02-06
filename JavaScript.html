@@ -12,6 +12,7 @@ var appState = {
   sortField: 'name',
   sortAsc: true,
   missingViewStudentId: null
+  feedbackLinks: null
 };
 
 // ─── Preloaded Options ───
@@ -26,7 +27,13 @@ document.addEventListener('DOMContentLoaded', function() {
   showLoading();
   google.script.run
     .withSuccessHandler(function() {
-      try { loadDashboard(); } catch(e) { hideLoading(); showToast('Error: ' + e.message); }
+      try {
+        google.script.run
+          .withSuccessHandler(function(links) { appState.feedbackLinks = links || {}; })
+          .withFailureHandler(function() { appState.feedbackLinks = {}; })
+          .getFeedbackLinks();
+        loadDashboard();
+      } catch(e) { hideLoading(); showToast('Error: ' + e.message); }
     })
     .withFailureHandler(function(err) {
       hideLoading();
@@ -764,6 +771,7 @@ function showAddStudent() {
   renderStudentForm({});
   document.getElementById('student-view-breadcrumb').textContent = 'Students';
   document.getElementById('student-view-title').textContent = 'New Student';
+  renderStudentMenu(null);
   showView('student-view');
 }
 
@@ -780,6 +788,7 @@ function editStudent(studentId) {
         document.getElementById('student-view-title').textContent =
           student.firstName + ' ' + student.lastName;
         renderStudentForm(student);
+        renderStudentMenu(studentId);
         showView('student-view');
       } catch(e) { hideLoading(); showToast('Render error: ' + e.message); return; }
 
@@ -1163,6 +1172,125 @@ function doDeleteCheckIn(checkInId, studentId) {
       });
     })
     .deleteCheckIn(checkInId);
+}
+
+// ─── Teacher Feedback Menu ───
+
+function renderStudentMenu(studentId) {
+  var container = document.getElementById('student-menu-container');
+  if (!container) return;
+  if (!studentId) { container.innerHTML = ''; return; }
+
+  var links = appState.feedbackLinks || {};
+  var hasSheet = links.sheetUrl ? true : false;
+
+  var items =
+    '<button class="dropdown-item" onclick="handleFeedbackClick()">Request Teacher Feedback</button>';
+  if (hasSheet) {
+    items += '<button class="dropdown-item" onclick="handleViewFeedbackClick()">View Teacher Feedback</button>';
+  }
+
+  container.innerHTML =
+    '<div class="menu-anchor">' +
+      '<button class="btn-icon" onclick="toggleStudentMenu(event)" aria-label="More options">' +
+        '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>' +
+      '</button>' +
+      '<div class="dropdown-menu" id="student-dropdown" style="display:none;">' +
+        items +
+      '</div>' +
+    '</div>';
+}
+
+function toggleStudentMenu(e) {
+  e.stopPropagation();
+  var menu = document.getElementById('student-dropdown');
+  if (!menu) return;
+  var isOpen = menu.style.display !== 'none';
+  menu.style.display = isOpen ? 'none' : '';
+  if (!isOpen) {
+    setTimeout(function() {
+      document.addEventListener('click', closeStudentMenu);
+    }, 0);
+  }
+}
+
+function closeStudentMenu() {
+  var menu = document.getElementById('student-dropdown');
+  if (menu) menu.style.display = 'none';
+  document.removeEventListener('click', closeStudentMenu);
+}
+
+function handleFeedbackClick() {
+  closeStudentMenu();
+  var links = appState.feedbackLinks || {};
+  if (links.formUrl) {
+    window.open(links.formUrl, '_blank');
+  } else {
+    showFeedbackSetupModal();
+  }
+}
+
+function handleViewFeedbackClick() {
+  closeStudentMenu();
+  var links = appState.feedbackLinks || {};
+  if (links.sheetUrl) {
+    window.open(links.sheetUrl, '_blank');
+  }
+}
+
+function showFeedbackSetupModal() {
+  var existing = appState.feedbackLinks || {};
+  var overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+  overlay.id = 'feedback-modal-overlay';
+  overlay.innerHTML =
+    '<div class="confirm-dialog" style="max-width:480px;">' +
+      '<h3>Teacher Feedback Setup</h3>' +
+      '<p>Enter the links for teacher feedback collection.</p>' +
+      '<div class="form-group" style="margin-bottom:16px;">' +
+        '<label>Teacher Feedback Google Form</label>' +
+        '<input type="url" id="fb-form-url" value="' + esc(existing.formUrl || '') + '" placeholder="https://docs.google.com/forms/...">' +
+      '</div>' +
+      '<div class="form-group" style="margin-bottom:24px;">' +
+        '<label>Teacher Feedback Google Sheet</label>' +
+        '<input type="url" id="fb-sheet-url" value="' + esc(existing.sheetUrl || '') + '" placeholder="https://docs.google.com/spreadsheets/...">' +
+      '</div>' +
+      '<div class="confirm-actions">' +
+        '<button class="btn btn-secondary" onclick="document.getElementById(\'feedback-modal-overlay\').remove()">Cancel</button>' +
+        '<button class="btn btn-primary" onclick="saveFeedbackSetup()">Save &amp; Open Form</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+}
+
+function saveFeedbackSetup() {
+  var formUrl = document.getElementById('fb-form-url').value.trim();
+  var sheetUrl = document.getElementById('fb-sheet-url').value.trim();
+
+  if (!formUrl) {
+    showToast('Please enter a Google Form URL');
+    return;
+  }
+
+  var links = { formUrl: formUrl, sheetUrl: sheetUrl };
+
+  // Optimistic: update local state
+  appState.feedbackLinks = links;
+  document.getElementById('feedback-modal-overlay').remove();
+
+  // Re-render menu to show "View Teacher Feedback" if sheet URL was provided
+  renderStudentMenu(appState.currentStudentId);
+
+  // Open form immediately
+  window.open(formUrl, '_blank');
+  showToast('Saving feedback links\u2026');
+
+  google.script.run
+    .withSuccessHandler(function() { showToast('Feedback links saved'); })
+    .withFailureHandler(function(err) {
+      showToast('Error: ' + (err && err.message ? err.message : String(err)));
+    })
+    .saveFeedbackLinks(links);
 }
 
 // ─── Utility Functions ───
