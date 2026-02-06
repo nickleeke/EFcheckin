@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700;900&display=swap" rel="stylesheet">
+<style>
+/* ───── Reset & Base ───── */
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --cardinal:#C8102E;--cardinal-dark:#9B0D23;--cardinal-light:#F9E0E4;
+  --teal:#00857C;--teal-light:#E0F5F3;
+  --orange:#E87722;--orange-light:#FFF0E0;
+  --purple:#6B3FA0;--purple-light:#F0E8F7;
+  --gold:#FFB81C;--gold-light:#FFF8E1;
+  --bg:#F5F6FA;--card:#FFFFFF;--text:#1A1A2E;--muted:#6B7280;
+  --border:#E5E7EB;--radius:12px;--shadow:0 2px 12px rgba(0,0,0,.06);
+}
+body{font-family:'Lato',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding-bottom:80px;}
+
+/* ───── Header ───── */
+.header{background:linear-gradient(135deg,var(--cardinal),var(--cardinal-dark));color:#fff;padding:16px 20px;position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(200,16,46,.3);}
+.header-row{display:flex;align-items:center;justify-content:space-between;max-width:600px;margin:0 auto;}
+.header h1{font-size:18px;font-weight:700;letter-spacing:.3px;}
+.header-sub{font-size:11px;opacity:.85;margin-top:2px;font-weight:300;}
+.back-btn{background:rgba(255,255,255,.15);border:none;color:#fff;width:36px;height:36px;border-radius:50%;cursor:pointer;font-size:18px;display:none;align-items:center;justify-content:center;transition:.2s;}
+.back-btn:hover{background:rgba(255,255,255,.3);}
+
+/* ───── Nav ───── */
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--border);display:flex;z-index:100;box-shadow:0 -2px 12px rgba(0,0,0,.06);}
+.nav-item{flex:1;padding:8px 4px 10px;text-align:center;cursor:pointer;transition:.2s;border-top:3px solid transparent;}
+.nav-item.active{color:var(--cardinal);border-top-color:var(--cardinal);}
+.nav-item .nav-icon{font-size:20px;display:block;}
+.nav-item .nav-label{font-size:10px;margin-top:2px;font-weight:600;}
+
+/* ───── Container ───── */
+.container{max-width:600px;margin:0 auto;padding:16px;}
+
+/* ───── Cards ───── */
+.card{background:var(--card);border-radius:var(--radius);padding:20px;margin-bottom:16px;box-shadow:var(--shadow);border:1px solid var(--border);}
+.card-title{font-size:14px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:12px;display:flex;align-items:center;gap:8px;}
+
+/* ───── Stat Chips ───── */
+.stat-row{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;}
+.stat-chip{flex:1;min-width:80px;background:var(--bg);border-radius:10px;padding:12px;text-align:center;}
+.stat-chip .val{font-size:22px;font-weight:900;color:var(--cardinal);}
+.stat-chip .lbl{font-size:10px;color:var(--muted);text-transform:uppercase;font-weight:600;letter-spacing:.5px;margin-top:2px;}
+.stat-chip.teal .val{color:var(--teal);}
+.stat-chip.orange .val{color:var(--orange);}
+.stat-chip.purple .val{color:var(--purple);}
+.stat-chip.gold .val{color:var(--gold);}
+
+/* ───── Student List ───── */
+.search-box{width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:14px;margin-bottom:12px;font-family:inherit;outline:none;transition:.2s;}
+.search-box:focus{border-color:var(--cardinal);box-shadow:0 0 0 3px var(--cardinal-light);}
+.student-item{display:flex;align-items:center;padding:14px;border-radius:10px;cursor:pointer;transition:.15s;border:1px solid transparent;margin-bottom:6px;}
+.student-item:hover{background:var(--cardinal-light);border-color:var(--cardinal);}
+.student-avatar{width:40px;height:40px;border-radius:50%;background:var(--cardinal);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;margin-right:12px;flex-shrink:0;}
+.student-info{flex:1;min-width:0;}
+.student-name{font-weight:700;font-size:15px;}
+.student-meta{font-size:12px;color:var(--muted);margin-top:2px;display:flex;gap:8px;flex-wrap:wrap;}
+.student-badges{display:flex;gap:6px;flex-shrink:0;align-items:center;}
+.badge{font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;}
+.badge-up{background:#D1FAE5;color:#065F46;}
+.badge-down{background:#FEE2E2;color:#991B1B;}
+.badge-flat{background:#E5E7EB;color:#4B5563;}
+.badge-new{background:var(--gold-light);color:#92400E;}
+.badge-gpa{background:var(--purple-light);color:var(--purple);font-size:11px;}
+.badge-missing{background:var(--orange-light);color:var(--orange);font-size:11px;}
+
+/* ───── Form Elements ───── */
+.form-group{margin-bottom:16px;}
+.form-label{display:block;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;}
+.form-input,.form-select,.form-textarea{width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:10px;font-size:14px;font-family:inherit;outline:none;transition:.2s;background:#fff;}
+.form-input:focus,.form-select:focus,.form-textarea:focus{border-color:var(--cardinal);box-shadow:0 0 0 3px var(--cardinal-light);}
+.form-textarea{min-height:80px;resize:vertical;}
+.form-row{display:flex;gap:12px;}
+.form-row .form-group{flex:1;}
+
+/* ───── Rating Dots ───── */
+.rating-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);}
+.rating-row:last-child{border-bottom:none;}
+.rating-label{font-size:13px;font-weight:600;flex:1;}
+.rating-dots{display:flex;gap:6px;}
+.dot{width:32px;height:32px;border-radius:50%;border:2px solid var(--border);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--muted);transition:.2s;}
+.dot:hover{border-color:var(--cardinal);color:var(--cardinal);}
+.dot.active{background:var(--cardinal);border-color:var(--cardinal);color:#fff;}
+
+/* ───── Micro Goal Picker ───── */
+.goal-category{margin-bottom:12px;}
+.goal-category-title{font-size:11px;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:6px;letter-spacing:.5px;}
+.goal-chips{display:flex;flex-wrap:wrap;gap:6px;}
+.goal-chip{padding:6px 12px;border-radius:20px;font-size:12px;font-weight:600;border:1px solid var(--border);cursor:pointer;transition:.2s;background:#fff;}
+.goal-chip:hover{border-color:var(--teal);}
+.goal-chip.selected{background:var(--teal);color:#fff;border-color:var(--teal);}
+
+/* ───── Academic Snapshot Table ───── */
+.academic-table{width:100%;border-collapse:separate;border-spacing:0;font-size:13px;}
+.academic-table th{background:var(--bg);padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;border-bottom:2px solid var(--border);}
+.academic-table td{padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:middle;}
+.academic-table tr:last-child td{border-bottom:none;}
+.academic-table .class-name{font-weight:600;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.academic-table .grade-select{padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:#fff;min-width:60px;}
+.academic-table .missing-input{width:60px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;text-align:center;}
+.academic-table .grade-select:focus,.academic-table .missing-input:focus{border-color:var(--cardinal);box-shadow:0 0 0 2px var(--cardinal-light);outline:none;}
+.gpa-display{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--purple-light);border-radius:10px;margin-top:12px;}
+.gpa-display .gpa-val{font-size:28px;font-weight:900;color:var(--purple);}
+.gpa-display .gpa-lbl{font-size:12px;color:var(--purple);font-weight:600;}
+.missing-display{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--orange-light);border-radius:10px;margin-top:8px;}
+.missing-display .missing-val{font-size:28px;font-weight:900;color:var(--orange);}
+.missing-display .missing-lbl{font-size:12px;color:var(--orange);font-weight:600;}
+
+/* ───── Bar Chart ───── */
+.bar-chart{margin-top:16px;}
+.bar-row{display:flex;align-items:center;margin-bottom:8px;gap:8px;}
+.bar-label{width:100px;font-size:11px;font-weight:600;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0;}
+.bar-track{flex:1;height:24px;background:var(--bg);border-radius:6px;overflow:hidden;position:relative;}
+.bar-fill{height:100%;border-radius:6px;transition:width .4s ease;display:flex;align-items:center;padding:0 8px;min-width:0;}
+.bar-fill span{font-size:11px;font-weight:700;color:#fff;white-space:nowrap;}
+.bar-fill.zero{background:transparent;}
+.bar-fill.zero span{color:var(--muted);}
+.bar-fill.low{background:var(--teal);}
+.bar-fill.med{background:var(--orange);}
+.bar-fill.high{background:var(--cardinal);}
+
+/* ───── History Timeline ───── */
+.timeline-item{border-left:3px solid var(--cardinal);padding:0 0 20px 16px;margin-left:8px;position:relative;}
+.timeline-item::before{content:'';position:absolute;left:-7px;top:4px;width:10px;height:10px;border-radius:50%;background:var(--cardinal);border:2px solid #fff;}
+.timeline-item:last-child{border-left-color:transparent;padding-bottom:0;}
+.timeline-date{font-size:12px;font-weight:700;color:var(--cardinal);margin-bottom:4px;}
+.timeline-card{background:var(--bg);border-radius:10px;padding:12px;}
+.timeline-ratings{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;}
+.timeline-pill{font-size:11px;padding:3px 8px;border-radius:12px;background:#fff;border:1px solid var(--border);}
+.timeline-text{font-size:13px;color:var(--muted);line-height:1.4;}
+.timeline-academic{margin-top:8px;padding-top:8px;border-top:1px solid var(--border);}
+.timeline-academic-row{display:flex;justify-content:space-between;font-size:12px;padding:2px 0;}
+.timeline-academic-class{font-weight:600;}
+.timeline-academic-grade{color:var(--purple);font-weight:700;}
+.timeline-academic-missing{color:var(--orange);font-weight:700;}
+.del-btn{background:none;border:none;color:#ccc;cursor:pointer;font-size:16px;float:right;padding:0 4px;transition:.2s;}
+.del-btn:hover{color:var(--cardinal);}
+
+/* ───── Class Editor (Profile) ───── */
+.class-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.class-row .class-number{font-size:12px;font-weight:700;color:var(--muted);width:20px;flex-shrink:0;}
+.class-row input{flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;outline:none;transition:.2s;}
+.class-row input:focus{border-color:var(--cardinal);box-shadow:0 0 0 2px var(--cardinal-light);}
+
+/* ───── Buttons ───── */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:12px 24px;border-radius:10px;font-size:14px;font-weight:700;border:none;cursor:pointer;transition:.2s;font-family:inherit;width:100%;}
+.btn-primary{background:var(--cardinal);color:#fff;}
+.btn-primary:hover{background:var(--cardinal-dark);}
+.btn-outline{background:#fff;color:var(--cardinal);border:2px solid var(--cardinal);}
+.btn-outline:hover{background:var(--cardinal-light);}
+.btn-danger{background:#FEE2E2;color:#991B1B;}
+.btn-danger:hover{background:#FECACA;}
+.btn-sm{padding:8px 16px;font-size:12px;}
+
+/* ───── FAB ───── */
+.fab{position:fixed;bottom:72px;right:20px;width:52px;height:52px;border-radius:50%;background:var(--cardinal);color:#fff;border:none;font-size:26px;cursor:pointer;box-shadow:0 4px 16px rgba(200,16,46,.4);z-index:90;transition:.2s;}
+.fab:hover{transform:scale(1.1);background:var(--cardinal-dark);}
+
+/* ───── Toast ───── */
+.toast{position:fixed;top:80px;left:50%;transform:translateX(-50%) translateY(-20px);background:#1A1A2E;color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;font-weight:600;z-index:200;opacity:0;transition:.3s;pointer-events:none;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+/* ───── Loading ───── */
+.loading-overlay{position:fixed;inset:0;background:rgba(255,255,255,.8);z-index:200;display:none;align-items:center;justify-content:center;}
+.loading-overlay.show{display:flex;}
+.spinner{width:40px;height:40px;border:4px solid var(--border);border-top-color:var(--cardinal);border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ───── View Toggle ───── */
+.view{display:none;}.view.active{display:block;}
+
+/* ───── Empty State ───── */
+.empty{text-align:center;padding:40px 20px;color:var(--muted);}
+.empty-icon{font-size:48px;margin-bottom:12px;}
+.empty-text{font-size:14px;}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-row">
+    <button class="back-btn" id="backBtn" onclick="goBack()">←</button>
+    <div>
+      <h1 id="headerTitle">🧠 EF Weekly Check-In</h1>
+      <div class="header-sub" id="headerSub">Richfield Public Schools</div>
+    </div>
+    <div style="width:36px;"></div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Loading -->
+<div class="loading-overlay" id="loading"><div class="spinner"></div></div>
+
+<!-- ═══════════ DASHBOARD VIEW ═══════════ -->
+<div class="view active" id="viewDashboard">
+  <div class="container">
+    <div class="stat-row" id="dashStats"></div>
+    <div class="card">
+      <div class="card-title">👥 Students</div>
+      <input type="text" class="search-box" placeholder="Search students…" oninput="filterStudents(this.value)">
+      <div id="studentList"></div>
+    </div>
+  </div>
+  <button class="fab" onclick="openNewStudent()" title="Add Student">+</button>
+</div>
+
+<!-- ═══════════ CHECK-IN VIEW ═══════════ -->
+<div class="view" id="viewCheckIn">
+  <div class="container">
+    <!-- Week Picker -->
+    <div class="card">
+      <div class="card-title">📅 Week Of</div>
+      <input type="date" class="form-input" id="ciWeek">
+    </div>
+
+    <!-- EF Self-Ratings -->
+    <div class="card">
+      <div class="card-title">📊 Self-Rating (1–5)</div>
+      <div class="rating-row">
+        <span class="rating-label">Planning & Organization</span>
+        <div class="rating-dots" data-field="planningRating"></div>
+      </div>
+      <div class="rating-row">
+        <span class="rating-label">Follow-Through</span>
+        <div class="rating-dots" data-field="followThroughRating"></div>
+      </div>
+      <div class="rating-row">
+        <span class="rating-label">Self-Regulation</span>
+        <div class="rating-dots" data-field="regulationRating"></div>
+      </div>
+      <div class="rating-row">
+        <span class="rating-label">Focus on Goal</span>
+        <div class="rating-dots" data-field="focusGoalRating"></div>
+      </div>
+      <div class="rating-row">
+        <span class="rating-label">Effort & Engagement</span>
+        <div class="rating-dots" data-field="effortRating"></div>
+      </div>
+    </div>
+
+    <!-- Academic Snapshot -->
+    <div class="card" id="academicCard" style="display:none;">
+      <div class="card-title">📚 Academic Snapshot</div>
+      <table class="academic-table">
+        <thead><tr><th>Class</th><th>Grade</th><th>Missing</th></tr></thead>
+        <tbody id="academicRows"></tbody>
+      </table>
+      <div class="gpa-display">
+        <div><span class="gpa-lbl">Calculated GPA</span></div>
+        <div class="gpa-val" id="liveGpa">—</div>
+      </div>
+      <div class="missing-display">
+        <div><span class="missing-lbl">Total Missing</span></div>
+        <div class="missing-val" id="liveMissing">0</div>
+      </div>
+      <!-- Inline bar chart -->
+      <div class="card-title" style="margin-top:16px;">📊 Missing by Class</div>
+      <div class="bar-chart" id="liveBarChart"></div>
+    </div>
+
+    <!-- Reflection -->
+    <div class="card">
+      <div class="card-title">💭 Reflection</div>
+      <div class="form-group">
+        <label class="form-label">What went well this week?</label>
+        <textarea class="form-textarea" id="ciWell" placeholder="Something I'm proud of…"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Biggest barrier</label>
+        <textarea class="form-textarea" id="ciBarrier" placeholder="What got in the way…"></textarea>
+      </div>
+    </div>
+
+    <!-- Micro Goal -->
+    <div class="card">
+      <div class="card-title">🎯 Micro-Goal for Next Week</div>
+      <div class="goal-category">
+        <div class="goal-category-title">Planning & Execution</div>
+        <div class="goal-chips">
+          <div class="goal-chip" data-cat="Planning & Execution" onclick="selectGoal(this)">Write due dates in planner</div>
+          <div class="goal-chip" data-cat="Planning & Execution" onclick="selectGoal(this)">Break 1 big task into steps</div>
+          <div class="goal-chip" data-cat="Planning & Execution" onclick="selectGoal(this)">Start HW within 10 min</div>
+        </div>
+      </div>
+      <div class="goal-category">
+        <div class="goal-category-title">Task Completion</div>
+        <div class="goal-chips">
+          <div class="goal-chip" data-cat="Task Completion" onclick="selectGoal(this)">Turn in all assignments on time</div>
+          <div class="goal-chip" data-cat="Task Completion" onclick="selectGoal(this)">Check grades 2× this week</div>
+          <div class="goal-chip" data-cat="Task Completion" onclick="selectGoal(this)">Complete 1 missing assignment</div>
+        </div>
+      </div>
+      <div class="goal-category">
+        <div class="goal-category-title">Self-Regulation</div>
+        <div class="goal-chips">
+          <div class="goal-chip" data-cat="Self-Regulation" onclick="selectGoal(this)">Use a focus timer in class</div>
+          <div class="goal-chip" data-cat="Self-Regulation" onclick="selectGoal(this)">Ask for help before giving up</div>
+          <div class="goal-chip" data-cat="Self-Regulation" onclick="selectGoal(this)">Take a break when frustrated</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Teacher Notes -->
+    <div class="card">
+      <div class="card-title">📝 Teacher Notes</div>
+      <textarea class="form-textarea" id="ciTeacherNotes" placeholder="Optional observations…"></textarea>
+    </div>
+
+    <button class="btn btn-primary" onclick="submitCheckIn()">💾 Save Check-In</button>
+  </div>
+</div>
+
+<!-- ═══════════ HISTORY VIEW ═══════════ -->
+<div class="view" id="viewHistory">
+  <div class="container">
+    <div class="card">
+      <div class="card-title">📜 Check-In History</div>
+      <div id="historyTimeline"></div>
+    </div>
+    <!-- Historical bar chart for last check-in -->
+    <div class="card" id="historyChartCard" style="display:none;">
+      <div class="card-title">📊 Latest Missing Assignments by Class</div>
+      <div class="bar-chart" id="historyBarChart"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ PROFILE VIEW ═══════════ -->
+<div class="view" id="viewProfile">
+  <div class="container">
+    <div class="card">
+      <div class="card-title">👤 Student Profile</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">First Name</label>
+          <input type="text" class="form-input" id="profFirst">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Last Name</label>
+          <input type="text" class="form-input" id="profLast">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Grade Level</label>
+          <select class="form-select" id="profGrade">
+            <option value="">—</option>
+            <option>6</option><option>7</option><option>8</option>
+            <option>9</option><option>10</option><option>11</option><option>12</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Period</label>
+          <select class="form-select" id="profPeriod">
+            <option value="">—</option>
+            <option>1</option><option>2</option><option>3</option>
+            <option>4</option><option>5</option><option>6</option><option>7</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Classes -->
+    <div class="card">
+      <div class="card-title">📚 Class Schedule (up to 7)</div>
+      <div id="classEditor"></div>
+      <button class="btn btn-outline btn-sm" style="margin-top:8px;width:auto;" onclick="addClassRow()">+ Add Class</button>
+    </div>
+
+    <div class="card">
+      <div class="form-group">
+        <label class="form-label">Focus Goal</label>
+        <input type="text" class="form-input" id="profGoal" placeholder="e.g., Turn in work on time">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Accommodations</label>
+        <textarea class="form-textarea" id="profAccomm" placeholder="IEP / 504 notes…"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notes</label>
+        <textarea class="form-textarea" id="profNotes" placeholder="Additional context…"></textarea>
+      </div>
+    </div>
+
+    <button class="btn btn-primary" onclick="saveProfile()">💾 Save Profile</button>
+    <div style="height:12px;"></div>
+    <button class="btn btn-danger" onclick="confirmDeleteStudent()">🗑 Delete Student</button>
+  </div>
+</div>
+
+<!-- Bottom Nav -->
+<div class="bottom-nav">
+  <div class="nav-item active" onclick="switchTab('Dashboard')">
+    <span class="nav-icon">📋</span><span class="nav-label">Dashboard</span>
+  </div>
+  <div class="nav-item" onclick="switchTab('CheckIn')" id="navCheckIn" style="display:none;">
+    <span class="nav-icon">✍️</span><span class="nav-label">Check-In</span>
+  </div>
+  <div class="nav-item" onclick="switchTab('History')" id="navHistory" style="display:none;">
+    <span class="nav-icon">📜</span><span class="nav-label">History</span>
+  </div>
+  <div class="nav-item" onclick="switchTab('Profile')" id="navProfile" style="display:none;">
+    <span class="nav-icon">👤</span><span class="nav-label">Profile</span>
+  </div>
+</div>
+
+<script>
+/* ═══════════ STATE ═══════════ */
+let allStudents = [];
+let currentStudent = null;
+let currentCheckIns = [];
+let selectedGoal = '';
+let selectedGoalCat = '';
+let ratings = { planningRating:0, followThroughRating:0, regulationRating:0, focusGoalRating:0, effortRating:0 };
+
+const GRADE_OPTIONS = ['','A','A-','B+','B','B-','C+','C','C-','D+','D','D-','F'];
+const GPA_MAP = {'A':4.0,'A-':3.7,'B+':3.3,'B':3.0,'B-':2.7,'C+':2.3,'C':2.0,'C-':1.7,'D+':1.3,'D':1.0,'D-':0.7,'F':0.0};
+
+/* ═══════════ INIT ═══════════ */
+window.addEventListener('DOMContentLoaded', () => {
+  initRatingDots();
+  loadDashboard();
+});
+
+function show(id) { document.getElementById(id).style.display = ''; }
+function hide(id) { document.getElementById(id).style.display = 'none'; }
+function showLoading() { document.getElementById('loading').classList.add('show'); }
+function hideLoading() { document.getElementById('loading').classList.remove('show'); }
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+/* ═══════════ NAVIGATION ═══════════ */
+function switchTab(tab) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+
+  document.getElementById('view' + tab).classList.add('active');
+  const navItems = document.querySelectorAll('.nav-item');
+  const tabMap = { Dashboard:0, CheckIn:1, History:2, Profile:3 };
+  if (navItems[tabMap[tab]]) navItems[tabMap[tab]].classList.add('active');
+
+  const back = document.getElementById('backBtn');
+  back.style.display = tab === 'Dashboard' ? 'none' : 'flex';
+
+  if (tab === 'Dashboard') {
+    document.getElementById('headerTitle').textContent = '🧠 EF Weekly Check-In';
+    document.getElementById('headerSub').textContent = 'Richfield Public Schools';
+    hide('navCheckIn'); hide('navHistory'); hide('navProfile');
+  }
+}
+
+function goBack() {
+  currentStudent = null;
+  switchTab('Dashboard');
+  loadDashboard();
+}
+
+function selectStudent(id) {
+  currentStudent = allStudents.find(s => s.id === id);
+  if (!currentStudent) return;
+
+  const name = currentStudent.firstName + ' ' + currentStudent.lastName;
+  document.getElementById('headerTitle').textContent = name;
+  document.getElementById('headerSub').textContent = 'Grade ' + (currentStudent.grade || '?') + ' · Period ' + (currentStudent.period || '?');
+
+  show('navCheckIn'); show('navHistory'); show('navProfile');
+
+  // Load profile
+  loadProfile();
+
+  // Reset check-in form
+  resetCheckInForm();
+
+  // Build academic rows from profile classes
+  buildAcademicTable(currentStudent.classes || []);
+
+  // Load history
+  loadHistory();
+
+  switchTab('CheckIn');
+}
+
+/* ═══════════ DASHBOARD ═══════════ */
+function loadDashboard() {
+  showLoading();
+  google.script.run
+    .withSuccessHandler(data => {
+      allStudents = data;
+      renderDashboard();
+      hideLoading();
+    })
+    .withFailureHandler(err => { hideLoading(); toast('Error: ' + err.message); })
+    .getDashboardData();
+}
+
+function renderDashboard() {
+  const total = allStudents.length;
+  const withCheckins = allStudents.filter(s => s.totalCheckIns > 0).length;
+  const avgGpa = calcAvgGpa();
+  const totalMissing = allStudents.reduce((s, st) => s + (st.totalMissing || 0), 0);
+
+  document.getElementById('dashStats').innerHTML =
+    '<div class="stat-chip"><div class="val">' + total + '</div><div class="lbl">Students</div></div>' +
+    '<div class="stat-chip teal"><div class="val">' + withCheckins + '</div><div class="lbl">Checked In</div></div>' +
+    '<div class="stat-chip purple"><div class="val">' + avgGpa + '</div><div class="lbl">Avg GPA</div></div>' +
+    '<div class="stat-chip orange"><div class="val">' + totalMissing + '</div><div class="lbl">Total Missing</div></div>';
+
+  renderStudentList(allStudents);
+}
+
+function calcAvgGpa() {
+  const gpas = allStudents.filter(s => s.gpa !== null).map(s => s.gpa);
+  if (gpas.length === 0) return '—';
+  return (gpas.reduce((a, b) => a + b, 0) / gpas.length).toFixed(2);
+}
+
+function renderStudentList(list) {
+  const container = document.getElementById('studentList');
+  if (list.length === 0) {
+    container.innerHTML = '<div class="empty"><div class="empty-icon">👥</div><div class="empty-text">No students yet</div></div>';
+    return;
+  }
+  container.innerHTML = list.map(s => {
+    const initials = (s.firstName?.[0] || '') + (s.lastName?.[0] || '');
+    const trendBadge = s.trend === 'up' ? '<span class="badge badge-up">▲ Up</span>' :
+      s.trend === 'down' ? '<span class="badge badge-down">▼ Down</span>' :
+      s.trend === 'flat' ? '<span class="badge badge-flat">— Flat</span>' :
+      s.totalCheckIns > 0 ? '' : '<span class="badge badge-new">New</span>';
+    const gpaBadge = s.gpa !== null ? '<span class="badge badge-gpa">' + s.gpa.toFixed(2) + ' GPA</span>' : '';
+    const missBadge = s.totalMissing > 0 ? '<span class="badge badge-missing">' + s.totalMissing + ' missing</span>' : '';
+
+    return '<div class="student-item" onclick="selectStudent(\'' + s.id + '\')">' +
+      '<div class="student-avatar">' + initials + '</div>' +
+      '<div class="student-info"><div class="student-name">' + s.firstName + ' ' + s.lastName + '</div>' +
+      '<div class="student-meta"><span>Gr ' + (s.grade || '?') + '</span><span>P' + (s.period || '?') + '</span>' +
+      '<span>' + s.totalCheckIns + ' check-in' + (s.totalCheckIns !== 1 ? 's' : '') + '</span></div></div>' +
+      '<div class="student-badges">' + gpaBadge + missBadge + trendBadge + '</div></div>';
+  }).join('');
+}
+
+function filterStudents(q) {
+  const term = q.toLowerCase();
+  const filtered = allStudents.filter(s =>
+    (s.firstName + ' ' + s.lastName).toLowerCase().includes(term)
+  );
+  renderStudentList(filtered);
+}
+
+/* ═══════════ RATING DOTS ═══════════ */
+function initRatingDots() {
+  document.querySelectorAll('.rating-dots').forEach(container => {
+    const field = container.dataset.field;
+    for (let i = 1; i <= 5; i++) {
+      const dot = document.createElement('div');
+      dot.className = 'dot';
+      dot.textContent = i;
+      dot.addEventListener('click', () => {
+        ratings[field] = i;
+        container.querySelectorAll('.dot').forEach((d, idx) => {
+          d.classList.toggle('active', idx < i);
+        });
+      });
+      container.appendChild(dot);
+    }
+  });
+}
+
+function resetRatings() {
+  Object.keys(ratings).forEach(k => ratings[k] = 0);
+  document.querySelectorAll('.rating-dots').forEach(c => {
+    c.querySelectorAll('.dot').forEach(d => d.classList.remove('active'));
+  });
+}
+
+/* ═══════════ MICRO GOALS ═══════════ */
+function selectGoal(el) {
+  document.querySelectorAll('.goal-chip').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedGoal = el.textContent;
+  selectedGoalCat = el.dataset.cat;
+}
+
+/* ═══════════ ACADEMIC TABLE (Check-In) ═══════════ */
+function buildAcademicTable(classes) {
+  const tbody = document.getElementById('academicRows');
+  const card = document.getElementById('academicCard');
+
+  if (!classes || classes.length === 0) {
+    hide('academicCard');
+    return;
+  }
+
+  show('academicCard');
+  tbody.innerHTML = classes.map((name, i) => {
+    const opts = GRADE_OPTIONS.map(g => '<option value="' + g + '">' + (g || '—') + '</option>').join('');
+    return '<tr>' +
+      '<td class="class-name">' + escHtml(name) + '</td>' +
+      '<td><select class="grade-select" data-idx="' + i + '" onchange="recalcAcademic()">' + opts + '</select></td>' +
+      '<td><input type="number" class="missing-input" data-idx="' + i + '" value="0" min="0" onchange="recalcAcademic()" oninput="recalcAcademic()"></td>' +
+      '</tr>';
+  }).join('');
+
+  recalcAcademic();
+}
+
+function recalcAcademic() {
+  const selects = document.querySelectorAll('#academicRows .grade-select');
+  const inputs = document.querySelectorAll('#academicRows .missing-input');
+  let totalMissing = 0;
+  const gpaValues = [];
+  const barData = [];
+  const classes = currentStudent ? (currentStudent.classes || []) : [];
+
+  selects.forEach((sel, i) => {
+    const grade = sel.value;
+    const missing = parseInt(inputs[i].value) || 0;
+    totalMissing += missing;
+    if (grade && GPA_MAP.hasOwnProperty(grade)) gpaValues.push(GPA_MAP[grade]);
+    barData.push({ name: classes[i] || ('Class ' + (i+1)), missing: missing });
+  });
+
+  const gpa = gpaValues.length > 0
+    ? (gpaValues.reduce((a, b) => a + b, 0) / gpaValues.length).toFixed(2)
+    : '—';
+
+  document.getElementById('liveGpa').textContent = gpa;
+  document.getElementById('liveMissing').textContent = totalMissing;
+
+  renderBarChart('liveBarChart', barData);
+}
+
+function getAcademicDataFromForm() {
+  const classes = currentStudent ? (currentStudent.classes || []) : [];
+  const selects = document.querySelectorAll('#academicRows .grade-select');
+  const inputs = document.querySelectorAll('#academicRows .missing-input');
+  const result = [];
+  selects.forEach((sel, i) => {
+    result.push({
+      name: classes[i] || '',
+      grade: sel.value,
+      missing: parseInt(inputs[i].value) || 0
+    });
+  });
+  return result;
+}
+
+/* ═══════════ BAR CHART RENDERER ═══════════ */
+function renderBarChart(containerId, data) {
+  const container = document.getElementById(containerId);
+  if (!data || data.length === 0) { container.innerHTML = ''; return; }
+
+  const maxVal = Math.max(...data.map(d => d.missing), 1);
+
+  container.innerHTML = data.map(d => {
+    const pct = Math.round((d.missing / maxVal) * 100);
+    const level = d.missing === 0 ? 'zero' : d.missing <= 2 ? 'low' : d.missing <= 5 ? 'med' : 'high';
+    return '<div class="bar-row">' +
+      '<div class="bar-label" title="' + escHtml(d.name) + '">' + escHtml(d.name) + '</div>' +
+      '<div class="bar-track"><div class="bar-fill ' + level + '" style="width:' + Math.max(pct, d.missing > 0 ? 15 : 0) + '%"><span>' + d.missing + '</span></div></div>' +
+      '</div>';
+  }).join('');
+}
+
+/* ═══════════ CHECK-IN ═══════════ */
+function resetCheckInForm() {
+  resetRatings();
+  document.getElementById('ciWeek').value = getMonday();
+  document.getElementById('ciWell').value = '';
+  document.getElementById('ciBarrier').value = '';
+  document.getElementById('ciTeacherNotes').value = '';
+  selectedGoal = '';
+  selectedGoalCat = '';
+  document.querySelectorAll('.goal-chip').forEach(c => c.classList.remove('selected'));
+}
+
+function submitCheckIn() {
+  if (!currentStudent) return;
+  const weekOf = document.getElementById('ciWeek').value;
+  if (!weekOf) { toast('Please select a week'); return; }
+
+  showLoading();
+  const data = {
+    studentId: currentStudent.id,
+    weekOf: weekOf,
+    planningRating: ratings.planningRating,
+    followThroughRating: ratings.followThroughRating,
+    regulationRating: ratings.regulationRating,
+    focusGoalRating: ratings.focusGoalRating,
+    effortRating: ratings.effortRating,
+    whatWentWell: document.getElementById('ciWell').value,
+    barrier: document.getElementById('ciBarrier').value,
+    microGoal: selectedGoal,
+    microGoalCategory: selectedGoalCat,
+    teacherNotes: document.getElementById('ciTeacherNotes').value,
+    academicData: getAcademicDataFromForm()
+  };
+
+  google.script.run
+    .withSuccessHandler(() => {
+      hideLoading();
+      toast('✅ Check-in saved!');
+      loadHistory();
+    })
+    .withFailureHandler(err => { hideLoading(); toast('Error: ' + err.message); })
+    .saveCheckIn(data);
+}
+
+/* ═══════════ HISTORY ═══════════ */
+function loadHistory() {
+  if (!currentStudent) return;
+  showLoading();
+  google.script.run
+    .withSuccessHandler(data => {
+      currentCheckIns = data;
+      renderHistory();
+      hideLoading();
+    })
+    .withFailureHandler(err => { hideLoading(); toast('Error: ' + err.message); })
+    .getCheckIns(currentStudent.id);
+}
+
+function renderHistory() {
+  const container = document.getElementById('historyTimeline');
+  const chartCard = document.getElementById('historyChartCard');
+
+  if (currentCheckIns.length === 0) {
+    container.innerHTML = '<div class="empty"><div class="empty-icon">📜</div><div class="empty-text">No check-ins yet</div></div>';
+    hide('historyChartCard');
+    return;
+  }
+
+  // Show bar chart from latest check-in
+  const latest = currentCheckIns[0];
+  if (latest.academicData && latest.academicData.length > 0) {
+    show('historyChartCard');
+    renderBarChart('historyBarChart', latest.academicData);
+  } else {
+    hide('historyChartCard');
+  }
+
+  container.innerHTML = currentCheckIns.map(ci => {
+    const rPills = [
+      ci.planningRating ? 'Plan: ' + ci.planningRating : '',
+      ci.followThroughRating ? 'Follow: ' + ci.followThroughRating : '',
+      ci.regulationRating ? 'Reg: ' + ci.regulationRating : '',
+      ci.focusGoalRating ? 'Focus: ' + ci.focusGoalRating : '',
+      ci.effortRating ? 'Effort: ' + ci.effortRating : ''
+    ].filter(Boolean).map(p => '<span class="timeline-pill">' + p + '</span>').join('');
+
+    let academicHtml = '';
+    if (ci.academicData && ci.academicData.length > 0) {
+      const totalM = ci.academicData.reduce((s, c) => s + (Number(c.missing) || 0), 0);
+      const gpaVals = ci.academicData.filter(c => c.grade && GPA_MAP[c.grade] !== undefined).map(c => GPA_MAP[c.grade]);
+      const gpa = gpaVals.length > 0 ? (gpaVals.reduce((a, b) => a + b, 0) / gpaVals.length).toFixed(2) : '—';
+
+      academicHtml = '<div class="timeline-academic">' +
+        '<div style="display:flex;justify-content:space-between;margin-bottom:4px;"><strong style="font-size:12px;color:var(--purple);">GPA: ' + gpa + '</strong><strong style="font-size:12px;color:var(--orange);">Missing: ' + totalM + '</strong></div>' +
+        ci.academicData.map(c =>
+          '<div class="timeline-academic-row">' +
+          '<span class="timeline-academic-class">' + escHtml(c.name || '?') + '</span>' +
+          '<span><span class="timeline-academic-grade">' + (c.grade || '—') + '</span> · <span class="timeline-academic-missing">' + (c.missing || 0) + ' missing</span></span>' +
+          '</div>'
+        ).join('') + '</div>';
+    }
+
+    const texts = [];
+    if (ci.whatWentWell) texts.push('✅ ' + escHtml(ci.whatWentWell));
+    if (ci.barrier) texts.push('🚧 ' + escHtml(ci.barrier));
+    if (ci.microGoal) texts.push('🎯 ' + escHtml(ci.microGoal));
+    if (ci.teacherNotes) texts.push('📝 ' + escHtml(ci.teacherNotes));
+
+    return '<div class="timeline-item">' +
+      '<div class="timeline-date">' + (ci.weekOf || 'No date') +
+      '<button class="del-btn" onclick="deleteCI(\'' + ci.id + '\')" title="Delete">×</button></div>' +
+      '<div class="timeline-card">' +
+      '<div class="timeline-ratings">' + rPills + '</div>' +
+      academicHtml +
+      '<div class="timeline-text">' + texts.join('<br>') + '</div>' +
+      '</div></div>';
+  }).join('');
+}
+
+function deleteCI(id) {
+  if (!confirm('Delete this check-in?')) return;
+  showLoading();
+  google.script.run
+    .withSuccessHandler(() => { hideLoading(); toast('Deleted'); loadHistory(); })
+    .withFailureHandler(err => { hideLoading(); toast('Error: ' + err.message); })
+    .deleteCheckIn(id);
+}
+
+/* ═══════════ PROFILE ═══════════ */
+function loadProfile() {
+  if (!currentStudent) return;
+  document.getElementById('profFirst').value = currentStudent.firstName || '';
+  document.getElementById('profLast').value = currentStudent.lastName || '';
+  document.getElementById('profGrade').value = currentStudent.grade || '';
+  document.getElementById('profPeriod').value = currentStudent.period || '';
+  document.getElementById('profGoal').value = currentStudent.focusGoal || '';
+  document.getElementById('profAccomm').value = currentStudent.accommodations || '';
+  document.getElementById('profNotes').value = currentStudent.notes || '';
+
+  // Classes
+  const editor = document.getElementById('classEditor');
+  const classes = currentStudent.classes || [];
+  editor.innerHTML = '';
+  if (classes.length === 0) {
+    addClassRow();
+  } else {
+    classes.forEach((name, i) => addClassRow(name));
+  }
+}
+
+function addClassRow(value) {
+  const editor = document.getElementById('classEditor');
+  const count = editor.querySelectorAll('.class-row').length;
+  if (count >= 7) { toast('Maximum 7 classes'); return; }
+
+  const row = document.createElement('div');
+  row.className = 'class-row';
+  row.innerHTML = '<span class="class-number">' + (count + 1) + '.</span>' +
+    '<input type="text" class="class-input" placeholder="e.g., Math 7" value="' + escHtml(value || '') + '">' +
+    '<button onclick="this.parentElement.remove();renumberClasses()" style="background:none;border:none;color:#ccc;cursor:pointer;font-size:18px;" title="Remove">×</button>';
+  editor.appendChild(row);
+}
+
+function renumberClasses() {
+  document.querySelectorAll('#classEditor .class-row').forEach((row, i) => {
+    row.querySelector('.class-number').textContent = (i + 1) + '.';
+  });
+}
+
+function getClassesFromEditor() {
+  const inputs = document.querySelectorAll('#classEditor .class-input');
+  const classes = [];
+  inputs.forEach(inp => {
+    const v = inp.value.trim();
+    if (v) classes.push(v);
+  });
+  return classes;
+}
+
+function saveProfile() {
+  if (!currentStudent) return;
+  showLoading();
+  const profile = {
+    id: currentStudent.id,
+    firstName: document.getElementById('profFirst').value.trim(),
+    lastName: document.getElementById('profLast').value.trim(),
+    grade: document.getElementById('profGrade').value,
+    period: document.getElementById('profPeriod').value,
+    focusGoal: document.getElementById('profGoal').value.trim(),
+    accommodations: document.getElementById('profAccomm').value.trim(),
+    notes: document.getElementById('profNotes').value.trim(),
+    classes: getClassesFromEditor()
+  };
+
+  google.script.run
+    .withSuccessHandler(res => {
+      hideLoading();
+      toast('✅ Profile saved!');
+      // Update local state
+      currentStudent.firstName = profile.firstName;
+      currentStudent.lastName = profile.lastName;
+      currentStudent.grade = profile.grade;
+      currentStudent.period = profile.period;
+      currentStudent.focusGoal = profile.focusGoal;
+      currentStudent.accommodations = profile.accommodations;
+      currentStudent.notes = profile.notes;
+      currentStudent.classes = profile.classes;
+
+      document.getElementById('headerTitle').textContent = profile.firstName + ' ' + profile.lastName;
+      document.getElementById('headerSub').textContent = 'Grade ' + (profile.grade || '?') + ' · Period ' + (profile.period || '?');
+
+      // Rebuild academic table for check-in
+      buildAcademicTable(profile.classes);
+    })
+    .withFailureHandler(err => { hideLoading(); toast('Error: ' + err.message); })
+    .saveStudent(profile);
+}
+
+function openNewStudent() {
+  currentStudent = { id: null, firstName: '', lastName: '', grade: '', period: '', focusGoal: '', accommodations: '', notes: '', classes: [] };
+  document.getElementById('headerTitle').textContent = 'New Student';
+  document.getElementById('headerSub').textContent = '';
+  show('navProfile');
+  loadProfile();
+  switchTab('Profile');
+}
+
+function confirmDeleteStudent() {
+  if (!currentStudent || !currentStudent.id) return;
+  if (!confirm('Delete ' + currentStudent.firstName + ' ' + currentStudent.lastName + '? This removes all their check-ins.')) return;
+  showLoading();
+  google.script.run
+    .withSuccessHandler(() => {
+      hideLoading();
+      toast('Student deleted');
+      currentStudent = null;
+      switchTab('Dashboard');
+      loadDashboard();
+    })
+    .withFailureHandler(err => { hideLoading(); toast('Error: ' + err.message); })
+    .deleteStudent(currentStudent.id);
+}
+
+/* ═══════════ HELPERS ═══════════ */
+function getMonday() {
+  const d = new Date();
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  const mon = new Date(d.setDate(diff));
+  return mon.toISOString().split('T')[0];
+}
+
+function escHtml(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>
