@@ -705,7 +705,7 @@ function showMissingAssignments(studentId) {
   appState.missingViewStudentId = studentId;
 
   document.getElementById('missing-view-breadcrumb').innerHTML =
-    'Student Profile <svg class="breadcrumb-chevron" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg> Missing Assignments';
+    '<button class="breadcrumb-link" onclick="editStudent(appState.missingViewStudentId)">Student Profile</button> <svg class="breadcrumb-chevron" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg> Missing Assignments';
   document.getElementById('missing-view-title').textContent =
     student.firstName + ' ' + student.lastName;
 
