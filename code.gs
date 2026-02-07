@@ -410,6 +410,27 @@ function deleteCheckIn(checkInId) {
   return { success: false };
 }
 
+function updateCheckInAcademicData(checkInId, academicData) {
+  initializeSheetsIfNeeded_();
+  const ss = getSS_();
+  const sheet = ss.getSheetByName(SHEET_CHECKINS);
+  if (!sheet) return { success: false };
+  const rows = sheet.getDataRange().getValues();
+  const headers = rows[0];
+  var colIdx = -1;
+  headers.forEach(function(h, i) { if (h === 'academicDataJson') colIdx = i + 1; });
+  if (colIdx < 0) return { success: false };
+
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][0] === checkInId) {
+      sheet.getRange(i + 1, colIdx).setValue(JSON.stringify(academicData || []));
+      invalidateCache_();
+      return { success: true };
+    }
+  }
+  return { success: false };
+}
+
 // ───── Dashboard / Analytics ─────
 
 function getDashboardData() {
@@ -497,6 +518,7 @@ function getDashboardData() {
       iepGoal: s.iepGoal || '',
       classes: s.classes || [],
       totalCheckIns: totalCheckIns,
+      latestCheckInId: latest ? latest.id : null,
       latestWeek: latest ? latest.weekOf : null,
       latestMicroGoal: latest ? latest.microGoal : null,
       avgRating: avgRating,
