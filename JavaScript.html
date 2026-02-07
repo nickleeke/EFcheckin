@@ -1,6 +1,6 @@
 <script>
 /* ============================================================
-   EF Weekly Check-In — Client-Side JavaScript
+   Caseload Dashboard — Client-Side JavaScript
    v3 — multi-user with onboarding
    ============================================================ */
 
@@ -1533,7 +1533,7 @@ function renderOnboardingWelcome() {
   };
 
   var features = [
-    { icon: 'dashboard', title: 'Student Dashboard', desc: 'See all your students at a glance with EF ratings, GPA, trends, and missing assignments.' },
+    { icon: 'dashboard', title: 'Caseload Dashboard', desc: 'See all your students at a glance with EF ratings, GPA, trends, and missing assignments.' },
     { icon: 'check_circle', title: 'Weekly Check-Ins', desc: 'Rate executive function skills across five dimensions, reflect on progress, and set micro-goals.' },
     { icon: 'trending_up', title: 'EF Tracking', desc: 'Track Planning, Follow-Through, Regulation, Focus Goal, and Effort over time.' },
     { icon: 'school', title: 'Academic Snapshots', desc: 'Log grades and missing assignments per class during each check-in.' },
@@ -1541,8 +1541,8 @@ function renderOnboardingWelcome() {
   ];
 
   var html = '<div class="onboarding-card">' +
-    '<h2 class="onboarding-title">Welcome to EF Check-In</h2>' +
-    '<p class="onboarding-subtitle">A tool for tracking executive function skills and academic progress for your students.</p>';
+    '<h2 class="onboarding-title">Welcome to Caseload Dashboard</h2>' +
+    '<p class="onboarding-subtitle">A caseload dashboard for tracking executive function skills and academic progress for your students.</p>';
 
   html += '<div class="onboarding-features">';
   features.forEach(function(f) {
@@ -1628,7 +1628,7 @@ function renderOnboardingFirstStudent() {
 
   var html = '<div class="onboarding-card">' +
     '<h2 class="onboarding-title">Add Your First Student</h2>' +
-    '<p class="onboarding-subtitle">Set up a student profile to get started. You can always add more students later from the dashboard.</p>' +
+    '<p class="onboarding-subtitle">Set up a student profile to get started. You can always add more students later from the caseload dashboard.</p>' +
     '<div class="form-card" style="box-shadow:none;padding:0;">' +
       '<div class="form-section">' +
         '<div class="form-section-title">Basic Information</div>' +
@@ -1685,7 +1685,7 @@ function saveOnboardingStudent() {
   google.script.run
     .withSuccessHandler(function(result) {
       if (result.success) {
-        showToast('Welcome to EF Check-In!');
+        showToast('Welcome to Caseload Dashboard!');
         completeOnboarding();
       } else {
         showToast('Error saving student');
