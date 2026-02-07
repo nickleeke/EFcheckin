@@ -263,6 +263,14 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   letter-spacing: 0.5px;
   color: var(--md-on-surface-variant);
   text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.breadcrumb-chevron {
+  color: var(--md-on-surface-variant);
+  opacity: 0.7;
+  flex-shrink: 0;
 }
 .view-title {
   /* M3 Headline Medium */
@@ -523,6 +531,14 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   font-size: 12px; font-weight: 500;
 }
 .sp-missing-badge.none { background: #D6F5D6; color: #1B5E20; }
+.sp-missing-badge.clickable {
+  cursor: pointer;
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+.sp-missing-badge.clickable:hover {
+  box-shadow: var(--md-elevation-1);
+  transform: scale(1.08);
+}
 
 .sp-total-missing {
   display: flex; align-items: center; justify-content: center; gap: 8px;
@@ -1142,6 +1158,42 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 }
 .type-formative  { background: #E3F2FD; color: #1565C0; }
 .type-summative  { background: #F3E5F5; color: #7B1FA2; }
+
+.missing-actions-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: center;
+}
+.missing-action-btn {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--md-shape-full);
+  cursor: pointer;
+  transition: background 0.2s, transform 0.15s;
+  background: none;
+  flex-shrink: 0;
+}
+.missing-action-btn.btn-check {
+  color: #1B5E20;
+  background: rgba(27, 94, 32, 0.08);
+}
+.missing-action-btn.btn-check:hover {
+  background: rgba(27, 94, 32, 0.20);
+  transform: scale(1.1);
+}
+.missing-action-btn.btn-delete {
+  color: var(--md-error);
+  background: rgba(186, 26, 26, 0.08);
+}
+.missing-action-btn.btn-delete:hover {
+  background: rgba(186, 26, 26, 0.20);
+  transform: scale(1.1);
+}
 
 .missing-none-msg,
 .missing-count-only {

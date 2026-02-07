@@ -294,7 +294,7 @@ function openSidePanel(index) {
         '<span class="sp-class-name">' + esc(classLabel) + '</span>' +
         '<span class="sp-class-meta">' +
           '<span class="sp-class-grade">' + esc(c.grade || '--') + '</span>' +
-          '<span class="sp-missing-badge' + missingBadgeClass + '">' + missingNum + ' missing</span>' +
+          '<span class="sp-missing-badge clickable' + missingBadgeClass + '" onclick="event.stopPropagation(); closeSidePanel(); showMissingAssignments(\'' + s.id + '\')" title="View missing assignments">' + missingNum + ' missing</span>' +
         '</span>' +
       '</li>';
     });
@@ -688,8 +688,8 @@ function showMissingAssignments(studentId) {
 
   appState.missingViewStudentId = studentId;
 
-  document.getElementById('missing-view-breadcrumb').textContent =
-    'Student Profile \u203A Missing Assignments';
+  document.getElementById('missing-view-breadcrumb').innerHTML =
+    'Student Profile <svg class="breadcrumb-chevron" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg> Missing Assignments';
   document.getElementById('missing-view-title').textContent =
     student.firstName + ' ' + student.lastName;
 
@@ -745,15 +745,17 @@ function renderMissingView(student) {
       if (missingNum === 0) {
         html += '<div class="missing-none-msg">No missing assignments</div>';
       } else if (assignments.length > 0) {
-        // Sort by name then type
-        var sorted = assignments.slice().sort(function(a, b) {
+        // Sort by name then type, tracking original indices
+        var sorted = assignments.map(function(a, i) {
+          return { name: a.name, type: a.type, _origIdx: i };
+        }).sort(function(a, b) {
           var nameComp = (a.name || '').localeCompare(b.name || '');
           if (nameComp !== 0) return nameComp;
           return (a.type || '').localeCompare(b.type || '');
         });
 
         html += '<table class="missing-detail-table">' +
-          '<thead><tr><th>Assignment Name</th><th>Type</th></tr></thead><tbody>';
+          '<thead><tr><th>Assignment Name</th><th>Type</th><th>Actions</th></tr></thead><tbody>';
         sorted.forEach(function(a) {
           var typeClass = a.type === 'Summative' ? 'type-summative' :
                           a.type === 'Formative' ? 'type-formative' : '';
@@ -761,6 +763,14 @@ function renderMissingView(student) {
             '<td>' + esc(a.name || 'Untitled') + '</td>' +
             '<td><span class="assignment-type ' + typeClass + '">' +
               esc(a.type || 'Unknown') + '</span></td>' +
+            '<td class="missing-actions-cell">' +
+              '<button class="missing-action-btn btn-check" onclick="event.stopPropagation(); markMissingDone(\'' + student.id + '\', ' + idx + ', ' + a._origIdx + ')" title="Mark as complete">' +
+                '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>' +
+              '</button>' +
+              '<button class="missing-action-btn btn-delete" onclick="event.stopPropagation(); removeMissingAssignment(\'' + student.id + '\', ' + idx + ', ' + a._origIdx + ')" title="Remove assignment">' +
+                '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>' +
+              '</button>' +
+            '</td>' +
           '</tr>';
         });
         html += '</tbody></table>';
@@ -792,6 +802,40 @@ function toggleMissingClass(idx) {
   } else {
     card.classList.add('expanded');
   }
+}
+
+function markMissingDone(studentId, classIdx, assignmentIdx) {
+  var student = appState.dashboardData.find(function(s) { return s.id === studentId; });
+  if (!student) return;
+  var classData = student.academicData[classIdx];
+  if (!classData || !classData.missingAssignments) return;
+
+  classData.missingAssignments.splice(assignmentIdx, 1);
+  classData.missing = classData.missingAssignments.length;
+
+  student.totalMissing = student.academicData.reduce(function(sum, c) {
+    return sum + (Number(c.missing) || 0);
+  }, 0);
+
+  renderMissingView(student);
+  showToast('Assignment marked as complete');
+}
+
+function removeMissingAssignment(studentId, classIdx, assignmentIdx) {
+  var student = appState.dashboardData.find(function(s) { return s.id === studentId; });
+  if (!student) return;
+  var classData = student.academicData[classIdx];
+  if (!classData || !classData.missingAssignments) return;
+
+  classData.missingAssignments.splice(assignmentIdx, 1);
+  classData.missing = classData.missingAssignments.length;
+
+  student.totalMissing = student.academicData.reduce(function(sum, c) {
+    return sum + (Number(c.missing) || 0);
+  }, 0);
+
+  renderMissingView(student);
+  showToast('Assignment removed');
 }
 
 function goBackFromMissing() {
