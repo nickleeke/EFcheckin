@@ -1,5 +1,5 @@
 /* ============================================================
-   EF Weekly Check-In — Google Apps Script Backend
+   Caseload Dashboard — Google Apps Script Backend
    Storage: Google Sheets (per-user, auto-provisioned)
    v3 — multi-user with per-user data isolation
 
@@ -87,7 +87,7 @@ function provisionUserSpreadsheet() {
   }
 
   // Create new spreadsheet in user's Drive
-  var ss = SpreadsheetApp.create('EF Check-In Data');
+  var ss = SpreadsheetApp.create('Caseload Dashboard Data');
 
   // Initialize Students sheet (rename default Sheet1)
   var studentsSheet = ss.getSheetByName('Sheet1');
@@ -117,7 +117,7 @@ function provisionUserSpreadsheet() {
 function doGet() {
   const template = HtmlService.createTemplateFromFile('Index');
   return template.evaluate()
-    .setTitle('Richfield Public Schools | EF Check-In')
+    .setTitle('Richfield Public Schools | Caseload Dashboard')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
@@ -536,7 +536,7 @@ function initializeSheetsIfNeeded_() {
 function onOpen() {
   try {
     SpreadsheetApp.getUi()
-      .createMenu('EF Check-In')
+      .createMenu('Caseload Dashboard')
       .addItem('Open Check-In App', 'openWebApp')
       .addItem('Initialize / Reset Sheets', 'initializeSheets')
       .addItem('Get Web App URL', 'showWebAppUrl')
@@ -551,7 +551,7 @@ function openWebApp() {
     '<p style="font-family:sans-serif;">Opening\u2026</p>' +
     '<script>window.open("' + ScriptApp.getService().getUrl() + '");google.script.host.close();</script>'
   ).setWidth(300).setHeight(80);
-  SpreadsheetApp.getUi().showModalDialog(html, 'EF Check-In');
+  SpreadsheetApp.getUi().showModalDialog(html, 'Caseload Dashboard');
 }
 
 function showWebAppUrl() {
