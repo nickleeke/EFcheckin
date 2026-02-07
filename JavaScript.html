@@ -320,8 +320,11 @@ function openSidePanel(index) {
   // Total missing (clickable to open detail view)
   content += '<div class="sp-section">';
   var totalMissing = s.totalMissing || 0;
-  var tmClass = totalMissing > 0 ? 'alert' : 'ok';
-  content += '<div class="sp-total-missing ' + tmClass + '" onclick="closeSidePanel(); showMissingAssignments(\'' + s.id + '\')" style="cursor:pointer;" title="View missing assignments detail">Total Missing Assignments: ' + totalMissing + '</div>';
+  if (totalMissing === 0) {
+    content += '<div class="sp-total-missing ok sp-no-missing" onclick="closeSidePanel(); showMissingAssignments(\'' + s.id + '\')" style="cursor:pointer;" title="View missing assignments detail">No Missing Assignments! <span class="sp-no-missing-emoji">&#x1F4AF;</span></div>';
+  } else {
+    content += '<div class="sp-total-missing alert" onclick="closeSidePanel(); showMissingAssignments(\'' + s.id + '\')" style="cursor:pointer;" title="View missing assignments detail">Total Missing Assignments: ' + totalMissing + '</div>';
+  }
   content += '</div>';
 
   // Action buttons
@@ -717,11 +720,16 @@ function renderMissingView(student) {
   var html = '';
 
   // Summary card
-  var summaryClass = totalMissing === 0 ? 'ok' : 'alert';
-  html += '<div class="missing-summary ' + summaryClass + '">' +
-    '<div class="missing-summary-count">' + totalMissing + '</div>' +
-    '<div class="missing-summary-label">Total Missing Assignments</div>' +
-  '</div>';
+  if (totalMissing === 0) {
+    html += '<div class="missing-summary-celebrate">' +
+      '<div class="missing-celebrate-text">No Missing Assignments!</div>' +
+    '</div>';
+  } else {
+    html += '<div class="missing-summary alert">' +
+      '<div class="missing-summary-count">' + totalMissing + '</div>' +
+      '<div class="missing-summary-label">Total Missing Assignments</div>' +
+    '</div>';
+  }
 
   if (academicData.length === 0) {
     html += '<div class="empty-state" style="padding:40px 20px;">' +
@@ -817,11 +825,73 @@ function toggleMissingClass(idx) {
   }
 }
 
+function launchConfetti(originEl) {
+  var rect = originEl ? originEl.getBoundingClientRect() : { left: window.innerWidth / 2, top: window.innerHeight / 2 };
+  var colors = ['#4CAF50', '#FFC107', '#2196F3', '#E91E63', '#9C27B0', '#FF5722', '#00BCD4'];
+  var shapes = ['circle', 'square'];
+  var count = 40;
+
+  for (var i = 0; i < count; i++) {
+    (function(index) {
+      var piece = document.createElement('div');
+      var size = Math.random() * 8 + 5;
+      var color = colors[Math.floor(Math.random() * colors.length)];
+      var shape = shapes[Math.floor(Math.random() * shapes.length)];
+      var angle = (Math.random() * 360) * (Math.PI / 180);
+      var velocity = Math.random() * 200 + 100;
+      var dx = Math.cos(angle) * velocity;
+      var dy = Math.sin(angle) * velocity - 150;
+      var rotation = Math.random() * 360;
+
+      piece.style.cssText =
+        'position:fixed;z-index:10000;pointer-events:none;' +
+        'width:' + size + 'px;height:' + size + 'px;' +
+        'background:' + color + ';' +
+        'border-radius:' + (shape === 'circle' ? '50%' : '2px') + ';' +
+        'left:' + rect.left + 'px;top:' + rect.top + 'px;' +
+        'opacity:1;transform:rotate(' + rotation + 'deg);';
+
+      document.body.appendChild(piece);
+
+      var startTime = performance.now();
+      var duration = 900 + Math.random() * 400;
+
+      function animate(now) {
+        var elapsed = now - startTime;
+        var progress = Math.min(elapsed / duration, 1);
+        var ease = 1 - Math.pow(1 - progress, 3);
+
+        var x = rect.left + dx * ease;
+        var y = rect.top + dy * ease + 300 * progress * progress;
+        var opacity = progress < 0.7 ? 1 : 1 - ((progress - 0.7) / 0.3);
+        var rot = rotation + 360 * ease;
+
+        piece.style.left = x + 'px';
+        piece.style.top = y + 'px';
+        piece.style.opacity = opacity;
+        piece.style.transform = 'rotate(' + rot + 'deg)';
+
+        if (progress < 1) {
+          requestAnimationFrame(animate);
+        } else {
+          piece.remove();
+        }
+      }
+
+      requestAnimationFrame(animate);
+    })(i);
+  }
+}
+
 function markMissingDone(studentId, classIdx, assignmentIdx) {
   var student = appState.dashboardData.find(function(s) { return s.id === studentId; });
   if (!student) return;
   var classData = student.academicData[classIdx];
   if (!classData || !classData.missingAssignments) return;
+
+  // Launch confetti from the button that was clicked
+  var btn = event && event.currentTarget ? event.currentTarget : null;
+  launchConfetti(btn);
 
   classData.missingAssignments.splice(assignmentIdx, 1);
   classData.missing = classData.missingAssignments.length;
