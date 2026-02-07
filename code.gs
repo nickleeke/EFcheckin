@@ -537,7 +537,7 @@ function onOpen() {
   try {
     SpreadsheetApp.getUi()
       .createMenu('Caseload Dashboard')
-      .addItem('Open Check-In App', 'openWebApp')
+      .addItem('Open Caseload Dashboard', 'openWebApp')
       .addItem('Initialize / Reset Sheets', 'initializeSheets')
       .addItem('Get Web App URL', 'showWebAppUrl')
       .addToUi();
