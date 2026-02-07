@@ -11,6 +11,7 @@
 // ───── Constants ─────
 const SHEET_STUDENTS = 'Students';
 const SHEET_CHECKINS = 'CheckIns';
+const SHEET_COTEACHERS = 'CoTeachers';
 
 const GPA_MAP = {
   'A':4.0, 'A-':3.7,
@@ -36,9 +37,36 @@ function getUserStatus() {
   var email = getCurrentUserEmail_();
   var props = PropertiesService.getUserProperties();
   var ssId = props.getProperty('spreadsheet_id');
+
+  // If no spreadsheet but a backup own spreadsheet exists, restore it
+  if (!ssId) {
+    var ownSsId = props.getProperty('own_spreadsheet_id');
+    if (ownSsId) {
+      try {
+        SpreadsheetApp.openById(ownSsId);
+        props.setProperty('spreadsheet_id', ownSsId);
+        props.deleteProperty('own_spreadsheet_id');
+        ssId = ownSsId;
+      } catch(e) {
+        props.deleteProperty('own_spreadsheet_id');
+      }
+    }
+  }
+
+  // Check for pending co-teacher invites in ScriptProperties
+  var invite = null;
+  try {
+    var scriptProps = PropertiesService.getScriptProperties();
+    var inviteRaw = scriptProps.getProperty('coteacher_invite_' + email);
+    if (inviteRaw) {
+      invite = JSON.parse(inviteRaw);
+    }
+  } catch(e) {}
+
   return {
     isNewUser: !ssId,
-    email: email
+    email: email,
+    pendingInvite: invite
   };
 }
 
@@ -102,6 +130,11 @@ function provisionUserSpreadsheet() {
   var checkInsSheet = ss.insertSheet(SHEET_CHECKINS);
   ensureHeaders_(checkInsSheet, CHECKIN_HEADERS);
 
+  // Initialize CoTeachers sheet with owner entry
+  var ctSheet = ss.insertSheet(SHEET_COTEACHERS);
+  ensureHeaders_(ctSheet, COTEACHER_HEADERS);
+  ctSheet.appendRow([email, 'owner', new Date().toISOString()]);
+
   // Store the new spreadsheet ID in UserProperties
   var ssId = ss.getId();
   props.setProperty('spreadsheet_id', ssId);
@@ -141,6 +174,7 @@ var CHECKIN_HEADERS = [
   'microGoal','microGoalCategory',
   'teacherNotes','academicDataJson','createdAt'
 ];
+var COTEACHER_HEADERS = ['email', 'role', 'addedAt'];
 
 function initializeSheets() {
   const ss = getSS_();
@@ -156,6 +190,17 @@ function initializeSheets() {
     checkInsSheet = ss.insertSheet(SHEET_CHECKINS);
   }
   ensureHeaders_(checkInsSheet, CHECKIN_HEADERS);
+
+  let ctSheet = ss.getSheetByName(SHEET_COTEACHERS);
+  if (!ctSheet) {
+    ctSheet = ss.insertSheet(SHEET_COTEACHERS);
+    ensureHeaders_(ctSheet, COTEACHER_HEADERS);
+    // Add current user as owner if sheet is brand-new
+    var email = getCurrentUserEmail_();
+    ctSheet.appendRow([email, 'owner', new Date().toISOString()]);
+  } else {
+    ensureHeaders_(ctSheet, COTEACHER_HEADERS);
+  }
 
   if (studentsSheet.getLastRow() <= 1) {
     seedDefaultStudents_(studentsSheet);
@@ -471,18 +516,27 @@ function getDashboardData() {
 // Pattern: read-through cache, invalidate on write.
 
 var CACHE_PREFIX = 'cache_';
+var CACHE_TTL_MS = 120000; // 2-minute TTL — keeps co-teacher views reasonably fresh
 
 function getCache_(key) {
   try {
     var raw = PropertiesService.getUserProperties().getProperty(CACHE_PREFIX + key);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      var cached = JSON.parse(raw);
+      if (cached && typeof cached === 'object' && cached.hasOwnProperty('_ts')) {
+        if (Date.now() - cached._ts > CACHE_TTL_MS) return null;
+        return cached._data;
+      }
+      return cached; // legacy format (no TTL wrapper)
+    }
   } catch(e) {}
   return null;
 }
 
 function setCache_(key, data) {
   try {
-    PropertiesService.getUserProperties().setProperty(CACHE_PREFIX + key, JSON.stringify(data));
+    var wrapped = { _data: data, _ts: Date.now() };
+    PropertiesService.getUserProperties().setProperty(CACHE_PREFIX + key, JSON.stringify(wrapped));
   } catch(e) { /* exceeds 9KB property limit — skip silently */ }
 }
 
@@ -511,6 +565,201 @@ function saveFeedbackLinks(links) {
   return { success: true };
 }
 
+// ───── Co-Teacher Management ─────
+
+/** Return team members and the current user's role for the active spreadsheet. */
+function getTeamInfo() {
+  var email = getCurrentUserEmail_();
+  var ss = getSS_();
+  var ctSheet = ss.getSheetByName(SHEET_COTEACHERS);
+
+  if (!ctSheet || ctSheet.getLastRow() <= 1) {
+    return { members: [{ email: email, role: 'owner', addedAt: '' }], currentUserRole: 'owner' };
+  }
+
+  var data = ctSheet.getDataRange().getValues();
+  var headers = data[0];
+  var members = [];
+  var currentUserRole = 'owner';
+
+  for (var i = 1; i < data.length; i++) {
+    var member = {};
+    headers.forEach(function(h, idx) { member[h] = data[i][idx]; });
+    members.push(member);
+    if (String(member.email).toLowerCase() === email) {
+      currentUserRole = member.role;
+    }
+  }
+
+  var found = members.some(function(m) { return String(m.email).toLowerCase() === email; });
+  if (!found) {
+    members.unshift({ email: email, role: 'owner', addedAt: '' });
+    currentUserRole = 'owner';
+  }
+
+  return { members: members, currentUserRole: currentUserRole };
+}
+
+/** Invite a co-teacher by email. Shares the spreadsheet and stores an invite. */
+function addCoTeacher(email) {
+  email = String(email || '').trim().toLowerCase();
+  if (!email || email.indexOf('@') === -1) {
+    return { success: false, error: 'Please enter a valid email address.' };
+  }
+
+  var currentEmail = getCurrentUserEmail_();
+  if (email === currentEmail) {
+    return { success: false, error: 'You cannot add yourself as a co-teacher.' };
+  }
+
+  var ss = getSS_();
+
+  // Ensure CoTeachers sheet exists
+  var ctSheet = ss.getSheetByName(SHEET_COTEACHERS);
+  if (!ctSheet) {
+    ctSheet = ss.insertSheet(SHEET_COTEACHERS);
+    ensureHeaders_(ctSheet, COTEACHER_HEADERS);
+    ctSheet.appendRow([currentEmail, 'owner', new Date().toISOString()]);
+  }
+
+  // Check for duplicates
+  var data = ctSheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][0]).toLowerCase() === email) {
+      return { success: false, error: 'This person is already on your team.' };
+    }
+  }
+
+  // Add to CoTeachers sheet
+  ctSheet.appendRow([email, 'co-teacher', new Date().toISOString()]);
+
+  // Share the spreadsheet with the co-teacher
+  try {
+    ss.addEditor(email);
+  } catch(e) {
+    return { success: false, error: 'Could not share the spreadsheet: ' + e.message };
+  }
+
+  // Store invite in ScriptProperties so co-teacher sees it on next load
+  try {
+    var scriptProps = PropertiesService.getScriptProperties();
+    scriptProps.setProperty('coteacher_invite_' + email, JSON.stringify({
+      spreadsheetId: ss.getId(),
+      ownerEmail: currentEmail,
+      invitedAt: new Date().toISOString()
+    }));
+  } catch(e) {}
+
+  return { success: true };
+}
+
+/** Remove a co-teacher. Revokes spreadsheet access and removes the invite. */
+function removeCoTeacher(email) {
+  email = String(email || '').trim().toLowerCase();
+  var ss = getSS_();
+  var ctSheet = ss.getSheetByName(SHEET_COTEACHERS);
+  if (!ctSheet) return { success: false, error: 'No co-teachers configured.' };
+
+  var data = ctSheet.getDataRange().getValues();
+  for (var i = data.length - 1; i >= 1; i--) {
+    if (String(data[i][0]).toLowerCase() === email && data[i][1] !== 'owner') {
+      ctSheet.deleteRow(i + 1);
+      break;
+    }
+  }
+
+  try { ss.removeEditor(email); } catch(e) {}
+
+  // Remove any pending invite
+  try {
+    PropertiesService.getScriptProperties().deleteProperty('coteacher_invite_' + email);
+  } catch(e) {}
+
+  return { success: true };
+}
+
+/** Co-teacher accepts a pending invite and links to the shared spreadsheet. */
+function acceptCoTeacherInvite() {
+  var email = getCurrentUserEmail_();
+  var scriptProps = PropertiesService.getScriptProperties();
+  var inviteRaw = scriptProps.getProperty('coteacher_invite_' + email);
+
+  if (!inviteRaw) {
+    return { success: false, error: 'No pending invite found.' };
+  }
+
+  var invite = JSON.parse(inviteRaw);
+
+  // Verify access
+  try {
+    var ss = SpreadsheetApp.openById(invite.spreadsheetId);
+  } catch(e) {
+    return { success: false, error: 'Cannot access the shared spreadsheet. The owner may have revoked access.' };
+  }
+
+  var props = PropertiesService.getUserProperties();
+  var oldSsId = props.getProperty('spreadsheet_id');
+  if (oldSsId) {
+    props.setProperty('own_spreadsheet_id', oldSsId);
+  }
+
+  props.setProperty('spreadsheet_id', invite.spreadsheetId);
+  scriptProps.deleteProperty('coteacher_invite_' + email);
+  invalidateCache_();
+
+  return { success: true, spreadsheetUrl: ss.getUrl() };
+}
+
+/** Co-teacher declines a pending invite. */
+function declineCoTeacherInvite() {
+  var email = getCurrentUserEmail_();
+  PropertiesService.getScriptProperties().deleteProperty('coteacher_invite_' + email);
+  return { success: true };
+}
+
+/** Co-teacher voluntarily leaves the shared spreadsheet. */
+function leaveCoTeacherTeam() {
+  var email = getCurrentUserEmail_();
+  var props = PropertiesService.getUserProperties();
+
+  // Remove self from CoTeachers sheet
+  try {
+    var ss = getSS_();
+    var ctSheet = ss.getSheetByName(SHEET_COTEACHERS);
+    if (ctSheet && ctSheet.getLastRow() > 1) {
+      var data = ctSheet.getDataRange().getValues();
+      for (var i = data.length - 1; i >= 1; i--) {
+        if (String(data[i][0]).toLowerCase() === email) {
+          ctSheet.deleteRow(i + 1);
+          break;
+        }
+      }
+    }
+  } catch(e) {}
+
+  // Clear shared spreadsheet and restore own if available
+  props.deleteProperty('spreadsheet_id');
+  var ownSsId = props.getProperty('own_spreadsheet_id');
+  if (ownSsId) {
+    try {
+      SpreadsheetApp.openById(ownSsId);
+      props.setProperty('spreadsheet_id', ownSsId);
+      props.deleteProperty('own_spreadsheet_id');
+    } catch(e) {
+      props.deleteProperty('own_spreadsheet_id');
+    }
+  }
+
+  invalidateCache_();
+  return { success: true };
+}
+
+/** Force-refresh: invalidate cache and return fresh dashboard data. */
+function refreshDashboardData() {
+  invalidateCache_();
+  return getDashboardData();
+}
+
 // ───── Helpers ─────
 
 /** Normalize a value that may be a Date object into YYYY-MM-DD string */
@@ -527,7 +776,7 @@ function formatDateValue_(val) {
 
 function initializeSheetsIfNeeded_() {
   const ss = getSS_();
-  if (!ss.getSheetByName(SHEET_STUDENTS) || !ss.getSheetByName(SHEET_CHECKINS)) {
+  if (!ss.getSheetByName(SHEET_STUDENTS) || !ss.getSheetByName(SHEET_CHECKINS) || !ss.getSheetByName(SHEET_COTEACHERS)) {
     initializeSheets();
   }
 }

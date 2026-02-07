@@ -1429,4 +1429,85 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   }
   .onboarding-step-line { width: 40px; }
 }
+
+/* ─── Co-Teacher Management ─── */
+
+.ct-role-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-radius: var(--md-shape-md);
+  margin-bottom: 20px;
+  font-size: 14px;
+}
+.ct-role-owner {
+  background: var(--md-primary-container);
+  color: var(--md-on-primary-container);
+}
+.ct-role-coteacher {
+  background: var(--md-tertiary-container);
+  color: var(--md-on-tertiary-container);
+}
+.ct-role-label {
+  font-weight: 400;
+}
+.ct-role-value {
+  font-weight: 600;
+}
+
+.ct-member-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--md-outline-variant);
+}
+.ct-member-row:last-child {
+  border-bottom: none;
+}
+.ct-member-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ct-member-email {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--md-on-surface);
+}
+.ct-member-role {
+  font-size: 12px;
+  color: var(--md-on-surface-variant);
+}
+
+.ct-add-form {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.ct-email-input {
+  flex: 1;
+  padding: 10px 14px;
+  font-size: 14px;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-sm);
+  background: var(--md-surface);
+  color: var(--md-on-surface);
+  font-family: 'Roboto', sans-serif;
+}
+.ct-email-input:focus {
+  outline: none;
+  border-color: var(--md-primary);
+  box-shadow: 0 0 0 1px var(--md-primary);
+}
+
+@media (max-width: 600px) {
+  .ct-add-form {
+    flex-direction: column;
+  }
+  .ct-add-form .btn {
+    width: 100%;
+  }
+}
 </style>
