@@ -157,7 +157,11 @@ function initializeSheets() {
   }
   ensureHeaders_(checkInsSheet, CHECKIN_HEADERS);
 
-  return { success: true };
+  if (studentsSheet.getLastRow() <= 1) {
+    seedDefaultStudents_(studentsSheet);
+  }
+
+  return { success: true, feedbackLinks: getFeedbackLinks() };
 }
 
 /** Verify row 1 has the expected headers; overwrite if not. */
