@@ -1,6 +1,7 @@
 <script>
 /* ============================================================
    EF Weekly Check-In — Client-Side JavaScript
+   v3 — multi-user with onboarding
    ============================================================ */
 
 // ─── Application State ───
@@ -15,6 +16,12 @@ var appState = {
   feedbackLinks: null
 };
 
+var onboardingState = {
+  step: 1,
+  email: '',
+  spreadsheetUrl: null
+};
+
 // ─── Preloaded Options ───
 var PRELOADED_CLASSES = [
   'Academic Skills', 'Art', 'Band', 'Choir', 'ELA',
@@ -24,7 +31,32 @@ var PRELOADED_CLASSES = [
 
 // ─── Initialization ───
 document.addEventListener('DOMContentLoaded', function() {
+  // Check user auth status before showing anything
+  google.script.run
+    .withSuccessHandler(function(status) {
+      if (status.isNewUser) {
+        showOnboarding(status);
+      } else {
+        enterApp();
+      }
+    })
+    .withFailureHandler(function(err) {
+      document.getElementById('auth-loading').innerHTML =
+        '<div class="empty-state">' +
+          '<h3>Unable to Load</h3>' +
+          '<p>' + esc(err && err.message ? err.message : String(err)) + '</p>' +
+          '<button class="btn btn-primary" style="margin-top:16px;" onclick="location.reload()">Reload</button>' +
+        '</div>';
+    })
+    .getUserStatus();
+});
+
+/** Enter the main app (for returning users or after onboarding). */
+function enterApp() {
+  document.getElementById('navbar').style.display = '';
+  showView('dashboard-view');
   showDashboardSkeleton();
+
   google.script.run
     .withSuccessHandler(function() {
       try {
@@ -39,7 +71,7 @@ document.addEventListener('DOMContentLoaded', function() {
       showToast('Error initializing: ' + (err && err.message ? err.message : String(err)));
     })
     .initializeSheets();
-});
+}
 
 // Close side panel on Escape key
 document.addEventListener('keydown', function(e) {
@@ -1447,5 +1479,232 @@ function esc(str) {
   var div = document.createElement('div');
   div.textContent = String(str);
   return div.innerHTML;
+}
+
+// ─── Onboarding Wizard ───
+
+function showOnboarding(status) {
+  onboardingState.email = status.email || '';
+  onboardingState.step = 1;
+  showView('onboarding-view');
+  renderOnboardingStep();
+}
+
+function onboardingNext() {
+  onboardingState.step++;
+  renderOnboardingStep();
+}
+
+function renderOnboardingStep() {
+  var container = document.getElementById('onboarding-container');
+  var html = '';
+
+  // Progress indicator
+  html += '<div class="onboarding-progress">';
+  for (var i = 1; i <= 3; i++) {
+    var stepClass = i === onboardingState.step ? 'active' :
+                    i < onboardingState.step ? 'completed' : '';
+    html += '<div class="onboarding-step-dot ' + stepClass + '">' + i + '</div>';
+    if (i < 3) html += '<div class="onboarding-step-line ' + (i < onboardingState.step ? 'completed' : '') + '"></div>';
+  }
+  html += '</div>';
+
+  if (onboardingState.step === 1) {
+    html += renderOnboardingWelcome();
+  } else if (onboardingState.step === 2) {
+    html += renderOnboardingProvision();
+  } else if (onboardingState.step === 3) {
+    html += renderOnboardingFirstStudent();
+  }
+
+  container.innerHTML = html;
+
+  // Auto-trigger provisioning when step 2 renders
+  if (onboardingState.step === 2) {
+    triggerProvisioning();
+  }
+}
+
+// ── Step 1: Welcome & Feature Highlights ──
+function renderOnboardingWelcome() {
+  var iconSvgs = {
+    dashboard: '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>',
+    check_circle: '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>',
+    trending_up: '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z"/></svg>',
+    school: '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3L1 9l11 6 9-4.91V17h2V9L12 3z"/></svg>',
+    insights: '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M21 8c-1.45 0-2.26 1.44-1.93 2.51l-3.55 3.56c-.3-.09-.74-.09-1.04 0l-2.55-2.55C12.27 10.45 11.46 9 10 9c-1.45 0-2.27 1.44-1.93 2.52l-4.56 4.55C2.44 15.74 1 16.55 1 18c0 1.1.9 2 2 2 1.45 0 2.26-1.44 1.93-2.51l4.55-4.56c.3.09.74.09 1.04 0l2.55 2.55C12.73 16.55 13.54 18 15 18c1.45 0 2.27-1.44 1.93-2.52l3.56-3.55C21.56 12.26 23 11.45 23 10c0-1.1-.9-2-2-2z"/></svg>'
+  };
+
+  var features = [
+    { icon: 'dashboard', title: 'Student Dashboard', desc: 'See all your students at a glance with EF ratings, GPA, trends, and missing assignments.' },
+    { icon: 'check_circle', title: 'Weekly Check-Ins', desc: 'Rate executive function skills across five dimensions, reflect on progress, and set micro-goals.' },
+    { icon: 'trending_up', title: 'EF Tracking', desc: 'Track Planning, Follow-Through, Regulation, Focus Goal, and Effort over time.' },
+    { icon: 'school', title: 'Academic Snapshots', desc: 'Log grades and missing assignments per class during each check-in.' },
+    { icon: 'insights', title: 'Trends & History', desc: 'Spot trends across check-ins and review a student\u2019s full history.' }
+  ];
+
+  var html = '<div class="onboarding-card">' +
+    '<h2 class="onboarding-title">Welcome to EF Check-In</h2>' +
+    '<p class="onboarding-subtitle">A tool for tracking executive function skills and academic progress for your students.</p>';
+
+  html += '<div class="onboarding-features">';
+  features.forEach(function(f) {
+    html += '<div class="onboarding-feature">' +
+      '<div class="onboarding-feature-icon">' + iconSvgs[f.icon] + '</div>' +
+      '<div class="onboarding-feature-text">' +
+        '<div class="onboarding-feature-title">' + f.title + '</div>' +
+        '<div class="onboarding-feature-desc">' + f.desc + '</div>' +
+      '</div>' +
+    '</div>';
+  });
+  html += '</div>';
+
+  html += '<div class="onboarding-actions">' +
+    '<button class="btn btn-primary" onclick="onboardingNext()">Get Started</button>' +
+  '</div>';
+
+  html += '</div>';
+  return html;
+}
+
+// ── Step 2: Spreadsheet Provisioning ──
+function renderOnboardingProvision() {
+  var html = '<div class="onboarding-card">' +
+    '<h2 class="onboarding-title">Setting Up Your Data</h2>' +
+    '<p class="onboarding-subtitle">Creating a private Google Sheet in your Drive to store student data securely.</p>' +
+    '<div id="provision-status" class="onboarding-provision-status">' +
+      '<div class="provision-spinner"></div>' +
+      '<p>Creating your spreadsheet\u2026</p>' +
+    '</div>' +
+    '<div id="provision-actions" class="onboarding-actions" style="display:none;">' +
+      '<button class="btn btn-primary" onclick="onboardingNext()">Continue</button>' +
+    '</div>' +
+  '</div>';
+  return html;
+}
+
+function triggerProvisioning() {
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (result.success) {
+        onboardingState.spreadsheetUrl = result.spreadsheetUrl;
+        var statusEl = document.getElementById('provision-status');
+        statusEl.innerHTML =
+          '<div class="provision-success">' +
+            '<svg width="48" height="48" viewBox="0 0 24 24" fill="var(--md-primary)"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>' +
+            '<p class="provision-success-text">Your spreadsheet has been created!</p>' +
+            '<p class="provision-success-hint">It\u2019s stored in your Google Drive and only accessible to you.</p>' +
+          '</div>';
+        document.getElementById('provision-actions').style.display = '';
+      } else {
+        showProvisionError('Unexpected error during setup.');
+      }
+    })
+    .withFailureHandler(function(err) {
+      showProvisionError(err && err.message ? err.message : String(err));
+    })
+    .provisionUserSpreadsheet();
+}
+
+function showProvisionError(message) {
+  var statusEl = document.getElementById('provision-status');
+  statusEl.innerHTML =
+    '<div class="provision-error">' +
+      '<p>Something went wrong: ' + esc(message) + '</p>' +
+      '<button class="btn btn-primary" onclick="renderOnboardingStep()" style="margin-top:12px;">Retry</button>' +
+    '</div>';
+}
+
+// ── Step 3: First Student Profile ──
+function renderOnboardingFirstStudent() {
+  var gradeOptions = [
+    { value: '', label: '-- Select Grade --' },
+    { value: '6', label: '6' },
+    { value: '7', label: '7' },
+    { value: '8', label: '8' }
+  ];
+
+  var gradeHtml = '';
+  gradeOptions.forEach(function(g) {
+    gradeHtml += '<option value="' + g.value + '">' + g.label + '</option>';
+  });
+
+  var html = '<div class="onboarding-card">' +
+    '<h2 class="onboarding-title">Add Your First Student</h2>' +
+    '<p class="onboarding-subtitle">Set up a student profile to get started. You can always add more students later from the dashboard.</p>' +
+    '<div class="form-card" style="box-shadow:none;padding:0;">' +
+      '<div class="form-section">' +
+        '<div class="form-section-title">Basic Information</div>' +
+        '<div class="form-row">' +
+          '<div class="form-group"><label>First Name *</label>' +
+            '<input type="text" id="ob-firstName" placeholder="First name"></div>' +
+          '<div class="form-group"><label>Last Name *</label>' +
+            '<input type="text" id="ob-lastName" placeholder="Last name"></div>' +
+        '</div>' +
+        '<div class="form-group"><label>Grade Level</label>' +
+          '<select id="ob-grade">' + gradeHtml + '</select>' +
+        '</div>' +
+      '</div>' +
+      '<div class="form-section">' +
+        '<div class="form-section-title">Focus &amp; Support</div>' +
+        '<div class="form-group"><label>Focus Goal</label>' +
+          '<input type="text" id="ob-focusGoal" placeholder="Executive function focus area"></div>' +
+        '<div class="form-group"><label>IEP Goal</label>' +
+          '<textarea id="ob-iepGoal" placeholder="Enter the student\u2019s current IEP goal (optional)"></textarea></div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="onboarding-actions">' +
+      '<button class="btn btn-secondary" onclick="skipFirstStudent()">Skip for Now</button>' +
+      '<button class="btn btn-primary" onclick="saveOnboardingStudent()">Save &amp; Finish</button>' +
+    '</div>' +
+  '</div>';
+
+  return html;
+}
+
+function saveOnboardingStudent() {
+  var firstName = document.getElementById('ob-firstName').value.trim();
+  var lastName = document.getElementById('ob-lastName').value.trim();
+
+  if (!firstName || !lastName) {
+    showToast('First and last name are required');
+    return;
+  }
+
+  var profile = {
+    firstName: firstName,
+    lastName: lastName,
+    grade: document.getElementById('ob-grade').value,
+    focusGoal: document.getElementById('ob-focusGoal').value.trim(),
+    iepGoal: document.getElementById('ob-iepGoal').value.trim(),
+    period: '',
+    accommodations: '',
+    notes: '',
+    classes: []
+  };
+
+  showToast('Saving student\u2026');
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (result.success) {
+        showToast('Welcome to EF Check-In!');
+        completeOnboarding();
+      } else {
+        showToast('Error saving student');
+      }
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error: ' + (err && err.message ? err.message : String(err)));
+    })
+    .saveStudent(profile);
+}
+
+function skipFirstStudent() {
+  completeOnboarding();
+}
+
+function completeOnboarding() {
+  enterApp();
 }
 </script>
