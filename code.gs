@@ -86,7 +86,7 @@ function initializeSheets() {
     seedDefaultStudents_(studentsSheet);
   }
 
-  return { success: true };
+  return { success: true, feedbackLinks: getFeedbackLinks() };
 }
 
 /** Verify row 1 has the expected headers; overwrite if not. */

@@ -26,12 +26,9 @@ var PRELOADED_CLASSES = [
 document.addEventListener('DOMContentLoaded', function() {
   showDashboardSkeleton();
   google.script.run
-    .withSuccessHandler(function() {
+    .withSuccessHandler(function(result) {
       try {
-        google.script.run
-          .withSuccessHandler(function(links) { appState.feedbackLinks = links || {}; })
-          .withFailureHandler(function() { appState.feedbackLinks = {}; })
-          .getFeedbackLinks();
+        appState.feedbackLinks = (result && result.feedbackLinks) || {};
         loadDashboard();
       } catch(e) { showToast('Error: ' + e.message); }
     })
