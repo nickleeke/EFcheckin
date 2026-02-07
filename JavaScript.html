@@ -13,7 +13,8 @@ var appState = {
   sortField: 'name',
   sortAsc: true,
   missingViewStudentId: null,
-  feedbackLinks: null
+  feedbackLinks: null,
+  currentUserEmail: ''
 };
 
 var onboardingState = {
@@ -34,7 +35,19 @@ document.addEventListener('DOMContentLoaded', function() {
   // Check user auth status before showing anything
   google.script.run
     .withSuccessHandler(function(status) {
-      if (status.isNewUser) {
+      appState.currentUserEmail = status.email || '';
+
+      // Check for pending co-teacher invite
+      if (status.pendingInvite) {
+        if (status.isNewUser) {
+          // New user with invite — show invite acceptance directly
+          showInviteModal(status.pendingInvite, true);
+        } else {
+          // Existing user with invite — enter app, then show invite modal
+          enterApp();
+          showInviteModal(status.pendingInvite, false);
+        }
+      } else if (status.isNewUser) {
         showOnboarding(status);
       } else {
         enterApp();
@@ -1370,6 +1383,258 @@ function saveFeedbackSetup() {
       showToast('Error: ' + (err && err.message ? err.message : String(err)));
     })
     .saveFeedbackLinks(links);
+}
+
+// ─── Co-Teacher Invite Modal ───
+
+function showInviteModal(invite, isNewUser) {
+  document.getElementById('navbar').style.display = '';
+  showView('auth-loading'); // keep loading state visible behind the modal
+  if (!isNewUser) showView('dashboard-view');
+
+  var overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+  overlay.id = 'invite-modal-overlay';
+  overlay.innerHTML =
+    '<div class="confirm-dialog" style="max-width:440px;">' +
+      '<h3>Co-Teacher Invitation</h3>' +
+      '<p><strong>' + esc(invite.ownerEmail) + '</strong> has invited you to collaborate on their caseload. You will share the same students and check-in data.</p>' +
+      (isNewUser
+        ? '<p class="hint">Accepting will set up your account with their shared caseload. You can also decline and create your own.</p>'
+        : '<p class="hint">Accepting will switch you to their shared caseload. Your own data will be preserved and can be restored if you leave the team later.</p>') +
+      '<div class="confirm-actions">' +
+        '<button class="btn btn-secondary" onclick="declineInvite(' + (isNewUser ? 'true' : 'false') + ')">Decline</button>' +
+        '<button class="btn btn-primary" onclick="acceptInvite(' + (isNewUser ? 'true' : 'false') + ')">Accept &amp; Join</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+}
+
+function acceptInvite(isNewUser) {
+  var modal = document.getElementById('invite-modal-overlay');
+  if (modal) modal.innerHTML =
+    '<div class="confirm-dialog" style="max-width:440px;text-align:center;">' +
+      '<div class="provision-spinner"></div>' +
+      '<p>Joining team\u2026</p>' +
+    '</div>';
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (modal) modal.remove();
+      if (result.success) {
+        showToast('Joined team successfully!');
+        enterApp();
+      } else {
+        showToast(result.error || 'Error joining team');
+        if (isNewUser) location.reload();
+      }
+    })
+    .withFailureHandler(function(err) {
+      if (modal) modal.remove();
+      showToast('Error: ' + (err && err.message ? err.message : String(err)));
+      if (isNewUser) location.reload();
+    })
+    .acceptCoTeacherInvite();
+}
+
+function declineInvite(isNewUser) {
+  var modal = document.getElementById('invite-modal-overlay');
+  if (modal) modal.remove();
+
+  google.script.run
+    .withSuccessHandler(function() {
+      if (isNewUser) {
+        // Show onboarding since they don't have their own spreadsheet yet
+        google.script.run
+          .withSuccessHandler(function(status) { showOnboarding(status); })
+          .withFailureHandler(function() { location.reload(); })
+          .getUserStatus();
+      }
+    })
+    .withFailureHandler(function() {})
+    .declineCoTeacherInvite();
+}
+
+// ─── Co-Teacher Management View ───
+
+function showCoTeachers() {
+  showView('coteacher-view');
+  document.getElementById('coteacher-content-container').innerHTML =
+    '<div class="skeleton-fade-in"><div class="form-card">' +
+      '<div class="skeleton skeleton-section-title" style="width:30%;"></div>' +
+      '<div class="skeleton skeleton-input" style="margin-bottom:12px;"></div>' +
+      '<div class="skeleton skeleton-input" style="margin-bottom:12px;"></div>' +
+    '</div></div>';
+
+  google.script.run
+    .withSuccessHandler(function(teamInfo) {
+      try { renderCoTeacherView(teamInfo); }
+      catch(e) { showToast('Render error: ' + e.message); }
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error: ' + (err && err.message ? err.message : String(err)));
+    })
+    .getTeamInfo();
+}
+
+function renderCoTeacherView(teamInfo) {
+  var container = document.getElementById('coteacher-content-container');
+  var isOwner = teamInfo.currentUserRole === 'owner';
+  var html = '';
+
+  // Role banner
+  html += '<div class="ct-role-banner ' + (isOwner ? 'ct-role-owner' : 'ct-role-coteacher') + '">' +
+    '<span class="ct-role-label">Your role:</span> ' +
+    '<span class="ct-role-value">' + (isOwner ? 'Owner' : 'Co-Teacher') + '</span>' +
+  '</div>';
+
+  // Team members
+  html += '<div class="form-card">' +
+    '<div class="form-section-title">Team Members</div>';
+
+  teamInfo.members.forEach(function(m) {
+    var emailStr = String(m.email || '');
+    var roleStr = m.role === 'owner' ? 'Owner' : 'Co-Teacher';
+    var isSelf = emailStr.toLowerCase() === (appState.currentUserEmail || '').toLowerCase();
+
+    html += '<div class="ct-member-row">' +
+      '<div class="ct-member-info">' +
+        '<span class="ct-member-email">' + esc(emailStr) + '</span>' +
+        '<span class="ct-member-role">' + roleStr + (isSelf ? ' (you)' : '') + '</span>' +
+      '</div>';
+
+    if (isOwner && m.role !== 'owner') {
+      html += '<button class="btn btn-sm btn-danger" onclick="confirmRemoveCoTeacher(\'' + esc(emailStr) + '\')">Remove</button>';
+    }
+
+    html += '</div>';
+  });
+
+  html += '</div>';
+
+  // Add co-teacher form (owner only)
+  if (isOwner) {
+    html += '<div class="form-card">' +
+      '<div class="form-section-title">Add Co-Teacher</div>' +
+      '<p class="hint">Enter the email address of the teacher you want to invite. They will receive the invite the next time they open the app.</p>' +
+      '<div class="ct-add-form">' +
+        '<input type="email" id="ct-add-email" placeholder="colleague@school.edu" class="ct-email-input">' +
+        '<button class="btn btn-primary" onclick="addCoTeacherFromForm()">Send Invite</button>' +
+      '</div>' +
+    '</div>';
+  }
+
+  // Leave team (co-teacher only)
+  if (!isOwner) {
+    html += '<div class="form-card">' +
+      '<div class="form-section-title">Leave Team</div>' +
+      '<p class="hint">Leaving will disconnect you from this shared caseload. If you previously had your own data, it will be restored.</p>' +
+      '<button class="btn btn-danger" onclick="confirmLeaveTeam()">Leave Team</button>' +
+    '</div>';
+  }
+
+  container.innerHTML = html;
+}
+
+function addCoTeacherFromForm() {
+  var input = document.getElementById('ct-add-email');
+  var email = (input.value || '').trim();
+  if (!email) { showToast('Please enter an email address'); return; }
+
+  showToast('Sending invite\u2026');
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (result.success) {
+        showToast('Invite sent to ' + email);
+        showCoTeachers(); // refresh
+      } else {
+        showToast(result.error || 'Error sending invite');
+      }
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error: ' + (err && err.message ? err.message : String(err)));
+    })
+    .addCoTeacher(email);
+}
+
+function confirmRemoveCoTeacher(email) {
+  var overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+  overlay.innerHTML =
+    '<div class="confirm-dialog">' +
+      '<h3>Remove Co-Teacher?</h3>' +
+      '<p>This will revoke <strong>' + esc(email) + '</strong>\u2019s access to the shared caseload.</p>' +
+      '<div class="confirm-actions">' +
+        '<button class="btn btn-secondary" onclick="this.closest(\'.confirm-overlay\').remove()">Cancel</button>' +
+        '<button class="btn btn-danger" onclick="doRemoveCoTeacher(\'' + esc(email) + '\'); this.closest(\'.confirm-overlay\').remove()">Remove</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+}
+
+function doRemoveCoTeacher(email) {
+  showToast('Removing co-teacher\u2026');
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (result.success) {
+        showToast('Co-teacher removed');
+        showCoTeachers();
+      } else {
+        showToast(result.error || 'Error removing co-teacher');
+      }
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error: ' + (err && err.message ? err.message : String(err)));
+    })
+    .removeCoTeacher(email);
+}
+
+function confirmLeaveTeam() {
+  var overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+  overlay.innerHTML =
+    '<div class="confirm-dialog">' +
+      '<h3>Leave Team?</h3>' +
+      '<p>You will be disconnected from this shared caseload. If you had your own data before joining, it will be restored.</p>' +
+      '<div class="confirm-actions">' +
+        '<button class="btn btn-secondary" onclick="this.closest(\'.confirm-overlay\').remove()">Cancel</button>' +
+        '<button class="btn btn-danger" onclick="doLeaveTeam(); this.closest(\'.confirm-overlay\').remove()">Leave</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+}
+
+function doLeaveTeam() {
+  showToast('Leaving team\u2026');
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (result.success) {
+        showToast('You have left the team');
+        location.reload();
+      }
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error: ' + (err && err.message ? err.message : String(err)));
+    })
+    .leaveCoTeacherTeam();
+}
+
+// ─── Dashboard Refresh (for co-teacher data freshness) ───
+function refreshDashboard() {
+  showDashboardSkeleton();
+  google.script.run
+    .withSuccessHandler(function(data) {
+      try {
+        appState.dashboardData = data || [];
+        renderDashboard(data);
+        showToast('Dashboard refreshed');
+      } catch(e) { showToast('Render error: ' + e.message); }
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error: ' + (err && err.message ? err.message : String(err)));
+    })
+    .refreshDashboardData();
 }
 
 // ─── Skeleton Loading Functions ───
