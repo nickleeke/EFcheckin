@@ -16,6 +16,7 @@ var appState = {
   feedbackLinks: null,
   currentUserEmail: ''
 };
+var _persistTimers = {};
 
 var onboardingState = {
   step: 1,
@@ -901,6 +902,7 @@ function markMissingDone(studentId, classIdx, assignmentIdx) {
   }, 0);
 
   renderMissingView(student);
+  persistAcademicData_(student);
   showToast('Assignment marked as complete');
 }
 
@@ -918,11 +920,33 @@ function removeMissingAssignment(studentId, classIdx, assignmentIdx) {
   }, 0);
 
   renderMissingView(student);
+  persistAcademicData_(student);
   showToast('Assignment removed');
 }
 
+function persistAcademicData_(student) {
+  if (!student.latestCheckInId) {
+    showToast('Change not saved — no check-in data found.');
+    return;
+  }
+  // Debounce: if user marks several assignments rapidly, only the last call persists
+  if (_persistTimers[student.id]) clearTimeout(_persistTimers[student.id]);
+  var checkInId = student.latestCheckInId;
+  var dataSnapshot = JSON.parse(JSON.stringify(student.academicData));
+  _persistTimers[student.id] = setTimeout(function() {
+    delete _persistTimers[student.id];
+    google.script.run
+      .withSuccessHandler(function() {})
+      .withFailureHandler(function(err) {
+        showToast('Could not save change: ' + (err && err.message ? err.message : String(err)));
+      })
+      .updateCheckInAcademicData(checkInId, dataSnapshot);
+  }, 600);
+}
+
 function goBackFromMissing() {
-  showDashboard();
+  renderDashboard(appState.dashboardData);
+  showView('dashboard-view');
 }
 
 // ─── Student Profile ───
