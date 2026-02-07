@@ -252,9 +252,17 @@ function openSidePanel(index) {
   }
   content += '</div>';
 
-  // Goal
+  // Focus Goal (from student profile / onboarding)
+  if (s.focusGoal) {
+    content += '<div class="sp-section">';
+    content += '<div class="sp-section-title">Focus Goal</div>';
+    content += '<div class="sp-goal-text">' + esc(s.focusGoal) + '</div>';
+    content += '</div>';
+  }
+
+  // Current Micro Goal (from latest check-in)
   content += '<div class="sp-section">';
-  content += '<div class="sp-section-title">Current Goal</div>';
+  content += '<div class="sp-section-title">Current Micro Goal</div>';
   if (s.latestMicroGoal) {
     content += '<div class="sp-goal-text">' + esc(s.latestMicroGoal) + '</div>';
   } else {
