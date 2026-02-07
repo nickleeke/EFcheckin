@@ -7,8 +7,8 @@
 </head>
 <body>
 
-  <!-- Navigation -->
-  <nav id="navbar">
+  <!-- Navigation (hidden until auth resolves) -->
+  <nav id="navbar" style="display:none">
     <div class="nav-brand">Richfield Public Schools | EF Check-In</div>
     <div class="nav-actions">
       <button onclick="showDashboard()" class="nav-btn">Dashboard</button>
@@ -18,8 +18,23 @@
 
   <main id="main-content">
 
+    <!-- Auth Loading State (shown while getUserStatus is in flight) -->
+    <div id="auth-loading" class="view active">
+      <div style="display:flex;align-items:center;justify-content:center;min-height:60vh;">
+        <div style="text-align:center;">
+          <div class="skeleton skeleton-text" style="width:200px;height:20px;margin:0 auto 12px;"></div>
+          <div class="skeleton skeleton-text" style="width:140px;height:14px;margin:0 auto;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Onboarding View -->
+    <div id="onboarding-view" class="view">
+      <div id="onboarding-container"></div>
+    </div>
+
     <!-- Dashboard View -->
-    <div id="dashboard-view" class="view active">
+    <div id="dashboard-view" class="view">
       <div class="view-header">
         <h2>Student Dashboard</h2>
       </div>

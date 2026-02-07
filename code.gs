@@ -1,25 +1,16 @@
 /* ============================================================
    EF Weekly Check-In — Google Apps Script Backend
-   Storage: Google Sheets (standalone w/ hardcoded ID)
-   v2 — adds academic snapshot (classes, grades, missing)
+   Storage: Google Sheets (per-user, auto-provisioned)
+   v3 — multi-user with per-user data isolation
+
+   DEPLOYMENT: Must deploy as "Execute as: User accessing the web app"
+   so that Session.getActiveUser() returns the actual user and
+   UserProperties are scoped per-user (FERPA compliance).
    ============================================================ */
 
 // ───── Constants ─────
-const SPREADSHEET_ID = '1VPFDlW87UstmxwQu8PL5t1wS_cLY3A1iS65Xxl2Ol1E';
 const SHEET_STUDENTS = 'Students';
 const SHEET_CHECKINS = 'CheckIns';
-
-const DEFAULT_STUDENTS = [
-  'Antoniah Cureton',
-  'Eric Evans',
-  'Ian Gutierrez Hernandez',
-  'Xander Hanna',
-  'Terrance Jones',
-  'Roman Lussier',
-  'Alex Panayotov',
-  'Leo Paradise',
-  'Lucas Thielen'
-];
 
 const GPA_MAP = {
   'A':4.0, 'A-':3.7,
@@ -29,13 +20,97 @@ const GPA_MAP = {
   'F':0.0
 };
 
-/** Get spreadsheet — works standalone or bound */
+// ───── User Identity ─────
+
+/** Get the authenticated user's email. Requires "Execute as: User accessing the web app". */
+function getCurrentUserEmail_() {
+  var email = Session.getActiveUser().getEmail();
+  if (!email) {
+    throw new Error('Unable to determine user identity. Please ensure you are signed in with your school Google account.');
+  }
+  return email.toLowerCase();
+}
+
+/** Check whether the current user has completed onboarding. */
+function getUserStatus() {
+  var email = getCurrentUserEmail_();
+  var props = PropertiesService.getUserProperties();
+  var ssId = props.getProperty('spreadsheet_id');
+  return {
+    isNewUser: !ssId,
+    email: email
+  };
+}
+
+// ───── Per-User Spreadsheet Resolution ─────
+
+/** Get the current user's spreadsheet — works bound or as web app. */
 function getSS_() {
+  // When running as a bound script (from the spreadsheet menu), use active spreadsheet
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     if (ss) return ss;
   } catch(e) {}
-  return SpreadsheetApp.openById(SPREADSHEET_ID);
+
+  // When running as a web app, look up user's spreadsheet from UserProperties
+  var props = PropertiesService.getUserProperties();
+  var ssId = props.getProperty('spreadsheet_id');
+  if (!ssId) {
+    throw new Error('No spreadsheet configured. Please complete onboarding.');
+  }
+
+  try {
+    return SpreadsheetApp.openById(ssId);
+  } catch(e) {
+    // Spreadsheet was deleted or access revoked; clear stored ID so onboarding re-triggers
+    props.deleteProperty('spreadsheet_id');
+    throw new Error('Your data spreadsheet is no longer accessible. Please reload to set up a new one.');
+  }
+}
+
+// ───── Spreadsheet Provisioning ─────
+
+/** Create a new Google Sheet in the user's Drive and store its ID. */
+function provisionUserSpreadsheet() {
+  var email = getCurrentUserEmail_();
+  var props = PropertiesService.getUserProperties();
+
+  // Guard: if already provisioned, return existing
+  var existingId = props.getProperty('spreadsheet_id');
+  if (existingId) {
+    try {
+      var existing = SpreadsheetApp.openById(existingId);
+      return { success: true, spreadsheetId: existingId, spreadsheetUrl: existing.getUrl() };
+    } catch(e) {
+      // Spreadsheet was deleted or access revoked; fall through to create new one
+    }
+  }
+
+  // Create new spreadsheet in user's Drive
+  var ss = SpreadsheetApp.create('EF Check-In Data');
+
+  // Initialize Students sheet (rename default Sheet1)
+  var studentsSheet = ss.getSheetByName('Sheet1');
+  if (studentsSheet) {
+    studentsSheet.setName(SHEET_STUDENTS);
+  } else {
+    studentsSheet = ss.insertSheet(SHEET_STUDENTS);
+  }
+  ensureHeaders_(studentsSheet, STUDENT_HEADERS);
+
+  // Initialize CheckIns sheet
+  var checkInsSheet = ss.insertSheet(SHEET_CHECKINS);
+  ensureHeaders_(checkInsSheet, CHECKIN_HEADERS);
+
+  // Store the new spreadsheet ID in UserProperties
+  var ssId = ss.getId();
+  props.setProperty('spreadsheet_id', ssId);
+
+  return {
+    success: true,
+    spreadsheetId: ssId,
+    spreadsheetUrl: ss.getUrl()
+  };
 }
 
 // ───── Web App Entry ─────
@@ -107,28 +182,6 @@ function ensureHeaders_(sheet, expectedHeaders) {
     sheet.getRange(1, 1, 1, expectedHeaders.length).setValues([expectedHeaders]);
     sheet.getRange('1:1').setFontWeight('bold');
   }
-}
-
-function seedDefaultStudents_(sheet) {
-  const now = new Date().toISOString();
-  DEFAULT_STUDENTS.forEach(function(fullName) {
-    const parts = fullName.split(' ');
-    const firstName = parts[0];
-    const lastName = parts.slice(1).join(' ');
-    const id = Utilities.getUuid();
-    sheet.appendRow([id, firstName, lastName, '', '', '', '', '', '[]', now, now, '']);
-  });
-}
-
-function forceSeedStudents() {
-  var ss = getSS_();
-  var sheet = ss.getSheetByName(SHEET_STUDENTS);
-  if (!sheet) { initializeSheets(); return; }
-  if (sheet.getLastRow() > 1) {
-    sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).clear();
-  }
-  seedDefaultStudents_(sheet);
-  Logger.log('Seeded ' + DEFAULT_STUDENTS.length + ' students');
 }
 
 // ───── Student CRUD ─────
@@ -413,15 +466,15 @@ function getDashboardData() {
   return summary;
 }
 
-// ───── Script Properties Cache ─────
-// Sheets = source of truth; Script Properties = fast read cache.
+// ───── User Properties Cache (FERPA-compliant: per-user isolated) ─────
+// Sheets = source of truth; User Properties = fast read cache.
 // Pattern: read-through cache, invalidate on write.
 
 var CACHE_PREFIX = 'cache_';
 
 function getCache_(key) {
   try {
-    var raw = PropertiesService.getScriptProperties().getProperty(CACHE_PREFIX + key);
+    var raw = PropertiesService.getUserProperties().getProperty(CACHE_PREFIX + key);
     if (raw) return JSON.parse(raw);
   } catch(e) {}
   return null;
@@ -429,22 +482,22 @@ function getCache_(key) {
 
 function setCache_(key, data) {
   try {
-    PropertiesService.getScriptProperties().setProperty(CACHE_PREFIX + key, JSON.stringify(data));
+    PropertiesService.getUserProperties().setProperty(CACHE_PREFIX + key, JSON.stringify(data));
   } catch(e) { /* exceeds 9KB property limit — skip silently */ }
 }
 
 function invalidateCache_() {
   try {
-    var props = PropertiesService.getScriptProperties();
+    var props = PropertiesService.getUserProperties();
     props.deleteProperty(CACHE_PREFIX + 'students');
     props.deleteProperty(CACHE_PREFIX + 'dashboard');
   } catch(e) {}
 }
 
-// ───── Teacher Feedback Links ─────
+// ───── Teacher Feedback Links (per-user) ─────
 
 function getFeedbackLinks() {
-  var props = PropertiesService.getScriptProperties();
+  var props = PropertiesService.getUserProperties();
   return {
     formUrl: props.getProperty('feedback_form_url') || '',
     sheetUrl: props.getProperty('feedback_sheet_url') || ''
@@ -452,7 +505,7 @@ function getFeedbackLinks() {
 }
 
 function saveFeedbackLinks(links) {
-  var props = PropertiesService.getScriptProperties();
+  var props = PropertiesService.getUserProperties();
   props.setProperty('feedback_form_url', links.formUrl || '');
   props.setProperty('feedback_sheet_url', links.sheetUrl || '');
   return { success: true };
@@ -479,20 +532,23 @@ function initializeSheetsIfNeeded_() {
   }
 }
 
-// ───── Menu ─────
+// ───── Menu (for bound-script usage) ─────
 function onOpen() {
-  SpreadsheetApp.getUi()
-    .createMenu('🧠 EF Check-In')
-    .addItem('Open Check-In App', 'openWebApp')
-    .addItem('Initialize / Reset Sheets', 'initializeSheets')
-    .addItem('Force Seed Students', 'forceSeedStudents')
-    .addItem('Get Web App URL', 'showWebAppUrl')
-    .addToUi();
+  try {
+    SpreadsheetApp.getUi()
+      .createMenu('EF Check-In')
+      .addItem('Open Check-In App', 'openWebApp')
+      .addItem('Initialize / Reset Sheets', 'initializeSheets')
+      .addItem('Get Web App URL', 'showWebAppUrl')
+      .addToUi();
+  } catch(e) {
+    // Not running as a bound script; silently skip
+  }
 }
 
 function openWebApp() {
   const html = HtmlService.createHtmlOutput(
-    '<p style="font-family:sans-serif;">Opening…</p>' +
+    '<p style="font-family:sans-serif;">Opening\u2026</p>' +
     '<script>window.open("' + ScriptApp.getService().getUrl() + '");google.script.host.close();</script>'
   ).setWidth(300).setHeight(80);
   SpreadsheetApp.getUi().showModalDialog(html, 'EF Check-In');
