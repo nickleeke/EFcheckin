@@ -16,6 +16,8 @@ var appState = {
   feedbackLinks: null,
   currentUserEmail: ''
 };
+var _persistTimers = {};
+var _persistInFlight = 0;
 
 var onboardingState = {
   step: 1,
@@ -109,6 +111,12 @@ function showDashboard() {
 }
 
 function loadDashboard() {
+  // If academic-data persists are pending or in-flight, render from
+  // local optimistic state to avoid overwriting unsaved changes.
+  if (Object.keys(_persistTimers).length > 0 || _persistInFlight > 0) {
+    renderDashboard(appState.dashboardData);
+    return;
+  }
   showDashboardSkeleton();
   google.script.run
     .withSuccessHandler(function(data) {
@@ -223,7 +231,7 @@ function renderDashboard(data) {
     }
 
     // Last check-in date
-    html += '<td>' + esc(s.latestWeek || 'Never') + '</td>';
+    html += '<td>' + esc(formatDateDisplay(s.latestWeek)) + '</td>';
 
     // Action buttons
     html += '<td><div class="action-btns">' +
@@ -721,9 +729,8 @@ function renderMissingView(student) {
 
   // Summary card
   if (totalMissing === 0) {
-    html += '<div class="missing-summary-celebrate">' +
-      '<div class="missing-celebrate-text">No Missing Assignments!</div>' +
-      '<span class="missing-celebrate-emoji">\uD83D\uDCAF</span>' +
+    html += '<div class="missing-summary ok">' +
+      '<div class="missing-summary-label" style="font-size:22px;font-weight:600;">No Missing Assignments! &#x1F4AF;</div>' +
     '</div>';
   } else {
     html += '<div class="missing-summary alert">' +
@@ -902,6 +909,7 @@ function markMissingDone(studentId, classIdx, assignmentIdx) {
   }, 0);
 
   renderMissingView(student);
+  persistAcademicData_(student);
   showToast('Assignment marked as complete');
 }
 
@@ -919,11 +927,42 @@ function removeMissingAssignment(studentId, classIdx, assignmentIdx) {
   }, 0);
 
   renderMissingView(student);
+  persistAcademicData_(student);
   showToast('Assignment removed');
 }
 
+function persistAcademicData_(student) {
+  if (!student.latestCheckInId) {
+    showToast('Change not saved — no check-in data found.');
+    return;
+  }
+  // Debounce: if user marks several assignments rapidly, only the last call persists
+  if (_persistTimers[student.id]) clearTimeout(_persistTimers[student.id]);
+  var checkInId = student.latestCheckInId;
+  var dataSnapshot = JSON.parse(JSON.stringify(student.academicData));
+  _persistTimers[student.id] = setTimeout(function() {
+    delete _persistTimers[student.id];
+    _persistInFlight++;
+    google.script.run
+      .withSuccessHandler(function() {
+        _persistInFlight--;
+        // Once all persists complete, sync dashboard from backend if visible
+        if (_persistInFlight === 0 && Object.keys(_persistTimers).length === 0 &&
+            document.getElementById('dashboard-view').classList.contains('active')) {
+          loadDashboard();
+        }
+      })
+      .withFailureHandler(function(err) {
+        _persistInFlight--;
+        showToast('Could not save change: ' + (err && err.message ? err.message : String(err)));
+      })
+      .updateCheckInAcademicData(checkInId, dataSnapshot);
+  }, 600);
+}
+
 function goBackFromMissing() {
-  showDashboard();
+  renderDashboard(appState.dashboardData);
+  showView('dashboard-view');
 }
 
 // ─── Student Profile ───
@@ -1253,7 +1292,7 @@ function renderCheckInHistory(checkIns, student) {
 
       html += '<div class="history-card" onclick="editCheckIn(\'' + ci.id + '\', \'' + student.id + '\')">' +
         '<div class="history-card-header">' +
-          '<span class="history-card-date">' + esc(ci.weekOf || 'No date') + '</span>' +
+          '<span class="history-card-date">' + esc(formatDateDisplay(ci.weekOf) || 'No date') + '</span>' +
           '<span class="chip ' + avgClass + '">Avg: ' + avg + '</span>' +
         '</div>' +
         '<div class="history-ratings">' +
@@ -1693,6 +1732,11 @@ function doLeaveTeam() {
 
 // ─── Dashboard Refresh (for co-teacher data freshness) ───
 function refreshDashboard() {
+  if (Object.keys(_persistTimers).length > 0 || _persistInFlight > 0) {
+    renderDashboard(appState.dashboardData);
+    showToast('Saving changes\u2026 refresh will complete shortly.');
+    return;
+  }
   showDashboardSkeleton();
   google.script.run
     .withSuccessHandler(function(data) {
@@ -1864,6 +1908,19 @@ function esc(str) {
   var div = document.createElement('div');
   div.textContent = String(str);
   return div.innerHTML;
+}
+
+/** Format a YYYY-MM-DD date string as "Mon. DD, YYYY" (e.g. "Feb. 24, 2026") */
+function formatDateDisplay(dateStr) {
+  if (!dateStr) return 'Never';
+  var parts = dateStr.split('-');
+  if (parts.length !== 3) return dateStr;
+  var months = ['Jan.', 'Feb.', 'Mar.', 'Apr.', 'May', 'Jun.',
+                'Jul.', 'Aug.', 'Sep.', 'Oct.', 'Nov.', 'Dec.'];
+  var m = parseInt(parts[1], 10);
+  var d = parseInt(parts[2], 10);
+  if (isNaN(m) || isNaN(d)) return dateStr;
+  return months[m - 1] + ' ' + d + ', ' + parts[0];
 }
 
 // ─── Onboarding Wizard ───
