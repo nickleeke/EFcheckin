@@ -17,6 +17,7 @@ var appState = {
   currentUserEmail: ''
 };
 var _persistTimers = {};
+var _persistInFlight = 0;
 
 var onboardingState = {
   step: 1,
@@ -110,6 +111,12 @@ function showDashboard() {
 }
 
 function loadDashboard() {
+  // If academic-data persists are pending or in-flight, render from
+  // local optimistic state to avoid overwriting unsaved changes.
+  if (Object.keys(_persistTimers).length > 0 || _persistInFlight > 0) {
+    renderDashboard(appState.dashboardData);
+    return;
+  }
   showDashboardSkeleton();
   google.script.run
     .withSuccessHandler(function(data) {
@@ -935,9 +942,18 @@ function persistAcademicData_(student) {
   var dataSnapshot = JSON.parse(JSON.stringify(student.academicData));
   _persistTimers[student.id] = setTimeout(function() {
     delete _persistTimers[student.id];
+    _persistInFlight++;
     google.script.run
-      .withSuccessHandler(function() {})
+      .withSuccessHandler(function() {
+        _persistInFlight--;
+        // Once all persists complete, sync dashboard from backend if visible
+        if (_persistInFlight === 0 && Object.keys(_persistTimers).length === 0 &&
+            document.getElementById('dashboard-view').classList.contains('active')) {
+          loadDashboard();
+        }
+      })
       .withFailureHandler(function(err) {
+        _persistInFlight--;
         showToast('Could not save change: ' + (err && err.message ? err.message : String(err)));
       })
       .updateCheckInAcademicData(checkInId, dataSnapshot);
@@ -1716,6 +1732,11 @@ function doLeaveTeam() {
 
 // ─── Dashboard Refresh (for co-teacher data freshness) ───
 function refreshDashboard() {
+  if (Object.keys(_persistTimers).length > 0 || _persistInFlight > 0) {
+    renderDashboard(appState.dashboardData);
+    showToast('Saving changes\u2026 refresh will complete shortly.');
+    return;
+  }
   showDashboardSkeleton();
   google.script.run
     .withSuccessHandler(function(data) {
