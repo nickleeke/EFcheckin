@@ -1276,7 +1276,7 @@ function renderCheckInHistory(checkIns, student) {
 
       html += '<div class="history-card" onclick="editCheckIn(\'' + ci.id + '\', \'' + student.id + '\')">' +
         '<div class="history-card-header">' +
-          '<span class="history-card-date">' + esc(ci.weekOf || 'No date') + '</span>' +
+          '<span class="history-card-date">' + esc(formatDateDisplay(ci.weekOf) || 'No date') + '</span>' +
           '<span class="chip ' + avgClass + '">Avg: ' + avg + '</span>' +
         '</div>' +
         '<div class="history-ratings">' +
