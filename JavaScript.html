@@ -33,35 +33,55 @@ var PRELOADED_CLASSES = [
 ];
 
 // ─── Initialization ───
+var _authLoadingTimer = null;
+
+function showAuthError(message) {
+  if (_authLoadingTimer) { clearTimeout(_authLoadingTimer); _authLoadingTimer = null; }
+  document.getElementById('auth-loading').innerHTML =
+    '<div class="empty-state">' +
+      '<h3>Unable to Load</h3>' +
+      '<p>' + esc(message) + '</p>' +
+      '<button class="btn btn-primary" style="margin-top:16px;" onclick="location.reload()">Reload</button>' +
+    '</div>';
+}
+
 document.addEventListener('DOMContentLoaded', function() {
+  // Safety timeout: if auth hasn't resolved after 15s, show a retry prompt
+  _authLoadingTimer = setTimeout(function() {
+    var authEl = document.getElementById('auth-loading');
+    if (authEl && authEl.classList.contains('active')) {
+      showAuthError('The app is taking too long to load. Please check your connection and try again.');
+    }
+  }, 15000);
+
   // Check user auth status before showing anything
   google.script.run
     .withSuccessHandler(function(status) {
-      appState.currentUserEmail = status.email || '';
+      if (_authLoadingTimer) { clearTimeout(_authLoadingTimer); _authLoadingTimer = null; }
+      try {
+        appState.currentUserEmail = status.email || '';
 
-      // Check for pending co-teacher invite
-      if (status.pendingInvite) {
-        if (status.isNewUser) {
-          // New user with invite — show invite acceptance directly
-          showInviteModal(status.pendingInvite, true);
+        // Check for pending co-teacher invite
+        if (status.pendingInvite) {
+          if (status.isNewUser) {
+            // New user with invite — show invite acceptance directly
+            showInviteModal(status.pendingInvite, true);
+          } else {
+            // Existing user with invite — enter app, then show invite modal
+            enterApp();
+            showInviteModal(status.pendingInvite, false);
+          }
+        } else if (status.isNewUser) {
+          showOnboarding(status);
         } else {
-          // Existing user with invite — enter app, then show invite modal
           enterApp();
-          showInviteModal(status.pendingInvite, false);
         }
-      } else if (status.isNewUser) {
-        showOnboarding(status);
-      } else {
-        enterApp();
+      } catch(e) {
+        showAuthError(e.message || 'Unexpected error during startup.');
       }
     })
     .withFailureHandler(function(err) {
-      document.getElementById('auth-loading').innerHTML =
-        '<div class="empty-state">' +
-          '<h3>Unable to Load</h3>' +
-          '<p>' + esc(err && err.message ? err.message : String(err)) + '</p>' +
-          '<button class="btn btn-primary" style="margin-top:16px;" onclick="location.reload()">Reload</button>' +
-        '</div>';
+      showAuthError(err && err.message ? err.message : String(err));
     })
     .getUserStatus();
 });
@@ -77,7 +97,14 @@ function enterApp() {
       try {
         appState.feedbackLinks = (result && result.feedbackLinks) || {};
         loadDashboard();
-      } catch(e) { showToast('Error: ' + e.message); }
+      } catch(e) {
+        document.getElementById('dashboard-table-container').innerHTML =
+          '<div class="empty-state">' +
+            '<h3>Unable to Load</h3>' +
+            '<p>' + esc(e.message || String(e)) + '</p>' +
+            '<button class="btn btn-primary" style="margin-top:16px;" onclick="location.reload()">Reload</button>' +
+          '</div>';
+      }
     })
     .withFailureHandler(function(err) {
       document.getElementById('dashboard-table-container').innerHTML =
@@ -129,7 +156,12 @@ function loadDashboard() {
         appState.dashboardData = data || [];
         renderDashboard(data);
       } catch(e) {
-        showToast('Render error: ' + e.message);
+        document.getElementById('dashboard-table-container').innerHTML =
+          '<div class="empty-state">' +
+            '<h3>Unable to Load</h3>' +
+            '<p>' + esc(e.message || String(e)) + '</p>' +
+            '<button class="btn btn-primary" style="margin-top:16px;" onclick="location.reload()">Reload</button>' +
+          '</div>';
       }
     })
     .withFailureHandler(function(err) {
