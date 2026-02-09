@@ -677,7 +677,7 @@ function addTeamMember(email, role) {
     var scriptProps = PropertiesService.getScriptProperties();
     scriptProps.setProperty('coteacher_invite_' + email, JSON.stringify({
       spreadsheetId: ss.getId(),
-      ownerEmail: currentEmail,
+      inviterEmail: currentEmail,
       invitedAt: new Date().toISOString()
     }));
   } catch(e) {}
@@ -745,7 +745,7 @@ function acceptCoTeacherInvite() {
   try {
     var ss = SpreadsheetApp.openById(invite.spreadsheetId);
   } catch(e) {
-    return { success: false, error: 'Cannot access the shared spreadsheet. The owner may have revoked access.' };
+    return { success: false, error: 'Cannot access the shared spreadsheet. The Caseload Manager may have revoked access.' };
   }
 
   var props = PropertiesService.getUserProperties();

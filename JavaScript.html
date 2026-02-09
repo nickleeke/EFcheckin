@@ -1550,7 +1550,7 @@ function showInviteModal(invite, isNewUser) {
   overlay.innerHTML =
     '<div class="confirm-dialog" style="max-width:440px;">' +
       '<h3>Team Invitation</h3>' +
-      '<p><strong>' + esc(invite.ownerEmail) + '</strong> has invited you to collaborate on their caseload. You will share the same students and check-in data.</p>' +
+      '<p><strong>' + esc(invite.inviterEmail) + '</strong> has invited you to collaborate on their caseload. You will share the same students and check-in data.</p>' +
       (isNewUser
         ? '<p class="hint">Accepting will set up your account with their shared caseload. You can also decline and create your own.</p>'
         : '<p class="hint">Accepting will switch you to their shared caseload. Your own data will be preserved and can be restored if you leave the team later.</p>') +
@@ -1645,7 +1645,7 @@ function renderCoTeacherView(teamInfo) {
   var html = '';
 
   // Role banner
-  html += '<div class="ct-role-banner ' + (isCaseloadManager ? 'ct-role-owner' : 'ct-role-coteacher') + '">' +
+  html += '<div class="ct-role-banner ' + (isCaseloadManager ? 'ct-role-caseload-manager' : 'ct-role-coteacher') + '">' +
     '<span class="ct-role-label">Your role:</span> ' +
     '<span class="ct-role-value">' + getRoleDisplayName(teamInfo.currentUserRole) + '</span>' +
   '</div>';
