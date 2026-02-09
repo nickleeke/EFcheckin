@@ -80,7 +80,12 @@ function enterApp() {
       } catch(e) { showToast('Error: ' + e.message); }
     })
     .withFailureHandler(function(err) {
-      showToast('Error initializing: ' + (err && err.message ? err.message : String(err)));
+      document.getElementById('dashboard-table-container').innerHTML =
+        '<div class="empty-state">' +
+          '<h3>Unable to Load</h3>' +
+          '<p>' + esc(err && err.message ? err.message : String(err)) + '</p>' +
+          '<button class="btn btn-primary" style="margin-top:16px;" onclick="location.reload()">Reload</button>' +
+        '</div>';
     })
     .initializeSheets();
 }
@@ -128,7 +133,12 @@ function loadDashboard() {
       }
     })
     .withFailureHandler(function(err) {
-      showToast('Error loading dashboard: ' + (err && err.message ? err.message : String(err)));
+      document.getElementById('dashboard-table-container').innerHTML =
+        '<div class="empty-state">' +
+          '<h3>Unable to Load</h3>' +
+          '<p>' + esc(err && err.message ? err.message : String(err)) + '</p>' +
+          '<button class="btn btn-primary" style="margin-top:16px;" onclick="location.reload()">Reload</button>' +
+        '</div>';
     })
     .getDashboardData();
 }
