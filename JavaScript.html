@@ -1549,7 +1549,7 @@ function showInviteModal(invite, isNewUser) {
   overlay.id = 'invite-modal-overlay';
   overlay.innerHTML =
     '<div class="confirm-dialog" style="max-width:440px;">' +
-      '<h3>Co-Teacher Invitation</h3>' +
+      '<h3>Team Invitation</h3>' +
       '<p><strong>' + esc(invite.ownerEmail) + '</strong> has invited you to collaborate on their caseload. You will share the same students and check-in data.</p>' +
       (isNewUser
         ? '<p class="hint">Accepting will set up your account with their shared caseload. You can also decline and create your own.</p>'
@@ -1629,15 +1629,25 @@ function showCoTeachers() {
     .getTeamInfo();
 }
 
+function getRoleDisplayName(role) {
+  switch(String(role).toLowerCase()) {
+    case 'caseload-manager': return 'Caseload Manager';
+    case 'service-provider': return 'Service Provider';
+    case 'para': return 'Para';
+    case 'co-teacher': return 'Co-Teacher';
+    default: return role;
+  }
+}
+
 function renderCoTeacherView(teamInfo) {
   var container = document.getElementById('coteacher-content-container');
-  var isOwner = teamInfo.currentUserRole === 'owner';
+  var isCaseloadManager = teamInfo.currentUserRole === 'caseload-manager';
   var html = '';
 
   // Role banner
-  html += '<div class="ct-role-banner ' + (isOwner ? 'ct-role-owner' : 'ct-role-coteacher') + '">' +
+  html += '<div class="ct-role-banner ' + (isCaseloadManager ? 'ct-role-owner' : 'ct-role-coteacher') + '">' +
     '<span class="ct-role-label">Your role:</span> ' +
-    '<span class="ct-role-value">' + (isOwner ? 'Owner' : 'Co-Teacher') + '</span>' +
+    '<span class="ct-role-value">' + getRoleDisplayName(teamInfo.currentUserRole) + '</span>' +
   '</div>';
 
   // Team members
@@ -1646,7 +1656,7 @@ function renderCoTeacherView(teamInfo) {
 
   teamInfo.members.forEach(function(m) {
     var emailStr = String(m.email || '');
-    var roleStr = m.role === 'owner' ? 'Owner' : 'Co-Teacher';
+    var roleStr = getRoleDisplayName(m.role);
     var isSelf = emailStr.toLowerCase() === (appState.currentUserEmail || '').toLowerCase();
 
     html += '<div class="ct-member-row">' +
@@ -1655,8 +1665,8 @@ function renderCoTeacherView(teamInfo) {
         '<span class="ct-member-role">' + roleStr + (isSelf ? ' (you)' : '') + '</span>' +
       '</div>';
 
-    if (isOwner && m.role !== 'owner') {
-      html += '<button class="btn btn-sm btn-danger" onclick="confirmRemoveCoTeacher(\'' + esc(emailStr) + '\')">Remove</button>';
+    if (isCaseloadManager && m.role !== 'caseload-manager') {
+      html += '<button class="btn btn-sm btn-danger" onclick="confirmRemoveTeamMember(\'' + esc(emailStr) + '\')">Remove</button>';
     }
 
     html += '</div>';
@@ -1664,20 +1674,25 @@ function renderCoTeacherView(teamInfo) {
 
   html += '</div>';
 
-  // Add co-teacher form (owner only)
-  if (isOwner) {
+  // Add team member form (caseload manager only)
+  if (isCaseloadManager) {
     html += '<div class="form-card">' +
-      '<div class="form-section-title">Add Co-Teacher</div>' +
-      '<p class="hint">Enter the email address of the teacher you want to invite. They will receive the invite the next time they open the app.</p>' +
+      '<div class="form-section-title">Add Team Member</div>' +
+      '<p class="hint">Enter the email address and role of the person you want to invite. They will receive the invite the next time they open the app. All roles have full access to caseload data.</p>' +
       '<div class="ct-add-form">' +
         '<input type="email" id="ct-add-email" placeholder="colleague@school.edu" class="ct-email-input">' +
-        '<button class="btn btn-primary" onclick="addCoTeacherFromForm()">Send Invite</button>' +
+        '<select id="ct-add-role" class="ct-role-select">' +
+          '<option value="service-provider">Service Provider</option>' +
+          '<option value="para">Para</option>' +
+          '<option value="co-teacher">Co-Teacher</option>' +
+        '</select>' +
+        '<button class="btn btn-primary" onclick="addTeamMemberFromForm()">Send Invite</button>' +
       '</div>' +
     '</div>';
   }
 
-  // Leave team (co-teacher only)
-  if (!isOwner) {
+  // Leave team (non-caseload-manager only)
+  if (!isCaseloadManager) {
     html += '<div class="form-card">' +
       '<div class="form-section-title">Leave Team</div>' +
       '<p class="hint">Leaving will disconnect you from this shared caseload. If you previously had your own data, it will be restored.</p>' +
@@ -1688,10 +1703,13 @@ function renderCoTeacherView(teamInfo) {
   container.innerHTML = html;
 }
 
-function addCoTeacherFromForm() {
+function addTeamMemberFromForm() {
   var input = document.getElementById('ct-add-email');
+  var roleSelect = document.getElementById('ct-add-role');
   var email = (input.value || '').trim();
+  var role = roleSelect.value;
   if (!email) { showToast('Please enter an email address'); return; }
+  if (!role) { showToast('Please select a role'); return; }
 
   showToast('Sending invite\u2026');
 
@@ -1707,39 +1725,39 @@ function addCoTeacherFromForm() {
     .withFailureHandler(function(err) {
       showToast('Error: ' + (err && err.message ? err.message : String(err)));
     })
-    .addCoTeacher(email);
+    .addTeamMember(email, role);
 }
 
-function confirmRemoveCoTeacher(email) {
+function confirmRemoveTeamMember(email) {
   var overlay = document.createElement('div');
   overlay.className = 'confirm-overlay';
   overlay.innerHTML =
     '<div class="confirm-dialog">' +
-      '<h3>Remove Co-Teacher?</h3>' +
+      '<h3>Remove Team Member?</h3>' +
       '<p>This will revoke <strong>' + esc(email) + '</strong>\u2019s access to the shared caseload.</p>' +
       '<div class="confirm-actions">' +
         '<button class="btn btn-secondary" onclick="this.closest(\'.confirm-overlay\').remove()">Cancel</button>' +
-        '<button class="btn btn-danger" onclick="doRemoveCoTeacher(\'' + esc(email) + '\'); this.closest(\'.confirm-overlay\').remove()">Remove</button>' +
+        '<button class="btn btn-danger" onclick="doRemoveTeamMember(\'' + esc(email) + '\'); this.closest(\'.confirm-overlay\').remove()">Remove</button>' +
       '</div>' +
     '</div>';
   document.body.appendChild(overlay);
 }
 
-function doRemoveCoTeacher(email) {
-  showToast('Removing co-teacher\u2026');
+function doRemoveTeamMember(email) {
+  showToast('Removing team member\u2026');
   google.script.run
     .withSuccessHandler(function(result) {
       if (result.success) {
-        showToast('Co-teacher removed');
+        showToast('Team member removed');
         showCoTeachers();
       } else {
-        showToast(result.error || 'Error removing co-teacher');
+        showToast(result.error || 'Error removing team member');
       }
     })
     .withFailureHandler(function(err) {
       showToast('Error: ' + (err && err.message ? err.message : String(err)));
     })
-    .removeCoTeacher(email);
+    .removeTeamMember(email);
 }
 
 function confirmLeaveTeam() {

@@ -1636,12 +1636,36 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   border-color: var(--md-primary);
   box-shadow: 0 0 0 1px var(--md-primary);
 }
+.ct-role-select {
+  padding: 10px 14px;
+  font-size: 14px;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-sm);
+  background: var(--md-surface);
+  color: var(--md-on-surface);
+  font-family: 'Roboto', sans-serif;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23534343' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 32px;
+  cursor: pointer;
+  min-width: 160px;
+}
+.ct-role-select:focus {
+  outline: none;
+  border-color: var(--md-primary);
+  box-shadow: 0 0 0 1px var(--md-primary);
+}
 
 @media (max-width: 600px) {
   .ct-add-form {
     flex-direction: column;
   }
-  .ct-add-form .btn {
+  .ct-add-form .btn,
+  .ct-add-form .ct-role-select {
     width: 100%;
   }
 }

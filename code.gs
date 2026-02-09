@@ -130,10 +130,10 @@ function provisionUserSpreadsheet() {
   var checkInsSheet = ss.insertSheet(SHEET_CHECKINS);
   ensureHeaders_(checkInsSheet, CHECKIN_HEADERS);
 
-  // Initialize CoTeachers sheet with owner entry
+  // Initialize CoTeachers sheet with caseload manager entry
   var ctSheet = ss.insertSheet(SHEET_COTEACHERS);
   ensureHeaders_(ctSheet, COTEACHER_HEADERS);
-  ctSheet.appendRow([email, 'owner', new Date().toISOString()]);
+  ctSheet.appendRow([email, 'caseload-manager', new Date().toISOString()]);
 
   // Store the new spreadsheet ID in UserProperties
   var ssId = ss.getId();
@@ -195,9 +195,9 @@ function initializeSheets() {
   if (!ctSheet) {
     ctSheet = ss.insertSheet(SHEET_COTEACHERS);
     ensureHeaders_(ctSheet, COTEACHER_HEADERS);
-    // Add current user as owner if sheet is brand-new
+    // Add current user as caseload manager if sheet is brand-new
     var email = getCurrentUserEmail_();
-    ctSheet.appendRow([email, 'owner', new Date().toISOString()]);
+    ctSheet.appendRow([email, 'caseload-manager', new Date().toISOString()]);
   } else {
     ensureHeaders_(ctSheet, COTEACHER_HEADERS);
   }
@@ -592,13 +592,13 @@ function getTeamInfo() {
   var ctSheet = ss.getSheetByName(SHEET_COTEACHERS);
 
   if (!ctSheet || ctSheet.getLastRow() <= 1) {
-    return { members: [{ email: email, role: 'owner', addedAt: '' }], currentUserRole: 'owner' };
+    return { members: [{ email: email, role: 'caseload-manager', addedAt: '' }], currentUserRole: 'caseload-manager' };
   }
 
   var data = ctSheet.getDataRange().getValues();
   var headers = data[0];
   var members = [];
-  var currentUserRole = 'owner';
+  var currentUserRole = 'caseload-manager';
 
   for (var i = 1; i < data.length; i++) {
     var member = {};
@@ -611,23 +611,31 @@ function getTeamInfo() {
 
   var found = members.some(function(m) { return String(m.email).toLowerCase() === email; });
   if (!found) {
-    members.unshift({ email: email, role: 'owner', addedAt: '' });
-    currentUserRole = 'owner';
+    members.unshift({ email: email, role: 'caseload-manager', addedAt: '' });
+    currentUserRole = 'caseload-manager';
   }
 
   return { members: members, currentUserRole: currentUserRole };
 }
 
-/** Invite a co-teacher by email. Shares the spreadsheet and stores an invite. */
-function addCoTeacher(email) {
+/** Valid roles that a caseload manager can assign to team members. */
+var ASSIGNABLE_ROLES = ['service-provider', 'para', 'co-teacher'];
+
+/** Invite a team member by email with a specified role. Only caseload managers can add members. */
+function addTeamMember(email, role) {
   email = String(email || '').trim().toLowerCase();
   if (!email || email.indexOf('@') === -1) {
     return { success: false, error: 'Please enter a valid email address.' };
   }
 
+  role = String(role || '').trim().toLowerCase();
+  if (ASSIGNABLE_ROLES.indexOf(role) === -1) {
+    return { success: false, error: 'Invalid role. Must be one of: Service Provider, Para, or Co-Teacher.' };
+  }
+
   var currentEmail = getCurrentUserEmail_();
   if (email === currentEmail) {
-    return { success: false, error: 'You cannot add yourself as a co-teacher.' };
+    return { success: false, error: 'You cannot add yourself as a team member.' };
   }
 
   var ss = getSS_();
@@ -637,7 +645,13 @@ function addCoTeacher(email) {
   if (!ctSheet) {
     ctSheet = ss.insertSheet(SHEET_COTEACHERS);
     ensureHeaders_(ctSheet, COTEACHER_HEADERS);
-    ctSheet.appendRow([currentEmail, 'owner', new Date().toISOString()]);
+    ctSheet.appendRow([currentEmail, 'caseload-manager', new Date().toISOString()]);
+  }
+
+  // Enforce: only caseload managers can add team members
+  var callerRole = getCallerRole_(ctSheet, currentEmail);
+  if (callerRole !== 'caseload-manager') {
+    return { success: false, error: 'Only Caseload Managers can add team members.' };
   }
 
   // Check for duplicates
@@ -648,17 +662,17 @@ function addCoTeacher(email) {
     }
   }
 
-  // Add to CoTeachers sheet
-  ctSheet.appendRow([email, 'co-teacher', new Date().toISOString()]);
+  // Add to CoTeachers sheet with the specified role
+  ctSheet.appendRow([email, role, new Date().toISOString()]);
 
-  // Share the spreadsheet with the co-teacher
+  // Share the spreadsheet with the new team member
   try {
     ss.addEditor(email);
   } catch(e) {
     return { success: false, error: 'Could not share the spreadsheet: ' + e.message };
   }
 
-  // Store invite in ScriptProperties so co-teacher sees it on next load
+  // Store invite in ScriptProperties so the member sees it on next load
   try {
     var scriptProps = PropertiesService.getScriptProperties();
     scriptProps.setProperty('coteacher_invite_' + email, JSON.stringify({
@@ -671,16 +685,35 @@ function addCoTeacher(email) {
   return { success: true };
 }
 
-/** Remove a co-teacher. Revokes spreadsheet access and removes the invite. */
-function removeCoTeacher(email) {
+/** Look up a user's role from the CoTeachers sheet. */
+function getCallerRole_(ctSheet, email) {
+  if (!ctSheet || ctSheet.getLastRow() <= 1) return 'caseload-manager';
+  var data = ctSheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][0]).toLowerCase() === email) {
+      return String(data[i][1]).toLowerCase();
+    }
+  }
+  return 'caseload-manager'; // fallback for spreadsheet creator
+}
+
+/** Remove a team member. Only caseload managers can do this. Revokes spreadsheet access. */
+function removeTeamMember(email) {
   email = String(email || '').trim().toLowerCase();
+  var currentEmail = getCurrentUserEmail_();
   var ss = getSS_();
   var ctSheet = ss.getSheetByName(SHEET_COTEACHERS);
-  if (!ctSheet) return { success: false, error: 'No co-teachers configured.' };
+  if (!ctSheet) return { success: false, error: 'No team members configured.' };
+
+  // Enforce: only caseload managers can remove team members
+  var callerRole = getCallerRole_(ctSheet, currentEmail);
+  if (callerRole !== 'caseload-manager') {
+    return { success: false, error: 'Only Caseload Managers can remove team members.' };
+  }
 
   var data = ctSheet.getDataRange().getValues();
   for (var i = data.length - 1; i >= 1; i--) {
-    if (String(data[i][0]).toLowerCase() === email && data[i][1] !== 'owner') {
+    if (String(data[i][0]).toLowerCase() === email && data[i][1] !== 'caseload-manager') {
       ctSheet.deleteRow(i + 1);
       break;
     }
