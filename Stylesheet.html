@@ -230,6 +230,15 @@ nav {
   font-weight: 400;
   line-height: 28px;
   letter-spacing: 0px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.nav-logo {
+  height: 40px;
+  width: auto;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 .nav-actions { display: flex; gap: 8px; }
 
@@ -1366,7 +1375,8 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
     flex-wrap: wrap;
     gap: 8px;
   }
-  .nav-brand { font-size: 18px; }
+  .nav-brand { font-size: 18px; gap: 8px; }
+  .nav-logo { height: 32px; }
   main { padding: 16px; }
   .form-row { flex-direction: column; gap: 0; }
   .dashboard-table { font-size: 13px; }
