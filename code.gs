@@ -202,10 +202,6 @@ function initializeSheets() {
     ensureHeaders_(ctSheet, COTEACHER_HEADERS);
   }
 
-  if (studentsSheet.getLastRow() <= 1) {
-    seedDefaultStudents_(studentsSheet);
-  }
-
   return { success: true, feedbackLinks: getFeedbackLinks() };
 }
 
