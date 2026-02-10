@@ -18,6 +18,9 @@ var appState = {
 };
 var _persistTimers = {};
 var _persistInFlight = 0;
+var _ciAutosaveTimer = null;
+var _ciAutosaveInFlight = false;
+var _ciAutosaveDirty = false;
 
 var onboardingState = {
   step: 1,
@@ -610,21 +613,26 @@ function renderCheckInForm(student, checkIns, existingCheckIn) {
       '<textarea id="ci-teacherNotes">' + esc(ci.teacherNotes || '') + '</textarea></div>' +
   '</div>';
 
-  // Buttons
-  html += '<div style="display:flex;gap:8px;justify-content:flex-end;">' +
-    '<button class="btn btn-secondary" onclick="goBackFromCheckIn()">Cancel</button>' +
-    '<button class="btn btn-primary" onclick="saveCheckIn()">Save Check-In</button>' +
+  // Buttons + autosave indicator
+  html += '<div class="checkin-form-footer">' +
+    '<div id="ci-autosave-status" class="autosave-status"></div>' +
+    '<div style="display:flex;gap:8px;">' +
+      '<button class="btn btn-secondary" onclick="goBackFromCheckIn()">Back</button>' +
+      '<button class="btn btn-primary" onclick="saveCheckIn()">Save Check-In</button>' +
+    '</div>' +
   '</div>';
 
   html += '</div>'; // form-card
 
   container.innerHTML = html;
+  setupCheckInAutosave();
 }
 
 function selectRating(btn) {
   var group = btn.parentElement;
   group.querySelectorAll('.rating-btn').forEach(function(b) { b.classList.remove('selected'); });
   btn.classList.add('selected');
+  scheduleCheckInAutosave();
 }
 
 function getSelectedRating(field) {
@@ -662,6 +670,7 @@ function addCheckInMissing(clsIdx) {
   div.innerHTML = renderCheckInMissingItem(clsIdx, '', '');
   list.appendChild(div.firstChild);
   updateCheckInMissingCount(clsIdx);
+  scheduleCheckInAutosave();
   // Focus the new name input
   var items = list.querySelectorAll('.ci-missing-item');
   var last = items[items.length - 1];
@@ -671,6 +680,7 @@ function addCheckInMissing(clsIdx) {
 function removeCheckInMissing(btn, clsIdx) {
   btn.parentElement.remove();
   updateCheckInMissingCount(clsIdx);
+  scheduleCheckInAutosave();
 }
 
 function updateCheckInMissingCount(clsIdx) {
@@ -711,10 +721,12 @@ function getAcademicData() {
   return result;
 }
 
-function saveCheckIn() {
-  var data = {
+function collectCheckInData() {
+  var weekOfEl = document.getElementById('ci-weekOf');
+  if (!weekOfEl) return null;
+  return {
     studentId: appState.currentStudentId,
-    weekOf: document.getElementById('ci-weekOf').value,
+    weekOf: weekOfEl.value,
     planningRating: getSelectedRating('planningRating'),
     followThroughRating: getSelectedRating('followThroughRating'),
     regulationRating: getSelectedRating('regulationRating'),
@@ -727,10 +739,24 @@ function saveCheckIn() {
     teacherNotes: document.getElementById('ci-teacherNotes').value,
     academicData: getAcademicData()
   };
+}
 
-  if (appState.editingCheckIn) {
+function saveCheckIn() {
+  // Cancel any pending autosave
+  if (_ciAutosaveTimer) {
+    clearTimeout(_ciAutosaveTimer);
+    _ciAutosaveTimer = null;
+  }
+
+  var data = collectCheckInData();
+  if (!data) return;
+
+  if (appState.editingCheckIn && appState.editingCheckIn.id) {
     data.id = appState.editingCheckIn.id;
   }
+
+  // Reset autosave state
+  _ciAutosaveDirty = false;
 
   // Optimistic UI: navigate immediately
   showView('dashboard-view');
@@ -751,7 +777,118 @@ function saveCheckIn() {
 }
 
 function goBackFromCheckIn() {
+  // Cancel any pending autosave timer
+  if (_ciAutosaveTimer) {
+    clearTimeout(_ciAutosaveTimer);
+    _ciAutosaveTimer = null;
+  }
+  // If there are unsaved changes, do a final save before leaving
+  if (_ciAutosaveDirty && !_ciAutosaveInFlight && appState.editingCheckIn && appState.editingCheckIn.id) {
+    var data = collectCheckInData();
+    if (data) {
+      data.id = appState.editingCheckIn.id;
+      _ciAutosaveDirty = false;
+      google.script.run
+        .withSuccessHandler(function() { loadDashboard(); })
+        .withFailureHandler(function() {})
+        .saveCheckIn(data);
+    }
+  }
   showDashboard();
+}
+
+// ─── Check-In Autosave ───
+
+function setupCheckInAutosave() {
+  var container = document.getElementById('checkin-form-container');
+  if (!container) return;
+
+  // Listen for input/change events on all form fields
+  container.addEventListener('input', function() { scheduleCheckInAutosave(); });
+  container.addEventListener('change', function() { scheduleCheckInAutosave(); });
+
+  // Reset autosave state
+  _ciAutosaveDirty = false;
+  _ciAutosaveInFlight = false;
+  if (_ciAutosaveTimer) { clearTimeout(_ciAutosaveTimer); _ciAutosaveTimer = null; }
+  updateAutosaveIndicator('idle');
+}
+
+function scheduleCheckInAutosave() {
+  _ciAutosaveDirty = true;
+  updateAutosaveIndicator('unsaved');
+  if (_ciAutosaveTimer) clearTimeout(_ciAutosaveTimer);
+  _ciAutosaveTimer = setTimeout(function() {
+    _ciAutosaveTimer = null;
+    performCheckInAutosave();
+  }, 2000);
+}
+
+function performCheckInAutosave() {
+  if (_ciAutosaveInFlight) {
+    // Already saving — re-schedule to pick up latest changes
+    scheduleCheckInAutosave();
+    return;
+  }
+
+  var data = collectCheckInData();
+  if (!data) return;
+
+  if (appState.editingCheckIn && appState.editingCheckIn.id) {
+    data.id = appState.editingCheckIn.id;
+  }
+
+  _ciAutosaveInFlight = true;
+  _ciAutosaveDirty = false;
+  updateAutosaveIndicator('saving');
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      _ciAutosaveInFlight = false;
+      if (result && result.success) {
+        // Store the ID so future saves update the same record
+        if (!appState.editingCheckIn) {
+          appState.editingCheckIn = {};
+        }
+        appState.editingCheckIn.id = result.id;
+
+        if (_ciAutosaveDirty) {
+          scheduleCheckInAutosave();
+        } else {
+          updateAutosaveIndicator('saved');
+        }
+      } else {
+        updateAutosaveIndicator('error');
+      }
+    })
+    .withFailureHandler(function() {
+      _ciAutosaveInFlight = false;
+      updateAutosaveIndicator('error');
+    })
+    .saveCheckIn(data);
+}
+
+function updateAutosaveIndicator(state) {
+  var el = document.getElementById('ci-autosave-status');
+  if (!el) return;
+  var html = '';
+  switch(state) {
+    case 'saving':
+      html = '<span class="autosave-saving"><span class="autosave-spinner"></span> Saving\u2026</span>';
+      break;
+    case 'saved':
+      html = '<span class="autosave-saved"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> All changes saved</span>';
+      break;
+    case 'unsaved':
+      html = '<span class="autosave-unsaved">Unsaved changes</span>';
+      break;
+    case 'error':
+      html = '<span class="autosave-error">Error saving — try again</span>';
+      break;
+    default:
+      html = '';
+  }
+  el.innerHTML = html;
 }
 
 // ─── Missing Assignments View (child page) ───
