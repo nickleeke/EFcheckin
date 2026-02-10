@@ -995,6 +995,24 @@ function renderMissingView(student) {
           ' recorded (no details available)</div>';
       }
 
+      // Add Missing Assignment inline form
+      html += '<div class="mv-add-section">' +
+        '<button type="button" class="btn-ghost btn-sm mv-add-btn" id="mv-add-btn-' + idx + '" onclick="event.stopPropagation(); showAddMissingForm(\'' + student.id + '\', ' + idx + ')">+ Add Missing Assignment</button>' +
+        '<div class="mv-add-form" id="mv-add-form-' + idx + '" style="display:none;">' +
+          '<div class="mv-add-form-row">' +
+            '<input type="text" class="mv-add-name" id="mv-add-name-' + idx + '" placeholder="Assignment name" onkeydown="if(event.key===\'Enter\'){event.preventDefault();confirmAddMissing(\'' + student.id + '\',' + idx + ');}">' +
+            '<select class="mv-add-type" id="mv-add-type-' + idx + '">' +
+              '<option value="">-- Type --</option>' +
+              '<option value="Formative">Formative</option>' +
+              '<option value="Summative">Summative</option>' +
+            '</select>' +
+            '<button type="button" class="mv-confirm-btn" id="mv-confirm-btn-' + idx + '" onclick="event.stopPropagation(); confirmAddMissing(\'' + student.id + '\', ' + idx + ')" title="Add assignment">' +
+              '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>' +
+            '</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
       html += '</div></div>';
     });
 
@@ -1149,6 +1167,65 @@ function persistAcademicData_(student) {
 function goBackFromMissing() {
   renderDashboard(appState.dashboardData);
   showView('dashboard-view');
+}
+
+// ─── Add Missing Assignment (from Missing View) ───
+
+function showAddMissingForm(studentId, classIdx) {
+  var btn = document.getElementById('mv-add-btn-' + classIdx);
+  var form = document.getElementById('mv-add-form-' + classIdx);
+  btn.style.display = 'none';
+  form.style.display = '';
+  document.getElementById('mv-add-name-' + classIdx).focus();
+}
+
+function confirmAddMissing(studentId, classIdx) {
+  var nameInput = document.getElementById('mv-add-name-' + classIdx);
+  var typeSelect = document.getElementById('mv-add-type-' + classIdx);
+  var confirmBtn = document.getElementById('mv-confirm-btn-' + classIdx);
+  var name = nameInput.value.trim();
+  var type = typeSelect.value;
+
+  if (!name) {
+    showToast('Please enter an assignment name');
+    nameInput.focus();
+    return;
+  }
+
+  var student = appState.dashboardData.find(function(s) { return s.id === studentId; });
+  if (!student) return;
+  var classData = student.academicData[classIdx];
+  if (!classData) return;
+
+  if (!classData.missingAssignments) classData.missingAssignments = [];
+  classData.missingAssignments.push({ name: name, type: type });
+  classData.missing = classData.missingAssignments.length;
+
+  student.totalMissing = student.academicData.reduce(function(sum, c) {
+    return sum + (Number(c.missing) || 0);
+  }, 0);
+
+  // Visual feedback: checkmark goes solid green
+  confirmBtn.classList.add('saved');
+
+  // Track which cards are currently expanded
+  var expandedCards = [];
+  document.querySelectorAll('.missing-class-card.expanded').forEach(function(card) {
+    expandedCards.push(card.id);
+  });
+
+  // Re-render after brief delay so user sees the saved state
+  setTimeout(function() {
+    renderMissingView(student);
+    // Re-expand previously expanded cards
+    expandedCards.forEach(function(cardId) {
+      var card = document.getElementById(cardId);
+      if (card) card.classList.add('expanded');
+    });
+    showToast('Assignment added');
+  }, 400);
+
+  persistAcademicData_(student);
 }
 
 // ─── Student Profile ───
