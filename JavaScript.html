@@ -1631,7 +1631,8 @@ function showCoTeachers() {
 
 function getRoleDisplayName(role) {
   switch(String(role).toLowerCase()) {
-    case 'caseload-manager': return 'Caseload Manager';
+    case 'caseload-manager':
+    case 'owner': return 'Caseload Manager';
     case 'service-provider': return 'Service Provider';
     case 'para': return 'Para';
     case 'co-teacher': return 'Co-Teacher';

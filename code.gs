@@ -603,6 +603,10 @@ function getTeamInfo() {
   for (var i = 1; i < data.length; i++) {
     var member = {};
     headers.forEach(function(h, idx) { member[h] = data[i][idx]; });
+    // Normalize legacy 'owner' role to 'caseload-manager'
+    if (String(member.role).toLowerCase() === 'owner') {
+      member.role = 'caseload-manager';
+    }
     members.push(member);
     if (String(member.email).toLowerCase() === email) {
       currentUserRole = member.role;
@@ -691,7 +695,10 @@ function getCallerRole_(ctSheet, email) {
   var data = ctSheet.getDataRange().getValues();
   for (var i = 1; i < data.length; i++) {
     if (String(data[i][0]).toLowerCase() === email) {
-      return String(data[i][1]).toLowerCase();
+      var role = String(data[i][1]).toLowerCase();
+      // Normalize legacy 'owner' role to 'caseload-manager'
+      if (role === 'owner') role = 'caseload-manager';
+      return role;
     }
   }
   return 'caseload-manager'; // fallback for spreadsheet creator
@@ -713,7 +720,8 @@ function removeTeamMember(email) {
 
   var data = ctSheet.getDataRange().getValues();
   for (var i = data.length - 1; i >= 1; i--) {
-    if (String(data[i][0]).toLowerCase() === email && data[i][1] !== 'caseload-manager') {
+    var memberRole = String(data[i][1]).toLowerCase();
+    if (String(data[i][0]).toLowerCase() === email && memberRole !== 'caseload-manager' && memberRole !== 'owner') {
       ctSheet.deleteRow(i + 1);
       break;
     }
