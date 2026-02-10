@@ -1296,6 +1296,53 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   justify-content: flex-end;
 }
 
+/* ─── Check-In Autosave Indicator ─── */
+.checkin-form-footer {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  align-items: center;
+}
+.autosave-status {
+  display: flex;
+  align-items: center;
+  /* M3 Body Small */
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  letter-spacing: 0.4px;
+  min-height: 20px;
+}
+.autosave-saving {
+  color: var(--md-on-surface-variant);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.autosave-saved {
+  color: #1B5E20;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.autosave-unsaved {
+  color: var(--md-on-surface-variant);
+  font-style: italic;
+}
+.autosave-error {
+  color: var(--md-error);
+}
+.autosave-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--md-outline-variant);
+  border-top-color: var(--md-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+  display: inline-block;
+}
+
 /* ─── Check-In Inline Missing Assignment Editor ─── */
 .missing-toggle {
   cursor: pointer;
