@@ -969,6 +969,8 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .action-btn.primary:hover {
   background: rgba(196,30,58,0.08);
 }
+.action-btn-icon { display: none; }
+.action-btn-label { display: inline; }
 
 /* ─── Check-In History Cards (M3 Outlined Card) ─── */
 .history-card {
@@ -1366,6 +1368,19 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .chip-clickable:hover {
   box-shadow: var(--md-elevation-1);
   transform: scale(1.05);
+}
+
+/* ─── Split-screen: action pill buttons → icon buttons ─── */
+@media (max-width: 1024px) {
+  .action-btn {
+    width: 32px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .action-btn-icon { display: inline-block; vertical-align: middle; }
+  .action-btn-label { display: none; }
 }
 
 /* ─── Responsive ─── */
