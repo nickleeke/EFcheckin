@@ -311,28 +311,24 @@ function saveStudent(profile) {
   const classesJson = JSON.stringify(profile.classes || []);
 
   if (profile.id) {
-    const data = sheet.getDataRange().getValues();
-    const headers = data[0];
-    const colIdx = {};
-    headers.forEach(function(h, i) { colIdx[h] = i + 1; });
-
-    for (let i = 1; i < data.length; i++) {
-      if (data[i][0] === profile.id) {
-        sheet.getRange(i+1, colIdx['firstName']).setValue(profile.firstName || '');
-        sheet.getRange(i+1, colIdx['lastName']).setValue(profile.lastName || '');
-        sheet.getRange(i+1, colIdx['grade']).setValue(profile.grade || '');
-        sheet.getRange(i+1, colIdx['period']).setValue(profile.period || '');
-        sheet.getRange(i+1, colIdx['focusGoal']).setValue(profile.focusGoal || '');
-        sheet.getRange(i+1, colIdx['accommodations']).setValue(profile.accommodations || '');
-        sheet.getRange(i+1, colIdx['notes']).setValue(profile.notes || '');
-        sheet.getRange(i+1, colIdx['classesJson']).setValue(classesJson);
-        sheet.getRange(i+1, colIdx['iepGoal']).setValue(profile.iepGoal || '');
-        sheet.getRange(i+1, colIdx['goalsJson']).setValue(profile.goalsJson || '');
-        sheet.getRange(i+1, colIdx['caseManagerEmail']).setValue(profile.caseManagerEmail || '');
-        sheet.getRange(i+1, colIdx['updatedAt']).setValue(now);
-        invalidateCache_();
-        return { success: true, id: profile.id };
-      }
+    var found = findRowById_(sheet, profile.id);
+    if (found) {
+      batchSetValues_(sheet, found.rowIndex, found.colIdx, {
+        firstName: profile.firstName || '',
+        lastName: profile.lastName || '',
+        grade: profile.grade || '',
+        period: profile.period || '',
+        focusGoal: profile.focusGoal || '',
+        accommodations: profile.accommodations || '',
+        notes: profile.notes || '',
+        classesJson: classesJson,
+        iepGoal: profile.iepGoal || '',
+        goalsJson: profile.goalsJson || '',
+        caseManagerEmail: profile.caseManagerEmail || '',
+        updatedAt: now
+      });
+      invalidateCache_();
+      return { success: true, id: profile.id };
     }
   }
 
@@ -354,18 +350,14 @@ function saveStudentGoals(studentId, goalsJson) {
   const sheet = ss.getSheetByName(SHEET_STUDENTS);
   const now = new Date().toISOString();
 
-  const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  const colIdx = {};
-  headers.forEach(function(h, i) { colIdx[h] = i + 1; });
-
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === studentId) {
-      sheet.getRange(i+1, colIdx['goalsJson']).setValue(goalsJson || '');
-      sheet.getRange(i+1, colIdx['updatedAt']).setValue(now);
-      invalidateCache_();
-      return { success: true };
-    }
+  var found = findRowById_(sheet, studentId);
+  if (found) {
+    batchSetValues_(sheet, found.rowIndex, found.colIdx, {
+      goalsJson: goalsJson || '',
+      updatedAt: now
+    });
+    invalidateCache_();
+    return { success: true };
   }
   return { success: false, error: 'Student not found' };
 }
@@ -400,28 +392,24 @@ function saveCheckIn(data) {
   const academicJson = JSON.stringify(data.academicData || []);
 
   if (data.id) {
-    const rows = sheet.getDataRange().getValues();
-    const headers = rows[0];
-    const colIdx = {};
-    headers.forEach(function(h, i) { colIdx[h] = i + 1; });
-
-    for (let i = 1; i < rows.length; i++) {
-      if (rows[i][0] === data.id) {
-        sheet.getRange(i+1, colIdx['weekOf']).setValue(data.weekOf || '');
-        sheet.getRange(i+1, colIdx['planningRating']).setValue(data.planningRating || '');
-        sheet.getRange(i+1, colIdx['followThroughRating']).setValue(data.followThroughRating || '');
-        sheet.getRange(i+1, colIdx['regulationRating']).setValue(data.regulationRating || '');
-        sheet.getRange(i+1, colIdx['focusGoalRating']).setValue(data.focusGoalRating || '');
-        sheet.getRange(i+1, colIdx['effortRating']).setValue(data.effortRating || '');
-        sheet.getRange(i+1, colIdx['whatWentWell']).setValue(data.whatWentWell || '');
-        sheet.getRange(i+1, colIdx['barrier']).setValue(data.barrier || '');
-        sheet.getRange(i+1, colIdx['microGoal']).setValue(data.microGoal || '');
-        sheet.getRange(i+1, colIdx['microGoalCategory']).setValue(data.microGoalCategory || '');
-        sheet.getRange(i+1, colIdx['teacherNotes']).setValue(data.teacherNotes || '');
-        sheet.getRange(i+1, colIdx['academicDataJson']).setValue(academicJson);
-        invalidateCache_();
-        return { success: true, id: data.id };
-      }
+    var found = findRowById_(sheet, data.id);
+    if (found) {
+      batchSetValues_(sheet, found.rowIndex, found.colIdx, {
+        weekOf: data.weekOf || '',
+        planningRating: data.planningRating || '',
+        followThroughRating: data.followThroughRating || '',
+        regulationRating: data.regulationRating || '',
+        focusGoalRating: data.focusGoalRating || '',
+        effortRating: data.effortRating || '',
+        whatWentWell: data.whatWentWell || '',
+        barrier: data.barrier || '',
+        microGoal: data.microGoal || '',
+        microGoalCategory: data.microGoalCategory || '',
+        teacherNotes: data.teacherNotes || '',
+        academicDataJson: academicJson
+      });
+      invalidateCache_();
+      return { success: true, id: data.id };
     }
   }
 
@@ -480,18 +468,12 @@ function updateCheckInAcademicData(checkInId, academicData) {
   const ss = getSS_();
   const sheet = ss.getSheetByName(SHEET_CHECKINS);
   if (!sheet) return { success: false };
-  const rows = sheet.getDataRange().getValues();
-  const headers = rows[0];
-  var colIdx = -1;
-  headers.forEach(function(h, i) { if (h === 'academicDataJson') colIdx = i + 1; });
-  if (colIdx < 0) return { success: false };
 
-  for (let i = 1; i < rows.length; i++) {
-    if (rows[i][0] === checkInId) {
-      sheet.getRange(i + 1, colIdx).setValue(JSON.stringify(academicData || []));
-      invalidateCache_();
-      return { success: true };
-    }
+  var found = findRowById_(sheet, checkInId);
+  if (found && found.colIdx['academicDataJson']) {
+    sheet.getRange(found.rowIndex, found.colIdx['academicDataJson']).setValue(JSON.stringify(academicData || []));
+    invalidateCache_();
+    return { success: true };
   }
   return { success: false };
 }
@@ -676,10 +658,7 @@ function getTeamInfo() {
   for (var i = 1; i < data.length; i++) {
     var member = {};
     headers.forEach(function(h, idx) { member[h] = data[i][idx]; });
-    // Normalize legacy 'owner' role to 'caseload-manager'
-    if (String(member.role).toLowerCase() === 'owner') {
-      member.role = 'caseload-manager';
-    }
+    member.role = normalizeRole_(member.role);
     members.push(member);
     if (String(member.email).toLowerCase() === email) {
       currentUserRole = member.role;
@@ -768,10 +747,7 @@ function getCallerRole_(ctSheet, email) {
   var data = ctSheet.getDataRange().getValues();
   for (var i = 1; i < data.length; i++) {
     if (String(data[i][0]).toLowerCase() === email) {
-      var role = String(data[i][1]).toLowerCase();
-      // Normalize legacy 'owner' role to 'caseload-manager'
-      if (role === 'owner') role = 'caseload-manager';
-      return role;
+      return normalizeRole_(data[i][1]);
     }
   }
   return 'caseload-manager'; // fallback for spreadsheet creator
@@ -913,6 +889,44 @@ function initializeSheetsIfNeeded_() {
   }
 }
 
+/** Build a {headerName: 1-based-column-index} map from a headers array. */
+function buildColIdx_(headers) {
+  var colIdx = {};
+  headers.forEach(function(h, i) { colIdx[h] = i + 1; });
+  return colIdx;
+}
+
+/**
+ * Find a data row by its ID (column 0). Returns {rowIndex, colIdx} or null.
+ * rowIndex is 1-based (sheet row number). colIdx maps header names to 1-based columns.
+ */
+function findRowById_(sheet, id) {
+  var data = sheet.getDataRange().getValues();
+  var headers = data[0];
+  var colIdx = buildColIdx_(headers);
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][0] === id) {
+      return { rowIndex: i + 1, colIdx: colIdx };
+    }
+  }
+  return null;
+}
+
+/** Update multiple cells in a single row. fields is {headerName: value}. */
+function batchSetValues_(sheet, rowIndex, colIdx, fields) {
+  for (var key in fields) {
+    if (fields.hasOwnProperty(key) && colIdx[key]) {
+      sheet.getRange(rowIndex, colIdx[key]).setValue(fields[key]);
+    }
+  }
+}
+
+/** Normalize legacy 'owner' role to 'caseload-manager'. */
+function normalizeRole_(role) {
+  role = String(role || '').toLowerCase();
+  return role === 'owner' ? 'caseload-manager' : role;
+}
+
 // ───── Menu (for bound-script usage) ─────
 function onOpen() {
   try {
@@ -1036,21 +1050,12 @@ function assignCaseManager(studentId, caseManagerEmail) {
   var sheet = ss.getSheetByName(SHEET_STUDENTS);
   if (!sheet) return { success: false, error: 'Students sheet not found.' };
 
-  var data = sheet.getDataRange().getValues();
-  var headers = data[0];
-  var colIdx = {};
-  headers.forEach(function(h, i) { colIdx[h] = i + 1; });
-
-  if (!colIdx['caseManagerEmail']) {
-    return { success: false, error: 'caseManagerEmail column not found. Please reload.' };
+  var found = findRowById_(sheet, studentId);
+  if (!found || !found.colIdx['caseManagerEmail']) {
+    return { success: false, error: found ? 'caseManagerEmail column not found. Please reload.' : 'Student not found.' };
   }
 
-  for (var i = 1; i < data.length; i++) {
-    if (data[i][0] === studentId) {
-      sheet.getRange(i + 1, colIdx['caseManagerEmail']).setValue(caseManagerEmail || '');
-      invalidateCache_();
-      return { success: true };
-    }
-  }
-  return { success: false, error: 'Student not found.' };
+  sheet.getRange(found.rowIndex, found.colIdx['caseManagerEmail']).setValue(caseManagerEmail || '');
+  invalidateCache_();
+  return { success: true };
 }
