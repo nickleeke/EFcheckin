@@ -33,6 +33,11 @@ var onboardingState = {
   spreadsheetUrl: null
 };
 
+var GPA_MAP = {
+  'A':4.0, 'A-':3.7, 'B+':3.3, 'B':3.0, 'B-':2.7,
+  'C+':2.3, 'C':2.0, 'C-':1.7, 'D+':1.3, 'D':1.0, 'D-':0.7, 'F':0.0
+};
+
 // ─── Preloaded Options ───
 var PRELOADED_CLASSES = [
   'Academic Skills', 'Art', 'Band', 'Choir', 'ELA',
@@ -129,20 +134,12 @@ function enterApp() {
         loadDashboard();
       } catch(e) {
         document.getElementById('dashboard-table-container').innerHTML =
-          '<div class="empty-state">' +
-            '<h3>Unable to Load</h3>' +
-            '<p>' + esc(e.message || String(e)) + '</p>' +
-            '<button class="btn btn-primary" style="margin-top:16px;" onclick="location.reload()">Reload</button>' +
-          '</div>';
+          renderErrorState(e.message || String(e));
       }
     })
     .withFailureHandler(function(err) {
       document.getElementById('dashboard-table-container').innerHTML =
-        '<div class="empty-state">' +
-          '<h3>Unable to Load</h3>' +
-          '<p>' + esc(err && err.message ? err.message : String(err)) + '</p>' +
-          '<button class="btn btn-primary" style="margin-top:16px;" onclick="location.reload()">Reload</button>' +
-        '</div>';
+        renderErrorState(err && err.message ? err.message : String(err));
     })
     .initializeSheets();
 }
@@ -186,20 +183,12 @@ function loadDashboard() {
         renderDashboard(data);
       } catch(e) {
         document.getElementById('dashboard-table-container').innerHTML =
-          '<div class="empty-state">' +
-            '<h3>Unable to Load</h3>' +
-            '<p>' + esc(e.message || String(e)) + '</p>' +
-            '<button class="btn btn-primary" style="margin-top:16px;" onclick="location.reload()">Reload</button>' +
-          '</div>';
+          renderErrorState(e.message || String(e));
       }
     })
     .withFailureHandler(function(err) {
       document.getElementById('dashboard-table-container').innerHTML =
-        '<div class="empty-state">' +
-          '<h3>Unable to Load</h3>' +
-          '<p>' + esc(err && err.message ? err.message : String(err)) + '</p>' +
-          '<button class="btn btn-primary" style="margin-top:16px;" onclick="location.reload()">Reload</button>' +
-        '</div>';
+        renderErrorState(err && err.message ? err.message : String(err));
     })
     .getDashboardData();
 }
@@ -930,8 +919,8 @@ function performCheckInAutosave() {
     .saveCheckIn(data);
 }
 
-function updateAutosaveIndicator(state) {
-  var el = document.getElementById('ci-autosave-status');
+function updateAutosaveIndicator(state, elementId) {
+  var el = document.getElementById(elementId || 'ci-autosave-status');
   if (!el) return;
   var html = '';
   switch(state) {
@@ -1057,26 +1046,7 @@ function collectGoalsData() {
 }
 
 function updateGoalsAutosaveIndicator(state) {
-  var el = document.getElementById('goals-autosave-status');
-  if (!el) return;
-  var html = '';
-  switch(state) {
-    case 'saving':
-      html = '<span class="autosave-saving"><span class="autosave-spinner"></span> Saving\u2026</span>';
-      break;
-    case 'saved':
-      html = '<span class="autosave-saved"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> All changes saved</span>';
-      break;
-    case 'unsaved':
-      html = '<span class="autosave-unsaved">Unsaved changes</span>';
-      break;
-    case 'error':
-      html = '<span class="autosave-error">Error saving — try again</span>';
-      break;
-    default:
-      html = '';
-  }
-  el.innerHTML = html;
+  updateAutosaveIndicator(state, 'goals-autosave-status');
 }
 
 function addGoal() {
@@ -1143,7 +1113,7 @@ function removeObjective(goalId, objId) {
 
 // ─── Missing Assignments View (child page) ───
 function showMissingAssignments(studentId) {
-  var student = appState.dashboardData.find(function(s) { return s.id === studentId; });
+  var student = getStudentById(studentId);
   if (!student) { showToast('Student not found'); return; }
 
   appState.missingViewStudentId = studentId;
@@ -1279,12 +1249,7 @@ function renderMissingView(student) {
 }
 
 function toggleMissingClass(idx) {
-  var card = document.getElementById('missing-card-' + idx);
-  if (card.classList.contains('expanded')) {
-    card.classList.remove('expanded');
-  } else {
-    card.classList.add('expanded');
-  }
+  document.getElementById('missing-card-' + idx).classList.toggle('expanded');
 }
 
 function launchConfetti(originEl) {
@@ -1345,44 +1310,42 @@ function launchConfetti(originEl) {
   }
 }
 
-function markMissingDone(studentId, classIdx, assignmentIdx) {
-  var student = appState.dashboardData.find(function(s) { return s.id === studentId; });
+/** Shared logic for removing a missing assignment from a student's academic data. */
+function modifyMissingAssignment(studentId, classIdx, assignmentIdx, opts) {
+  var student = getStudentById(studentId);
   if (!student) return;
   var classData = student.academicData[classIdx];
   if (!classData || !classData.missingAssignments) return;
 
-  // Launch confetti from the button that was clicked
-  var btn = event && event.currentTarget ? event.currentTarget : null;
-  launchConfetti(btn);
+  if (opts && opts.confetti) {
+    var btn = event && event.currentTarget ? event.currentTarget : null;
+    launchConfetti(btn);
+  }
 
   classData.missingAssignments.splice(assignmentIdx, 1);
   classData.missing = classData.missingAssignments.length;
+  recalcTotalMissing(student);
 
-  student.totalMissing = student.academicData.reduce(function(sum, c) {
-    return sum + (Number(c.missing) || 0);
-  }, 0);
-
-  renderMissingView(student);
+  if (opts && opts.renderFn) {
+    opts.renderFn(student);
+  }
   persistAcademicData_(student);
-  showToast('Assignment marked as complete');
+  showToast(opts && opts.message || 'Assignment updated');
+}
+
+function markMissingDone(studentId, classIdx, assignmentIdx) {
+  modifyMissingAssignment(studentId, classIdx, assignmentIdx, {
+    confetti: true,
+    renderFn: renderMissingView,
+    message: 'Assignment marked as complete'
+  });
 }
 
 function removeMissingAssignment(studentId, classIdx, assignmentIdx) {
-  var student = appState.dashboardData.find(function(s) { return s.id === studentId; });
-  if (!student) return;
-  var classData = student.academicData[classIdx];
-  if (!classData || !classData.missingAssignments) return;
-
-  classData.missingAssignments.splice(assignmentIdx, 1);
-  classData.missing = classData.missingAssignments.length;
-
-  student.totalMissing = student.academicData.reduce(function(sum, c) {
-    return sum + (Number(c.missing) || 0);
-  }, 0);
-
-  renderMissingView(student);
-  persistAcademicData_(student);
-  showToast('Assignment removed');
+  modifyMissingAssignment(studentId, classIdx, assignmentIdx, {
+    renderFn: renderMissingView,
+    message: 'Assignment removed'
+  });
 }
 
 function persistAcademicData_(student) {
@@ -1417,53 +1380,31 @@ function persistAcademicData_(student) {
 // ─── Profile Dashboard — Missing Assignment Operations ───
 
 function profileMarkDone(studentId, classIdx, assignmentIdx, btnEl) {
-  var student = appState.dashboardData.find(function(s) { return s.id === studentId; });
+  // For profile view, confetti originates from the passed button element
+  var student = getStudentById(studentId);
   if (!student) return;
-  var classData = student.academicData[classIdx];
-  if (!classData || !classData.missingAssignments) return;
-
   launchConfetti(btnEl);
-
-  classData.missingAssignments.splice(assignmentIdx, 1);
-  classData.missing = classData.missingAssignments.length;
-  student.totalMissing = student.academicData.reduce(function(sum, c) {
-    return sum + (Number(c.missing) || 0);
-  }, 0);
-
-  reRenderProfileAcademics(student);
-  persistAcademicData_(student);
-  showToast('Assignment marked as complete');
+  modifyMissingAssignment(studentId, classIdx, assignmentIdx, {
+    renderFn: reRenderProfileAcademics,
+    message: 'Assignment marked as complete'
+  });
 }
 
 function profileRemoveAssignment(studentId, classIdx, assignmentIdx) {
-  var student = appState.dashboardData.find(function(s) { return s.id === studentId; });
-  if (!student) return;
-  var classData = student.academicData[classIdx];
-  if (!classData || !classData.missingAssignments) return;
-
-  classData.missingAssignments.splice(assignmentIdx, 1);
-  classData.missing = classData.missingAssignments.length;
-  student.totalMissing = student.academicData.reduce(function(sum, c) {
-    return sum + (Number(c.missing) || 0);
-  }, 0);
-
-  reRenderProfileAcademics(student);
-  persistAcademicData_(student);
-  showToast('Assignment removed');
+  modifyMissingAssignment(studentId, classIdx, assignmentIdx, {
+    renderFn: reRenderProfileAcademics,
+    message: 'Assignment removed'
+  });
 }
 
 function showProfileAddMissing(studentId, classIdx) {
-  var btn = document.getElementById('pv-add-btn-' + classIdx);
-  var form = document.getElementById('pv-add-form-' + classIdx);
-  if (btn) btn.style.display = 'none';
-  if (form) form.style.display = '';
-  var nameInput = document.getElementById('pv-add-name-' + classIdx);
-  if (nameInput) nameInput.focus();
+  showAddMissingForm(studentId, classIdx, 'pv');
 }
 
-function profileConfirmAddMissing(studentId, classIdx) {
-  var nameInput = document.getElementById('pv-add-name-' + classIdx);
-  var typeSelect = document.getElementById('pv-add-type-' + classIdx);
+/** Shared logic for adding a missing assignment from an inline form. */
+function addMissingFromForm_(studentId, classIdx, prefix, renderFn, opts) {
+  var nameInput = document.getElementById(prefix + '-add-name-' + classIdx);
+  var typeSelect = document.getElementById(prefix + '-add-type-' + classIdx);
   var name = nameInput.value.trim();
   var type = typeSelect.value;
 
@@ -1473,7 +1414,7 @@ function profileConfirmAddMissing(studentId, classIdx) {
     return;
   }
 
-  var student = appState.dashboardData.find(function(s) { return s.id === studentId; });
+  var student = getStudentById(studentId);
   if (!student) return;
   var classData = student.academicData[classIdx];
   if (!classData) return;
@@ -1481,13 +1422,45 @@ function profileConfirmAddMissing(studentId, classIdx) {
   if (!classData.missingAssignments) classData.missingAssignments = [];
   classData.missingAssignments.push({ name: name, type: type });
   classData.missing = classData.missingAssignments.length;
-  student.totalMissing = student.academicData.reduce(function(sum, c) {
-    return sum + (Number(c.missing) || 0);
-  }, 0);
+  recalcTotalMissing(student);
 
-  reRenderProfileAcademics(student);
+  if (opts && opts.confirmBtn) {
+    var confirmBtn = document.getElementById(prefix + '-confirm-btn-' + classIdx);
+    if (confirmBtn) confirmBtn.classList.add('saved');
+  }
+
+  // Track expanded cards
+  var expandedCards = [];
+  var cardSelector = opts && opts.cardSelector || '.missing-class-card.expanded';
+  document.querySelectorAll(cardSelector).forEach(function(card) {
+    expandedCards.push(card.id);
+  });
+
+  if (opts && opts.delay) {
+    setTimeout(function() {
+      renderFn(student);
+      expandedCards.forEach(function(cardId) {
+        var card = document.getElementById(cardId);
+        if (card) card.classList.add('expanded');
+      });
+      showToast('Assignment added');
+    }, opts.delay);
+  } else {
+    renderFn(student);
+    expandedCards.forEach(function(cardId) {
+      var card = document.getElementById(cardId);
+      if (card) card.classList.add('expanded');
+    });
+    showToast('Assignment added');
+  }
+
   persistAcademicData_(student);
-  showToast('Assignment added');
+}
+
+function profileConfirmAddMissing(studentId, classIdx) {
+  addMissingFromForm_(studentId, classIdx, 'pv', reRenderProfileAcademics, {
+    cardSelector: '.profile-class-card.expanded'
+  });
 }
 
 function reRenderProfileAcademics(student) {
@@ -1519,61 +1492,22 @@ function goBackFromMissing() {
 
 // ─── Add Missing Assignment (from Missing View) ───
 
-function showAddMissingForm(studentId, classIdx) {
-  var btn = document.getElementById('mv-add-btn-' + classIdx);
-  var form = document.getElementById('mv-add-form-' + classIdx);
-  btn.style.display = 'none';
-  form.style.display = '';
-  document.getElementById('mv-add-name-' + classIdx).focus();
+function showAddMissingForm(studentId, classIdx, prefix) {
+  prefix = prefix || 'mv';
+  var btn = document.getElementById(prefix + '-add-btn-' + classIdx);
+  var form = document.getElementById(prefix + '-add-form-' + classIdx);
+  if (btn) btn.style.display = 'none';
+  if (form) form.style.display = '';
+  var nameInput = document.getElementById(prefix + '-add-name-' + classIdx);
+  if (nameInput) nameInput.focus();
 }
 
 function confirmAddMissing(studentId, classIdx) {
-  var nameInput = document.getElementById('mv-add-name-' + classIdx);
-  var typeSelect = document.getElementById('mv-add-type-' + classIdx);
-  var confirmBtn = document.getElementById('mv-confirm-btn-' + classIdx);
-  var name = nameInput.value.trim();
-  var type = typeSelect.value;
-
-  if (!name) {
-    showToast('Please enter an assignment name');
-    nameInput.focus();
-    return;
-  }
-
-  var student = appState.dashboardData.find(function(s) { return s.id === studentId; });
-  if (!student) return;
-  var classData = student.academicData[classIdx];
-  if (!classData) return;
-
-  if (!classData.missingAssignments) classData.missingAssignments = [];
-  classData.missingAssignments.push({ name: name, type: type });
-  classData.missing = classData.missingAssignments.length;
-
-  student.totalMissing = student.academicData.reduce(function(sum, c) {
-    return sum + (Number(c.missing) || 0);
-  }, 0);
-
-  // Visual feedback: checkmark goes solid green
-  confirmBtn.classList.add('saved');
-
-  // Track which cards are currently expanded
-  var expandedCards = [];
-  document.querySelectorAll('.missing-class-card.expanded').forEach(function(card) {
-    expandedCards.push(card.id);
+  addMissingFromForm_(studentId, classIdx, 'mv', renderMissingView, {
+    confirmBtn: true,
+    delay: 400,
+    cardSelector: '.missing-class-card.expanded'
   });
-
-  // Re-render after brief delay so user sees the saved state
-  setTimeout(function() {
-    renderMissingView(student);
-    // Re-expand previously expanded cards
-    expandedCards.forEach(function(cardId) {
-      var card = document.getElementById(cardId);
-      if (card) card.classList.add('expanded');
-    });
-    showToast('Assignment added');
-  }, 400);
-
-  persistAcademicData_(student);
 }
 
 // ─── Student Profile ───
@@ -1833,12 +1767,7 @@ function renderGoalItem(goal) {
 }
 
 function toggleProfileClass(idx) {
-  var card = document.getElementById('profile-card-' + idx);
-  if (card.classList.contains('expanded')) {
-    card.classList.remove('expanded');
-  } else {
-    card.classList.add('expanded');
-  }
+  document.getElementById('profile-card-' + idx).classList.toggle('expanded');
 }
 
 function cancelStudentEdit() {
@@ -2100,18 +2029,12 @@ function saveStudentForm() {
 }
 
 function confirmDeleteStudent(studentId) {
-  var overlay = document.createElement('div');
-  overlay.className = 'confirm-overlay';
-  overlay.innerHTML =
-    '<div class="confirm-dialog">' +
-      '<h3>Delete Student?</h3>' +
-      '<p>This will permanently delete this student and all their check-in records.</p>' +
-      '<div class="confirm-actions">' +
-        '<button class="btn btn-secondary" onclick="this.closest(\'.confirm-overlay\').remove()">Cancel</button>' +
-        '<button class="btn btn-danger" onclick="doDeleteStudent(\'' + studentId + '\'); this.closest(\'.confirm-overlay\').remove()">Delete</button>' +
-      '</div>' +
-    '</div>';
-  document.body.appendChild(overlay);
+  showConfirmDialog({
+    title: 'Delete Student?',
+    body: 'This will permanently delete this student and all their check-in records.',
+    confirmLabel: 'Delete',
+    onConfirm: "doDeleteStudent('" + studentId + "')"
+  });
 }
 
 function doDeleteStudent(studentId) {
@@ -2207,18 +2130,12 @@ function editCheckIn(checkInId, studentId) {
 }
 
 function confirmDeleteCheckIn(checkInId, studentId) {
-  var overlay = document.createElement('div');
-  overlay.className = 'confirm-overlay';
-  overlay.innerHTML =
-    '<div class="confirm-dialog">' +
-      '<h3>Delete Check-In?</h3>' +
-      '<p>This check-in record will be permanently deleted.</p>' +
-      '<div class="confirm-actions">' +
-        '<button class="btn btn-secondary" onclick="this.closest(\'.confirm-overlay\').remove()">Cancel</button>' +
-        '<button class="btn btn-danger" onclick="doDeleteCheckIn(\'' + checkInId + '\', \'' + studentId + '\'); this.closest(\'.confirm-overlay\').remove()">Delete</button>' +
-      '</div>' +
-    '</div>';
-  document.body.appendChild(overlay);
+  showConfirmDialog({
+    title: 'Delete Check-In?',
+    body: 'This check-in record will be permanently deleted.',
+    confirmLabel: 'Delete',
+    onConfirm: "doDeleteCheckIn('" + checkInId + "', '" + studentId + "')"
+  });
 }
 
 function doDeleteCheckIn(checkInId, studentId) {
@@ -2403,7 +2320,6 @@ function printStudentReport() {
 
   // Classes with Grades section
   if (academicData.length > 0) {
-    var gpaMap = { 'A': 4.0, 'A-': 3.7, 'B+': 3.3, 'B': 3.0, 'B-': 2.7, 'C+': 2.3, 'C': 2.0, 'C-': 1.7, 'D+': 1.3, 'D': 1.0, 'D-': 0.7, 'F': 0.0 };
     var totalMissing = 0;
     academicData.forEach(function(c) { totalMissing += (Number(c.missing) || 0); });
 
@@ -2426,7 +2342,7 @@ function printStudentReport() {
       var matchedClass = (student.classes || []).find(function(cl) { return cl.name === c.className; });
       if (matchedClass && matchedClass.period) classLabel += ' (P' + matchedClass.period + ')';
 
-      var gradeVal = gpaMap[c.grade];
+      var gradeVal = GPA_MAP[c.grade];
       var gradeClass = gradeVal != null ? (gradeVal >= 3.0 ? 'grade-good' : gradeVal >= 2.0 ? 'grade-mid' : 'grade-low') : '';
 
       html += '<tr><td>' + esc(classLabel) + '</td>' +
@@ -2743,18 +2659,12 @@ function addTeamMemberFromForm() {
 }
 
 function confirmRemoveTeamMember(email) {
-  var overlay = document.createElement('div');
-  overlay.className = 'confirm-overlay';
-  overlay.innerHTML =
-    '<div class="confirm-dialog">' +
-      '<h3>Remove Team Member?</h3>' +
-      '<p>This will revoke <strong>' + esc(email) + '</strong>\u2019s access to the shared caseload.</p>' +
-      '<div class="confirm-actions">' +
-        '<button class="btn btn-secondary" onclick="this.closest(\'.confirm-overlay\').remove()">Cancel</button>' +
-        '<button class="btn btn-danger" onclick="doRemoveTeamMember(\'' + esc(email) + '\'); this.closest(\'.confirm-overlay\').remove()">Remove</button>' +
-      '</div>' +
-    '</div>';
-  document.body.appendChild(overlay);
+  showConfirmDialog({
+    title: 'Remove Team Member?',
+    body: 'This will revoke <strong>' + esc(email) + '</strong>\u2019s access to the shared caseload.',
+    confirmLabel: 'Remove',
+    onConfirm: "doRemoveTeamMember('" + esc(email) + "')"
+  });
 }
 
 function doRemoveTeamMember(email) {
@@ -2775,18 +2685,12 @@ function doRemoveTeamMember(email) {
 }
 
 function confirmLeaveTeam() {
-  var overlay = document.createElement('div');
-  overlay.className = 'confirm-overlay';
-  overlay.innerHTML =
-    '<div class="confirm-dialog">' +
-      '<h3>Leave Team?</h3>' +
-      '<p>You will be disconnected from this shared caseload. If you had your own data before joining, it will be restored.</p>' +
-      '<div class="confirm-actions">' +
-        '<button class="btn btn-secondary" onclick="this.closest(\'.confirm-overlay\').remove()">Cancel</button>' +
-        '<button class="btn btn-danger" onclick="doLeaveTeam(); this.closest(\'.confirm-overlay\').remove()">Leave</button>' +
-      '</div>' +
-    '</div>';
-  document.body.appendChild(overlay);
+  showConfirmDialog({
+    title: 'Leave Team?',
+    body: 'You will be disconnected from this shared caseload. If you had your own data before joining, it will be restored.',
+    confirmLabel: 'Leave',
+    onConfirm: 'doLeaveTeam()'
+  });
 }
 
 function doLeaveTeam() {
@@ -2959,10 +2863,6 @@ function showCheckInSkeleton() {
   container.innerHTML = html;
 }
 
-// Legacy wrappers — now no-ops since we use per-view skeletons
-function showLoading() {}
-function hideLoading() {}
-
 function showToast(message) {
   var toast = document.getElementById('toast');
   toast.textContent = message;
@@ -2975,6 +2875,42 @@ function esc(str) {
   var div = document.createElement('div');
   div.textContent = String(str);
   return div.innerHTML;
+}
+
+function renderErrorState(message) {
+  return '<div class="empty-state">' +
+    '<h3>Unable to Load</h3>' +
+    '<p>' + esc(message) + '</p>' +
+    '<button class="btn btn-primary" style="margin-top:16px;" onclick="location.reload()">Reload</button>' +
+  '</div>';
+}
+
+function showConfirmDialog(opts) {
+  var overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+  if (opts.id) overlay.id = opts.id;
+  overlay.innerHTML =
+    '<div class="confirm-dialog"' + (opts.style ? ' style="' + opts.style + '"' : '') + '>' +
+      '<h3>' + (opts.title || 'Confirm') + '</h3>' +
+      '<p>' + (opts.body || '') + '</p>' +
+      (opts.hint ? '<p class="hint">' + opts.hint + '</p>' : '') +
+      '<div class="confirm-actions">' +
+        '<button class="btn btn-secondary" onclick="this.closest(\'.confirm-overlay\').remove()">' + (opts.cancelLabel || 'Cancel') + '</button>' +
+        '<button class="btn ' + (opts.confirmClass || 'btn-danger') + '" onclick="' + opts.onConfirm + '; this.closest(\'.confirm-overlay\').remove()">' + (opts.confirmLabel || 'Confirm') + '</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+  return overlay;
+}
+
+function getStudentById(studentId) {
+  return appState.dashboardData.find(function(s) { return s.id === studentId; });
+}
+
+function recalcTotalMissing(student) {
+  student.totalMissing = (student.academicData || []).reduce(function(sum, c) {
+    return sum + (Number(c.missing) || 0);
+  }, 0);
 }
 
 /** Format a YYYY-MM-DD date string as "Mon. DD, YYYY" (e.g. "Feb. 24, 2026") */
@@ -3437,18 +3373,12 @@ function addCaseManagerFromForm() {
 }
 
 function confirmRemoveCaseManager(email) {
-  var overlay = document.createElement('div');
-  overlay.className = 'confirm-overlay';
-  overlay.innerHTML =
-    '<div class="confirm-dialog">' +
-      '<h3>Remove Case Manager?</h3>' +
-      '<p>This will remove <strong>' + esc(email) + '</strong> from the case managers list. Students already assigned will keep their assignment.</p>' +
-      '<div class="confirm-actions">' +
-        '<button class="btn btn-secondary" onclick="this.closest(\'.confirm-overlay\').remove()">Cancel</button>' +
-        '<button class="btn btn-danger" onclick="doRemoveCaseManager(\'' + esc(email) + '\'); this.closest(\'.confirm-overlay\').remove()">Remove</button>' +
-      '</div>' +
-    '</div>';
-  document.body.appendChild(overlay);
+  showConfirmDialog({
+    title: 'Remove Case Manager?',
+    body: 'This will remove <strong>' + esc(email) + '</strong> from the case managers list. Students already assigned will keep their assignment.',
+    confirmLabel: 'Remove',
+    onConfirm: "doRemoveCaseManager('" + esc(email) + "')"
+  });
 }
 
 function doRemoveCaseManager(email) {
