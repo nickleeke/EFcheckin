@@ -3356,7 +3356,7 @@ function renderAdminView(caseManagers, students) {
           '<span class="admin-cm-name">' + esc(cm.name) + '</span>' +
           '<span class="admin-cm-email">' + esc(cm.email) + '</span>' +
         '</div>' +
-        '<button class="btn btn-sm btn-danger" onclick="confirmRemoveCaseManager(\'' + esc(cm.email) + '\')">Remove</button>' +
+        '<button class="btn-icon btn-icon-danger" onclick="confirmRemoveCaseManager(\'' + esc(cm.email) + '\')" title="Remove">&times;</button>' +
       '</div>';
     });
   }
