@@ -2339,8 +2339,11 @@ function printStudentReport() {
   });
 
   var html = '<!DOCTYPE html><html><head><title>Report - ' + esc(name) + '</title>' +
+    '<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">' +
     '<style>' +
-    'body { font-family: "Roboto", Arial, sans-serif; color: #201A1A; margin: 0; padding: 24px 32px; font-size: 13px; }' +
+    'body { font-family: "Roboto", Arial, sans-serif; color: #201A1A; margin: 0; padding: 24px 32px; font-size: 13px; -webkit-font-smoothing: antialiased; }' +
+    '.report-logo { text-align: center; margin-bottom: 16px; }' +
+    '.report-logo img { height: 48px; }' +
     'h1 { font-size: 20px; margin: 0 0 4px; }' +
     '.subtitle { color: #534343; font-size: 13px; margin-bottom: 20px; }' +
     'h2 { font-size: 15px; font-weight: 500; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 2px solid #C41E3A; }' +
@@ -2369,7 +2372,8 @@ function printStudentReport() {
     '@media print { body { padding: 12px 16px; } }' +
     '</style></head><body>';
 
-  // Header
+  // Logo + Header
+  html += '<div class="report-logo"><img src="https://resources.finalsite.net/images/f_auto,q_auto/v1593114034/richfieldschoolsorg/nevtdqxgci8pdkldabzj/MS_Horiz_C.png" alt="Richfield Middle School"></div>';
   html += '<h1>' + esc(name) + '</h1>';
   html += '<div class="subtitle">Grade ' + esc(grade) + ' &bull; Printed ' + new Date().toLocaleDateString() + '</div>';
 
@@ -2446,7 +2450,7 @@ function printStudentReport() {
     html += '<p style="color:#534343;">No academic data from the latest check-in.</p>';
   }
 
-  html += '<div class="footer">Caseload Dashboard &bull; Richfield Public Schools</div>';
+  html += '<div class="footer">Richfield Public Schools</div>';
   html += '</body></html>';
 
   var printWindow = window.open('', '_blank');
