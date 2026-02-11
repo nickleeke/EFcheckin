@@ -1616,7 +1616,7 @@ function showStudentProfile(studentId) {
         .getCheckIns(studentId);
     })
     .withFailureHandler(function(err) { showToast('Error: ' + (err && err.message ? err.message : String(err))); })
-    .getStudents();
+    .getDashboardData();
 }
 
 function renderStudentProfileDashboard(student) {

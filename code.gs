@@ -540,6 +540,8 @@ function getDashboardData() {
       firstName: s.firstName, lastName: s.lastName,
       grade: s.grade, period: s.period,
       focusGoal: s.focusGoal,
+      accommodations: s.accommodations || '',
+      notes: s.notes || '',
       iepGoal: s.iepGoal || '',
       goalsJson: s.goalsJson || '',
       caseManagerEmail: s.caseManagerEmail || '',
