@@ -21,6 +21,9 @@ var _persistInFlight = 0;
 var _ciAutosaveTimer = null;
 var _ciAutosaveInFlight = false;
 var _ciAutosaveDirty = false;
+var _goalsAutosaveTimer = null;
+var _goalsAutosaveInFlight = false;
+var _goalsAutosaveDirty = false;
 
 var onboardingState = {
   step: 1,
@@ -279,15 +282,13 @@ function renderDashboard(data) {
     // Last check-in date
     html += '<td>' + esc(formatDateDisplay(s.latestWeek)) + '</td>';
 
-    // Action buttons
+    // Action buttons (icon-only)
     html += '<td><div class="action-btns">' +
       '<button class="action-btn primary" onclick="event.stopPropagation(); startCheckIn(\'' + s.id + '\')" title="Check-In">' +
         '<svg class="action-btn-icon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>' +
-        '<span class="action-btn-label">Check-In</span>' +
       '</button>' +
-      '<button class="action-btn" onclick="event.stopPropagation(); editStudent(\'' + s.id + '\')" title="Edit">' +
-        '<svg class="action-btn-icon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>' +
-        '<span class="action-btn-label">Edit</span>' +
+      '<button class="action-btn" onclick="event.stopPropagation(); showStudentProfile(\'' + s.id + '\')" title="Student Profile">' +
+        '<svg class="action-btn-icon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>' +
       '</button>' +
       '</div></td>';
 
@@ -891,6 +892,194 @@ function updateAutosaveIndicator(state) {
   el.innerHTML = html;
 }
 
+// ─── Goals Autosave ───
+
+function setupGoalsAutosave() {
+  var container = document.getElementById('goals-autosave-container');
+  if (!container) return;
+
+  container.addEventListener('input', function() { scheduleGoalsAutosave(); });
+  container.addEventListener('change', function() { scheduleGoalsAutosave(); });
+
+  _goalsAutosaveDirty = false;
+  _goalsAutosaveInFlight = false;
+  if (_goalsAutosaveTimer) { clearTimeout(_goalsAutosaveTimer); _goalsAutosaveTimer = null; }
+  updateGoalsAutosaveIndicator('idle');
+}
+
+function scheduleGoalsAutosave() {
+  _goalsAutosaveDirty = true;
+  updateGoalsAutosaveIndicator('unsaved');
+  if (_goalsAutosaveTimer) clearTimeout(_goalsAutosaveTimer);
+  _goalsAutosaveTimer = setTimeout(function() {
+    _goalsAutosaveTimer = null;
+    performGoalsAutosave();
+  }, 2000);
+}
+
+function performGoalsAutosave() {
+  if (_goalsAutosaveInFlight) {
+    scheduleGoalsAutosave();
+    return;
+  }
+
+  var goalsData = collectGoalsData();
+  var goalsJson = JSON.stringify(goalsData);
+  var studentId = appState.currentStudentId;
+  if (!studentId) return;
+
+  _goalsAutosaveInFlight = true;
+  _goalsAutosaveDirty = false;
+  updateGoalsAutosaveIndicator('saving');
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      _goalsAutosaveInFlight = false;
+      if (result && result.success) {
+        // Update local state
+        var s = appState.dashboardData.find(function(st) { return st.id === studentId; });
+        if (s) {
+          s.goalsJson = goalsJson;
+          s.goals = goalsData;
+        }
+        if (appState.currentStudent) {
+          appState.currentStudent.goalsJson = goalsJson;
+          appState.currentStudent.goals = goalsData;
+        }
+
+        if (_goalsAutosaveDirty) {
+          scheduleGoalsAutosave();
+        } else {
+          updateGoalsAutosaveIndicator('saved');
+        }
+      } else {
+        updateGoalsAutosaveIndicator('error');
+      }
+    })
+    .withFailureHandler(function() {
+      _goalsAutosaveInFlight = false;
+      updateGoalsAutosaveIndicator('error');
+    })
+    .saveStudentGoals(studentId, goalsJson);
+}
+
+function collectGoalsData() {
+  var container = document.getElementById('goals-autosave-container');
+  if (!container) return [];
+
+  var goals = [];
+  var goalItems = container.querySelectorAll('.profile-goal-item');
+  goalItems.forEach(function(goalEl) {
+    var goalId = goalEl.getAttribute('data-goal-id') || '';
+    var goalText = goalEl.querySelector('[data-field="goal-text"]');
+    var text = goalText ? goalText.value : '';
+
+    var objectives = [];
+    var objItems = goalEl.querySelectorAll('.profile-objective-item');
+    objItems.forEach(function(objEl) {
+      var objId = objEl.getAttribute('data-obj-id') || '';
+      var objText = objEl.querySelector('[data-field="obj-text"]');
+      objectives.push({
+        id: objId,
+        text: objText ? objText.value : ''
+      });
+    });
+
+    goals.push({
+      id: goalId,
+      text: text,
+      objectives: objectives
+    });
+  });
+
+  return goals;
+}
+
+function updateGoalsAutosaveIndicator(state) {
+  var el = document.getElementById('goals-autosave-status');
+  if (!el) return;
+  var html = '';
+  switch(state) {
+    case 'saving':
+      html = '<span class="autosave-saving"><span class="autosave-spinner"></span> Saving\u2026</span>';
+      break;
+    case 'saved':
+      html = '<span class="autosave-saved"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> All changes saved</span>';
+      break;
+    case 'unsaved':
+      html = '<span class="autosave-unsaved">Unsaved changes</span>';
+      break;
+    case 'error':
+      html = '<span class="autosave-error">Error saving — try again</span>';
+      break;
+    default:
+      html = '';
+  }
+  el.innerHTML = html;
+}
+
+function addGoal() {
+  var container = document.getElementById('goals-autosave-container');
+  if (!container) return;
+  var goalId = 'goal-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5);
+  var goal = { id: goalId, text: '', objectives: [] };
+  var div = document.createElement('div');
+  div.innerHTML = renderGoalItem(goal);
+  var goalEl = div.firstChild;
+  container.appendChild(goalEl);
+  // Focus the new goal textarea
+  var textarea = goalEl.querySelector('[data-field="goal-text"]');
+  if (textarea) textarea.focus();
+  scheduleGoalsAutosave();
+}
+
+function removeGoal(goalId) {
+  var container = document.getElementById('goals-autosave-container');
+  if (!container) return;
+  var goalEl = container.querySelector('[data-goal-id="' + goalId + '"]');
+  if (goalEl) goalEl.remove();
+  scheduleGoalsAutosave();
+}
+
+function addObjective(goalId) {
+  var container = document.getElementById('goals-autosave-container');
+  if (!container) return;
+  var goalEl = container.querySelector('[data-goal-id="' + goalId + '"]');
+  if (!goalEl) return;
+  var objList = goalEl.querySelector('.profile-objectives-list');
+  if (!objList) return;
+
+  var objId = 'obj-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5);
+  var objHtml = '<div class="profile-objective-item" data-obj-id="' + objId + '">' +
+    '<textarea data-field="obj-text" placeholder="Enter objective..."></textarea>' +
+    '<button class="goal-remove-btn" onclick="removeObjective(\'' + esc(goalId) + '\', \'' + objId + '\')" title="Remove objective">' +
+      '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>' +
+    '</button>' +
+  '</div>';
+
+  // Insert before the "Add Objective" button
+  var addBtn = objList.querySelector('.btn-ghost');
+  var div = document.createElement('div');
+  div.innerHTML = objHtml;
+  var objEl = div.firstChild;
+  objList.insertBefore(objEl, addBtn);
+
+  // Focus the new objective textarea
+  var textarea = objEl.querySelector('[data-field="obj-text"]');
+  if (textarea) textarea.focus();
+  scheduleGoalsAutosave();
+}
+
+function removeObjective(goalId, objId) {
+  var container = document.getElementById('goals-autosave-container');
+  if (!container) return;
+  var goalEl = container.querySelector('[data-goal-id="' + goalId + '"]');
+  if (!goalEl) return;
+  var objEl = goalEl.querySelector('[data-obj-id="' + objId + '"]');
+  if (objEl) objEl.remove();
+  scheduleGoalsAutosave();
+}
+
 // ─── Missing Assignments View (child page) ───
 function showMissingAssignments(studentId) {
   var student = appState.dashboardData.find(function(s) { return s.id === studentId; });
@@ -1164,6 +1353,104 @@ function persistAcademicData_(student) {
   }, 600);
 }
 
+// ─── Profile Dashboard — Missing Assignment Operations ───
+
+function profileMarkDone(studentId, classIdx, assignmentIdx, btnEl) {
+  var student = appState.dashboardData.find(function(s) { return s.id === studentId; });
+  if (!student) return;
+  var classData = student.academicData[classIdx];
+  if (!classData || !classData.missingAssignments) return;
+
+  launchConfetti(btnEl);
+
+  classData.missingAssignments.splice(assignmentIdx, 1);
+  classData.missing = classData.missingAssignments.length;
+  student.totalMissing = student.academicData.reduce(function(sum, c) {
+    return sum + (Number(c.missing) || 0);
+  }, 0);
+
+  reRenderProfileAcademics(student);
+  persistAcademicData_(student);
+  showToast('Assignment marked as complete');
+}
+
+function profileRemoveAssignment(studentId, classIdx, assignmentIdx) {
+  var student = appState.dashboardData.find(function(s) { return s.id === studentId; });
+  if (!student) return;
+  var classData = student.academicData[classIdx];
+  if (!classData || !classData.missingAssignments) return;
+
+  classData.missingAssignments.splice(assignmentIdx, 1);
+  classData.missing = classData.missingAssignments.length;
+  student.totalMissing = student.academicData.reduce(function(sum, c) {
+    return sum + (Number(c.missing) || 0);
+  }, 0);
+
+  reRenderProfileAcademics(student);
+  persistAcademicData_(student);
+  showToast('Assignment removed');
+}
+
+function showProfileAddMissing(studentId, classIdx) {
+  var btn = document.getElementById('pv-add-btn-' + classIdx);
+  var form = document.getElementById('pv-add-form-' + classIdx);
+  if (btn) btn.style.display = 'none';
+  if (form) form.style.display = '';
+  var nameInput = document.getElementById('pv-add-name-' + classIdx);
+  if (nameInput) nameInput.focus();
+}
+
+function profileConfirmAddMissing(studentId, classIdx) {
+  var nameInput = document.getElementById('pv-add-name-' + classIdx);
+  var typeSelect = document.getElementById('pv-add-type-' + classIdx);
+  var name = nameInput.value.trim();
+  var type = typeSelect.value;
+
+  if (!name) {
+    showToast('Please enter an assignment name');
+    nameInput.focus();
+    return;
+  }
+
+  var student = appState.dashboardData.find(function(s) { return s.id === studentId; });
+  if (!student) return;
+  var classData = student.academicData[classIdx];
+  if (!classData) return;
+
+  if (!classData.missingAssignments) classData.missingAssignments = [];
+  classData.missingAssignments.push({ name: name, type: type });
+  classData.missing = classData.missingAssignments.length;
+  student.totalMissing = student.academicData.reduce(function(sum, c) {
+    return sum + (Number(c.missing) || 0);
+  }, 0);
+
+  reRenderProfileAcademics(student);
+  persistAcademicData_(student);
+  showToast('Assignment added');
+}
+
+function reRenderProfileAcademics(student) {
+  // Track which profile class cards are expanded
+  var expandedCards = [];
+  document.querySelectorAll('.profile-class-card.expanded').forEach(function(card) {
+    expandedCards.push(card.id);
+  });
+
+  // Save current goals from DOM before re-render so unsaved changes aren't lost
+  var goalsData = collectGoalsData();
+  if (goalsData.length > 0) {
+    student.goalsJson = JSON.stringify(goalsData);
+  }
+
+  renderStudentProfileDashboard(student);
+
+  // Re-expand previously expanded cards
+  expandedCards.forEach(function(cardId) {
+    var card = document.getElementById(cardId);
+    if (card) card.classList.add('expanded');
+  });
+}
+
 function goBackFromMissing() {
   renderDashboard(appState.dashboardData);
   showView('dashboard-view');
@@ -1239,6 +1526,10 @@ function showAddStudent() {
 }
 
 function editStudent(studentId) {
+  showStudentProfile(studentId);
+}
+
+function showStudentProfile(studentId) {
   appState.currentStudentId = studentId;
   document.getElementById('student-view-breadcrumb').textContent = 'Student Profile';
   document.getElementById('student-view-title').textContent = 'Loading\u2026';
@@ -1251,10 +1542,13 @@ function editStudent(studentId) {
       var student = (students || []).find(function(s) { return s.id === studentId; });
       if (!student) { showToast('Student not found'); return; }
 
+      // Store student reference for edit access
+      appState.currentStudent = student;
+
       try {
         document.getElementById('student-view-title').textContent =
           student.firstName + ' ' + student.lastName;
-        renderStudentForm(student);
+        renderStudentProfileDashboard(student);
         renderStudentMenu(studentId);
       } catch(e) { showToast('Render error: ' + e.message); return; }
 
@@ -1268,6 +1562,207 @@ function editStudent(studentId) {
     })
     .withFailureHandler(function(err) { showToast('Error: ' + (err && err.message ? err.message : String(err))); })
     .getStudents();
+}
+
+function renderStudentProfileDashboard(student) {
+  var container = document.getElementById('student-form-container');
+  var html = '';
+
+  // ─── Section 1: Academic Snapshot ───
+  html += '<div class="profile-section-card">';
+  html += '<div class="profile-section-header">' +
+    '<span class="profile-section-title">Academics</span>' +
+    '<button class="btn btn-sm btn-primary" onclick="startCheckIn(\'' + student.id + '\')">New Check-In</button>' +
+  '</div>';
+
+  var academicData = student.academicData || [];
+  if (academicData.length === 0) {
+    html += '<div class="profile-empty-state"><p>No academic data from the latest check-in.</p></div>';
+  } else {
+    // GPA summary bar
+    var totalMissing = student.totalMissing || 0;
+    html += '<div class="profile-gpa-bar">';
+    if (student.gpa != null) {
+      var gpaClass = student.gpa >= 3.5 ? 'high' : student.gpa >= 2.5 ? 'mid' : 'low';
+      html += '<span class="gpa-label">GPA</span><span class="gpa-value ' + gpaClass + '">' + student.gpa.toFixed(2) + '</span>';
+    } else {
+      html += '<span class="gpa-label">GPA</span><span class="gpa-value">--</span>';
+    }
+    html += '<span style="margin-left:auto;" class="gpa-label">Missing</span>';
+    if (totalMissing === 0) {
+      html += '<span class="gpa-value high">0</span>';
+    } else {
+      html += '<span class="gpa-value low">' + totalMissing + '</span>';
+    }
+    html += '</div>';
+
+    // Expandable class cards
+    html += '<div class="profile-class-cards">';
+    academicData.forEach(function(c, idx) {
+      var missingNum = Number(c.missing) || 0;
+      var assignments = c.missingAssignments || [];
+      var badgeClass = missingNum === 0 ? 'badge-green' : missingNum <= 3 ? 'badge-yellow' : 'badge-red';
+      var classLabel = c.className || 'Unknown';
+
+      var matchedClass = (student.classes || []).find(function(cl) { return cl.name === c.className; });
+      if (matchedClass && matchedClass.period) classLabel += ' (P' + matchedClass.period + ')';
+
+      html += '<div class="profile-class-card" id="profile-card-' + idx + '">' +
+        '<div class="profile-class-header" onclick="toggleProfileClass(' + idx + ')">' +
+          '<div class="profile-class-info">' +
+            '<span class="profile-class-name">' + esc(classLabel) + '</span>' +
+            '<span class="profile-class-grade">' + esc(c.grade || '--') + '</span>' +
+          '</div>' +
+          '<div class="profile-class-right">' +
+            '<div class="profile-class-badge ' + badgeClass + '">' + missingNum + '</div>' +
+            '<svg class="expand-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>' +
+          '</div>' +
+        '</div>' +
+        '<div class="profile-class-detail">';
+
+      if (missingNum === 0) {
+        html += '<div class="missing-none-msg" style="padding:12px 16px;">No missing assignments</div>';
+      } else if (assignments.length > 0) {
+        var sorted = assignments.map(function(a, i) {
+          return { name: a.name, type: a.type, _origIdx: i };
+        }).sort(function(a, b) {
+          var nameComp = (a.name || '').localeCompare(b.name || '');
+          if (nameComp !== 0) return nameComp;
+          return (a.type || '').localeCompare(b.type || '');
+        });
+
+        html += '<table class="missing-detail-table">' +
+          '<thead><tr><th>Assignment Name</th><th>Type</th><th>Actions</th></tr></thead><tbody>';
+        sorted.forEach(function(a) {
+          var typeClass = a.type === 'Summative' ? 'type-summative' :
+                          a.type === 'Formative' ? 'type-formative' : '';
+          html += '<tr>' +
+            '<td>' + esc(a.name || 'Untitled') + '</td>' +
+            '<td><span class="assignment-type ' + typeClass + '">' + esc(a.type || 'Unknown') + '</span></td>' +
+            '<td class="missing-actions-cell">' +
+              '<button class="missing-action-btn btn-check" onclick="event.stopPropagation(); profileMarkDone(\'' + student.id + '\', ' + idx + ', ' + a._origIdx + ', this)" title="Mark as complete">' +
+                '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>' +
+              '</button>' +
+              '<button class="missing-action-btn btn-delete" onclick="event.stopPropagation(); profileRemoveAssignment(\'' + student.id + '\', ' + idx + ', ' + a._origIdx + ')" title="Remove assignment">' +
+                '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>' +
+              '</button>' +
+            '</td>' +
+          '</tr>';
+        });
+        html += '</tbody></table>';
+      } else {
+        html += '<div class="missing-count-only" style="padding:12px 16px;">' + missingNum +
+          ' missing assignment' + (missingNum !== 1 ? 's' : '') +
+          ' recorded (no details available)</div>';
+      }
+
+      // Add Missing Assignment inline form
+      html += '<div class="mv-add-section">' +
+        '<button type="button" class="btn-ghost btn-sm mv-add-btn" id="pv-add-btn-' + idx + '" onclick="event.stopPropagation(); showProfileAddMissing(\'' + student.id + '\', ' + idx + ')">+ Add Missing Assignment</button>' +
+        '<div class="mv-add-form" id="pv-add-form-' + idx + '" style="display:none;">' +
+          '<div class="mv-add-form-row">' +
+            '<input type="text" class="mv-add-name" id="pv-add-name-' + idx + '" placeholder="Assignment name" onkeydown="if(event.key===\'Enter\'){event.preventDefault();profileConfirmAddMissing(\'' + student.id + '\',' + idx + ');}">' +
+            '<select class="mv-add-type" id="pv-add-type-' + idx + '">' +
+              '<option value="">-- Type --</option>' +
+              '<option value="Formative">Formative</option>' +
+              '<option value="Summative">Summative</option>' +
+            '</select>' +
+            '<button type="button" class="mv-confirm-btn" onclick="event.stopPropagation(); profileConfirmAddMissing(\'' + student.id + '\', ' + idx + ')" title="Add assignment">' +
+              '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>' +
+            '</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+      html += '</div></div>';
+    });
+    html += '</div>';
+  }
+  html += '</div>';
+
+  // ─── Section 2: Goals & Objectives ───
+  html += '<div class="profile-section-card">';
+  html += '<div class="profile-section-header">' +
+    '<span class="profile-section-title">Goals &amp; Objectives</span>' +
+    '<span class="goals-autosave-status" id="goals-autosave-status"></span>' +
+  '</div>';
+  html += '<div id="goals-autosave-container">';
+
+  // Parse goals — backward compat with old iepGoal field
+  var goals = [];
+  if (student.goalsJson) {
+    try { goals = JSON.parse(student.goalsJson); } catch(e) { goals = []; }
+  } else if (student.goals && student.goals.length > 0) {
+    goals = student.goals;
+  }
+  if (goals.length === 0 && student.iepGoal) {
+    goals = [{ id: 'migrated-' + Date.now(), text: student.iepGoal, objectives: [] }];
+  }
+
+  if (goals.length > 0) {
+    goals.forEach(function(goal) {
+      html += renderGoalItem(goal);
+    });
+  }
+
+  html += '</div>';
+  html += '<button type="button" class="btn btn-sm btn-secondary" onclick="addGoal()" style="margin-top:8px;">+ Add Goal</button>';
+  html += '</div>';
+
+  // ─── Section 3: Check-In History placeholder ───
+  html += '<div id="checkin-history-section"></div>';
+
+  container.innerHTML = html;
+
+  // Setup goals autosave listeners
+  setupGoalsAutosave();
+}
+
+function renderGoalItem(goal) {
+  var html = '<div class="profile-goal-item" data-goal-id="' + esc(goal.id) + '">';
+  html += '<div class="profile-goal-header">' +
+    '<span class="profile-goal-label">IEP Goal</span>' +
+    '<button class="goal-remove-btn" onclick="removeGoal(\'' + esc(goal.id) + '\')" title="Remove goal">' +
+      '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>' +
+    '</button>' +
+  '</div>';
+  html += '<textarea class="profile-goal-textarea" data-field="goal-text" placeholder="Enter IEP goal...">' + esc(goal.text || '') + '</textarea>';
+
+  // Objectives
+  html += '<div class="profile-objectives-list">';
+  var objectives = goal.objectives || [];
+  if (objectives.length > 0) {
+    objectives.forEach(function(obj) {
+      html += '<div class="profile-objective-item" data-obj-id="' + esc(obj.id) + '">' +
+        '<textarea data-field="obj-text" placeholder="Enter objective...">' + esc(obj.text || '') + '</textarea>' +
+        '<button class="goal-remove-btn" onclick="removeObjective(\'' + esc(goal.id) + '\', \'' + esc(obj.id) + '\')" title="Remove objective">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>' +
+        '</button>' +
+      '</div>';
+    });
+  }
+  html += '<button type="button" class="btn-ghost btn-sm" onclick="addObjective(\'' + esc(goal.id) + '\')" style="margin-top:4px;">+ Add Objective</button>';
+  html += '</div>';
+
+  html += '</div>';
+  return html;
+}
+
+function toggleProfileClass(idx) {
+  var card = document.getElementById('profile-card-' + idx);
+  if (card.classList.contains('expanded')) {
+    card.classList.remove('expanded');
+  } else {
+    card.classList.add('expanded');
+  }
+}
+
+function cancelStudentEdit() {
+  if (appState.currentStudentId) {
+    showStudentProfile(appState.currentStudentId);
+  } else {
+    showDashboard();
+  }
 }
 
 function renderStudentForm(student) {
@@ -1334,7 +1829,7 @@ function renderStudentForm(student) {
   }
   html += '</div>' +
     '<div style="display:flex;gap:8px;">' +
-      '<button class="btn btn-secondary" onclick="showDashboard()">Cancel</button>' +
+      '<button class="btn btn-secondary" onclick="cancelStudentEdit()">Cancel</button>' +
       '<button class="btn btn-primary" onclick="saveStudentForm()">Save Student</button>' +
     '</div>' +
   '</div>';
@@ -1473,8 +1968,12 @@ function saveStudentForm() {
     });
   }
 
-  renderDashboard(appState.dashboardData);
-  showView('dashboard-view');
+  if (appState.currentStudentId) {
+    showStudentProfile(appState.currentStudentId);
+  } else {
+    renderDashboard(appState.dashboardData);
+    showView('dashboard-view');
+  }
   showToast('Saving\u2026');
 
   google.script.run
@@ -1650,6 +2149,7 @@ function renderStudentMenu(studentId) {
   var hasSheet = links.sheetUrl ? true : false;
 
   var items =
+    '<button class="dropdown-item" onclick="editStudentInfo()">Edit Student</button>' +
     '<button class="dropdown-item" onclick="handleFeedbackClick()">Request Teacher Feedback</button>';
   if (hasSheet) {
     items += '<button class="dropdown-item" onclick="handleViewFeedbackClick()">View Teacher Feedback</button>';
@@ -1664,6 +2164,37 @@ function renderStudentMenu(studentId) {
         items +
       '</div>' +
     '</div>';
+}
+
+function editStudentInfo() {
+  closeStudentMenu();
+  var studentId = appState.currentStudentId;
+  if (!studentId) return;
+
+  var student = appState.currentStudent;
+  if (student) {
+    document.getElementById('student-view-breadcrumb').innerHTML =
+      '<button class="breadcrumb-link" onclick="showStudentProfile(appState.currentStudentId)">Student Profile</button> ' +
+      '<svg class="breadcrumb-chevron" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg> Edit';
+    renderStudentForm(student);
+    renderStudentMenu(studentId);
+    return;
+  }
+
+  // Fallback: fetch student data if not cached
+  google.script.run
+    .withSuccessHandler(function(students) {
+      var s = (students || []).find(function(st) { return st.id === studentId; });
+      if (!s) { showToast('Student not found'); return; }
+      appState.currentStudent = s;
+      document.getElementById('student-view-breadcrumb').innerHTML =
+        '<button class="breadcrumb-link" onclick="showStudentProfile(appState.currentStudentId)">Student Profile</button> ' +
+        '<svg class="breadcrumb-chevron" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg> Edit';
+      renderStudentForm(s);
+      renderStudentMenu(studentId);
+    })
+    .withFailureHandler(function(err) { showToast('Error: ' + (err && err.message ? err.message : String(err))); })
+    .getStudents();
 }
 
 function toggleStudentMenu(e) {
@@ -2065,46 +2596,35 @@ function showDashboardSkeleton() {
 
 function showStudentProfileSkeleton() {
   var container = document.getElementById('student-form-container');
-  var html = '<div class="skeleton-fade-in"><div class="form-card">';
-  // Basic Info section
-  html += '<div class="skeleton-section">' +
-    '<div class="skeleton skeleton-section-title"></div>' +
-    '<div style="display:flex;gap:16px;"><div style="flex:1;"><div class="skeleton skeleton-input"></div></div>' +
-    '<div style="flex:1;"><div class="skeleton skeleton-input"></div></div></div>' +
-    '<div class="skeleton skeleton-input" style="width:50%;"></div>' +
-  '</div>';
-  // Focus & Support section
-  html += '<div class="skeleton-section">' +
-    '<div class="skeleton skeleton-section-title" style="width:25%;"></div>' +
-    '<div class="skeleton skeleton-input"></div>' +
-    '<div class="skeleton skeleton-input" style="height:80px;"></div>' +
-    '<div class="skeleton skeleton-input" style="height:80px;"></div>' +
-  '</div>';
-  // IEP Goal section
-  html += '<div class="skeleton-section">' +
-    '<div class="skeleton skeleton-section-title" style="width:20%;"></div>' +
-    '<div class="skeleton skeleton-input" style="height:80px;"></div>' +
-  '</div>';
-  // Classes section
-  html += '<div class="skeleton-section">' +
-    '<div class="skeleton skeleton-section-title" style="width:15%;"></div>';
-  for (var i = 0; i < 3; i++) {
-    html += '<div style="display:flex;gap:8px;margin-bottom:10px;">' +
-      '<div class="skeleton" style="flex:2;height:44px;border-radius:4px;"></div>' +
-      '<div class="skeleton" style="width:100px;height:44px;border-radius:4px;"></div>' +
-      '<div class="skeleton" style="width:40px;height:40px;border-radius:50%;"></div>' +
+  var html = '<div class="skeleton-fade-in">';
+  // Academics card
+  html += '<div class="profile-section-card">' +
+    '<div class="skeleton skeleton-section-title" style="width:20%;margin-bottom:16px;"></div>' +
+    '<div style="display:flex;gap:16px;padding:12px 16px;background:var(--md-surface-container-low);border-radius:var(--md-shape-sm);margin-bottom:12px;">' +
+      '<div class="skeleton skeleton-text w-20" style="margin:0;"></div>' +
+      '<div class="skeleton skeleton-chip" style="width:64px;height:32px;"></div>' +
+      '<div class="skeleton skeleton-text w-20" style="margin:0;margin-left:auto;"></div>' +
+      '<div class="skeleton skeleton-chip" style="width:40px;height:32px;"></div>' +
+    '</div>';
+  for (var i = 0; i < 4; i++) {
+    html += '<div style="border:1px solid var(--md-outline-variant);border-radius:var(--md-shape-md);padding:12px 16px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center;">' +
+      '<div style="display:flex;gap:12px;align-items:center;">' +
+        '<div class="skeleton skeleton-text w-30" style="margin:0;"></div>' +
+        '<div class="skeleton skeleton-text" style="width:24px;margin:0;"></div>' +
+      '</div>' +
+      '<div class="skeleton skeleton-chip"></div>' +
     '</div>';
   }
   html += '</div>';
-  // Buttons
-  html += '<div style="display:flex;gap:8px;justify-content:flex-end;">' +
-    '<div class="skeleton skeleton-btn" style="width:80px;height:40px;"></div>' +
-    '<div class="skeleton skeleton-btn" style="width:100px;height:40px;"></div>' +
+  // Goals card
+  html += '<div class="profile-section-card">' +
+    '<div class="skeleton skeleton-section-title" style="width:30%;margin-bottom:16px;"></div>' +
+    '<div class="skeleton skeleton-input" style="height:80px;margin-bottom:16px;"></div>' +
+    '<div class="skeleton skeleton-input" style="height:60px;margin-left:20px;"></div>' +
   '</div>';
-  html += '</div>';
-  // Check-in history skeleton
-  html += '<div class="form-card" style="margin-top:20px;">' +
-    '<div class="skeleton skeleton-section-title" style="width:35%;"></div>';
+  // Check-in history
+  html += '<div class="profile-section-card">' +
+    '<div class="skeleton skeleton-section-title" style="width:25%;margin-bottom:16px;"></div>';
   for (var j = 0; j < 2; j++) {
     html += '<div class="skeleton-card">' +
       '<div style="display:flex;justify-content:space-between;margin-bottom:12px;">' +
@@ -2112,7 +2632,6 @@ function showStudentProfileSkeleton() {
         '<div class="skeleton skeleton-chip"></div>' +
       '</div>' +
       '<div style="display:flex;gap:12px;flex-wrap:wrap;">' +
-        '<div class="skeleton skeleton-text w-20" style="margin:0;"></div>' +
         '<div class="skeleton skeleton-text w-20" style="margin:0;"></div>' +
         '<div class="skeleton skeleton-text w-20" style="margin:0;"></div>' +
         '<div class="skeleton skeleton-text w-20" style="margin:0;"></div>' +
