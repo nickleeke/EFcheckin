@@ -168,8 +168,7 @@ function showView(viewId) {
 
 // ─── Dashboard ───
 function showDashboard() {
-  showView('dashboard-view');
-  loadDashboard();
+  switchDashboardTab('caseload');
 }
 
 function loadDashboard() {
@@ -206,19 +205,25 @@ function loadDashboard() {
 }
 
 function switchDashboardTab(tabName) {
+  // Ensure dashboard view is visible (handles clicks from child pages)
+  showView('dashboard-view');
   // Deactivate all tabs and panels
-  document.querySelectorAll('.dashboard-tab').forEach(function(t) { t.classList.remove('active'); });
+  document.querySelectorAll('.nav-tab').forEach(function(t) { t.classList.remove('active'); });
   document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
   // Activate selected
   var tab = document.getElementById('tab-' + tabName);
   var panel = document.getElementById('tab-panel-' + tabName);
   if (tab) tab.classList.add('active');
   if (panel) panel.classList.add('active');
-  // Show/hide refresh button (not relevant for admin)
+  // Show/hide refresh button and add student button (not relevant for admin)
   var refreshBtn = document.getElementById('dashboard-refresh-btn');
   if (refreshBtn) refreshBtn.style.display = (tabName === 'admin') ? 'none' : '';
+  var addStudentBtn = document.getElementById('add-student-btn');
+  if (addStudentBtn) addStudentBtn.style.display = (tabName === 'admin') ? 'none' : '';
   // Render tab content
-  if (tabName === 'mycaseload') {
+  if (tabName === 'caseload') {
+    loadDashboard();
+  } else if (tabName === 'mycaseload') {
     renderMyCaseload();
   } else if (tabName === 'admin') {
     loadAdminView();
