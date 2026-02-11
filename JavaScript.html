@@ -1623,6 +1623,29 @@ function renderStudentProfileDashboard(student) {
   var container = document.getElementById('student-form-container');
   var html = '';
 
+  // ─── Section 0: Schedule ───
+  var classes = student.classes || [];
+  if (classes.length > 0) {
+    // Sort by period number (classes without a period go to the end)
+    var sorted = classes.slice().sort(function(a, b) {
+      var pa = parseInt(a.period) || 999;
+      var pb = parseInt(b.period) || 999;
+      return pa - pb;
+    });
+
+    html += '<div class="profile-section-card">';
+    html += '<div class="profile-section-header">' +
+      '<span class="profile-section-title">Schedule</span>' +
+    '</div>';
+    html += '<table class="schedule-table"><thead><tr><th>Period</th><th>Class</th></tr></thead><tbody>';
+    sorted.forEach(function(cl) {
+      html += '<tr><td class="schedule-period">' + esc(cl.period ? String(cl.period) : '--') + '</td>' +
+        '<td>' + esc(cl.name || 'Unknown') + '</td></tr>';
+    });
+    html += '</tbody></table>';
+    html += '</div>';
+  }
+
   // ─── Section 1: Academic Snapshot ───
   html += '<div class="profile-section-card">';
   html += '<div class="profile-section-header">' +
@@ -2230,6 +2253,7 @@ function renderStudentMenu(studentId) {
 
   var items =
     '<button class="dropdown-item" onclick="editStudentInfo()">Edit Student</button>' +
+    '<button class="dropdown-item" onclick="printStudentReport()">Print Missing Work &amp; Grades</button>' +
     '<button class="dropdown-item" onclick="handleFeedbackClick()">Request Teacher Feedback</button>';
   if (hasSheet) {
     items += '<button class="dropdown-item" onclick="handleViewFeedbackClick()">View Teacher Feedback</button>';
@@ -2294,6 +2318,146 @@ function closeStudentMenu() {
   var menu = document.getElementById('student-dropdown');
   if (menu) menu.style.display = 'none';
   document.removeEventListener('click', closeStudentMenu);
+}
+
+function printStudentReport() {
+  closeStudentMenu();
+  var student = appState.currentStudent;
+  if (!student) {
+    student = appState.dashboardData.find(function(s) { return s.id === appState.currentStudentId; });
+  }
+  if (!student) { showToast('Student data not available'); return; }
+
+  var name = (student.firstName || '') + ' ' + (student.lastName || '');
+  var grade = student.grade || '--';
+  var academicData = student.academicData || [];
+  var classes = student.classes || [];
+
+  // Build sorted schedule
+  var sortedClasses = classes.slice().sort(function(a, b) {
+    return (parseInt(a.period) || 999) - (parseInt(b.period) || 999);
+  });
+
+  var html = '<!DOCTYPE html><html><head><title>Report - ' + esc(name) + '</title>' +
+    '<style>' +
+    'body { font-family: "Roboto", Arial, sans-serif; color: #201A1A; margin: 0; padding: 24px 32px; font-size: 13px; }' +
+    'h1 { font-size: 20px; margin: 0 0 4px; }' +
+    '.subtitle { color: #534343; font-size: 13px; margin-bottom: 20px; }' +
+    'h2 { font-size: 15px; font-weight: 500; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 2px solid #C41E3A; }' +
+    'table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }' +
+    'th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid #D8C2C2; }' +
+    'th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #534343; background: #F9EAEA; font-weight: 500; }' +
+    '.period-col { width: 60px; text-align: center; }' +
+    '.grade-col { width: 60px; text-align: center; }' +
+    '.missing-col { width: 80px; text-align: center; }' +
+    '.grade-good { color: #1B5E20; font-weight: 500; }' +
+    '.grade-mid { color: #7A5900; font-weight: 500; }' +
+    '.grade-low { color: #BA1A1A; font-weight: 500; }' +
+    '.badge { display: inline-block; min-width: 22px; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 500; text-align: center; }' +
+    '.badge-green { background: #D6F5D6; color: #1B5E20; }' +
+    '.badge-yellow { background: #FFF3CD; color: #7A5900; }' +
+    '.badge-red { background: #FFDAD6; color: #410006; }' +
+    '.missing-section { margin-left: 16px; margin-bottom: 12px; }' +
+    '.missing-section h3 { font-size: 13px; font-weight: 500; margin: 8px 0 4px; }' +
+    '.type-tag { font-size: 11px; padding: 1px 6px; border-radius: 4px; }' +
+    '.type-formative { background: #E3F2FD; color: #0D47A1; }' +
+    '.type-summative { background: #FCE4EC; color: #880E4F; }' +
+    '.gpa-bar { padding: 8px 12px; background: #F9EAEA; border-radius: 8px; margin-bottom: 12px; display: flex; gap: 16px; align-items: center; }' +
+    '.gpa-bar .label { font-size: 12px; color: #534343; }' +
+    '.gpa-bar .value { font-size: 16px; font-weight: 600; }' +
+    '.footer { margin-top: 24px; font-size: 11px; color: #857373; text-align: center; }' +
+    '@media print { body { padding: 12px 16px; } }' +
+    '</style></head><body>';
+
+  // Header
+  html += '<h1>' + esc(name) + '</h1>';
+  html += '<div class="subtitle">Grade ' + esc(grade) + ' &bull; Printed ' + new Date().toLocaleDateString() + '</div>';
+
+  // Schedule section
+  if (sortedClasses.length > 0) {
+    html += '<h2>Schedule</h2>';
+    html += '<table><thead><tr><th class="period-col">Period</th><th>Class</th></tr></thead><tbody>';
+    sortedClasses.forEach(function(cl) {
+      html += '<tr><td class="period-col">' + esc(cl.period ? String(cl.period) : '--') + '</td>' +
+        '<td>' + esc(cl.name || 'Unknown') + '</td></tr>';
+    });
+    html += '</tbody></table>';
+  }
+
+  // Classes with Grades section
+  if (academicData.length > 0) {
+    var gpaMap = { 'A': 4.0, 'A-': 3.7, 'B+': 3.3, 'B': 3.0, 'B-': 2.7, 'C+': 2.3, 'C': 2.0, 'C-': 1.7, 'D+': 1.3, 'D': 1.0, 'D-': 0.7, 'F': 0.0 };
+    var totalMissing = 0;
+    academicData.forEach(function(c) { totalMissing += (Number(c.missing) || 0); });
+
+    // GPA bar
+    html += '<h2>Classes &amp; Grades</h2>';
+    html += '<div class="gpa-bar">';
+    if (student.gpa != null) {
+      var gpaClass = student.gpa >= 3.5 ? 'grade-good' : student.gpa >= 2.5 ? 'grade-mid' : 'grade-low';
+      html += '<span class="label">GPA</span><span class="value ' + gpaClass + '">' + student.gpa.toFixed(2) + '</span>';
+    }
+    html += '<span class="label" style="margin-left:auto;">Total Missing</span><span class="value ' + (totalMissing === 0 ? 'grade-good' : 'grade-low') + '">' + totalMissing + '</span>';
+    html += '</div>';
+
+    // Grades table
+    html += '<table><thead><tr><th>Class</th><th class="grade-col">Grade</th><th class="missing-col">Missing</th></tr></thead><tbody>';
+    academicData.forEach(function(c) {
+      var missingNum = Number(c.missing) || 0;
+      var badgeClass = missingNum === 0 ? 'badge-green' : missingNum <= 3 ? 'badge-yellow' : 'badge-red';
+      var classLabel = c.className || 'Unknown';
+      var matchedClass = (student.classes || []).find(function(cl) { return cl.name === c.className; });
+      if (matchedClass && matchedClass.period) classLabel += ' (P' + matchedClass.period + ')';
+
+      var gradeVal = gpaMap[c.grade];
+      var gradeClass = gradeVal != null ? (gradeVal >= 3.0 ? 'grade-good' : gradeVal >= 2.0 ? 'grade-mid' : 'grade-low') : '';
+
+      html += '<tr><td>' + esc(classLabel) + '</td>' +
+        '<td class="grade-col ' + gradeClass + '">' + esc(c.grade || '--') + '</td>' +
+        '<td class="missing-col"><span class="badge ' + badgeClass + '">' + missingNum + '</span></td></tr>';
+    });
+    html += '</tbody></table>';
+
+    // Missing work detail
+    var hasMissing = academicData.some(function(c) { return (c.missingAssignments || []).length > 0; });
+    if (hasMissing) {
+      html += '<h2>Missing Work Detail</h2>';
+      academicData.forEach(function(c) {
+        var assignments = c.missingAssignments || [];
+        if (assignments.length === 0) return;
+        var classLabel = c.className || 'Unknown';
+        var matchedClass = (student.classes || []).find(function(cl) { return cl.name === c.className; });
+        if (matchedClass && matchedClass.period) classLabel += ' (P' + matchedClass.period + ')';
+
+        html += '<div class="missing-section"><h3>' + esc(classLabel) + ' (' + assignments.length + ')</h3>';
+        html += '<table><thead><tr><th>Assignment</th><th>Type</th></tr></thead><tbody>';
+        assignments.slice().sort(function(a, b) {
+          return (a.name || '').localeCompare(b.name || '');
+        }).forEach(function(a) {
+          var typeClass = a.type === 'Summative' ? 'type-summative' : a.type === 'Formative' ? 'type-formative' : '';
+          html += '<tr><td>' + esc(a.name || 'Untitled') + '</td>' +
+            '<td><span class="type-tag ' + typeClass + '">' + esc(a.type || 'Unknown') + '</span></td></tr>';
+        });
+        html += '</tbody></table></div>';
+      });
+    }
+  } else {
+    html += '<h2>Classes &amp; Grades</h2>';
+    html += '<p style="color:#534343;">No academic data from the latest check-in.</p>';
+  }
+
+  html += '<div class="footer">Caseload Dashboard &bull; Richfield Public Schools</div>';
+  html += '</body></html>';
+
+  var printWindow = window.open('', '_blank');
+  if (printWindow) {
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  } else {
+    showToast('Please allow pop-ups to print the report');
+  }
 }
 
 function handleFeedbackClick() {
