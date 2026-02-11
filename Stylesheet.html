@@ -222,30 +222,21 @@ body {
   opacity: 0.7;
 }
 
-/* ─── Top App Bar (M3 Small) with Persistent Tabs ─── */
+/* ─── Top App Bar (M3 Small) with Inline Tabs ─── */
 nav {
   background: var(--md-primary);
   color: var(--md-on-primary);
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: center;
   position: sticky; top: 0; z-index: 100;
-}
-.nav-top-row {
   height: 64px;
   padding: 0 16px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
 }
 .nav-brand {
-  /* M3 Title Large */
-  font-size: 22px;
-  font-weight: 400;
-  line-height: 28px;
-  letter-spacing: 0px;
   display: flex;
   align-items: center;
-  gap: 16px;
+  flex-shrink: 0;
 }
 .nav-logo {
   height: 40px;
@@ -253,60 +244,46 @@ nav {
   object-fit: contain;
   flex-shrink: 0;
 }
-.nav-actions { display: flex; gap: 8px; }
 
-.nav-btn {
-  /* M3 Tonal Icon/Text Button on colored surface */
-  height: 40px;
-  padding: 0 16px;
-  background: rgba(255,255,255,0.12);
-  color: var(--md-on-primary);
-  border: none;
-  border-radius: var(--md-shape-full);
-  cursor: pointer;
-  font-family: 'Roboto', sans-serif;
-  /* M3 Label Large */
-  font-size: 14px;
-  font-weight: 500;
-  letter-spacing: 0.1px;
-  line-height: 20px;
-  transition: background 0.2s;
-}
-.nav-btn:hover { background: rgba(255,255,255,0.20); }
-.nav-btn:active { background: rgba(255,255,255,0.24); }
-.nav-btn.btn-outline {
-  background: transparent;
-  border: 1px solid rgba(255,255,255,0.40);
-}
-.nav-btn.btn-outline:hover { background: rgba(255,255,255,0.12); }
-
-/* ─── Navigation Tabs (M3 Primary Tabs on Primary Surface) ─── */
+/* ─── Navigation Tabs (M3 Primary Tabs — Icon + Label) ─── */
 .nav-tabs {
   display: flex;
   align-items: stretch;
-  height: 48px;
-  padding: 0 16px;
+  justify-content: center;
+  height: 100%;
+  flex: 1;
+  min-width: 0;
 }
 .nav-tab {
-  height: 48px;
+  height: 100%;
   padding: 0 24px;
   background: none;
   border: none;
   border-bottom: 3px solid transparent;
   cursor: pointer;
   font-family: 'Roboto', sans-serif;
-  /* M3 Title Small */
-  font-size: 14px;
-  font-weight: 500;
-  letter-spacing: 0.1px;
-  line-height: 20px;
   color: rgba(255,255,255,0.70);
   transition: color 0.2s, border-color 0.2s, background 0.2s;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 2px;
   position: relative;
   white-space: nowrap;
+}
+.nav-tab-icon {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
+  flex-shrink: 0;
+}
+.nav-tab-label {
+  /* M3 Label Medium */
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  line-height: 16px;
 }
 .nav-tab:hover {
   background: rgba(255,255,255,0.08);
@@ -1790,22 +1767,18 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 
 /* ─── Responsive ─── */
 @media (max-width: 768px) {
-  .nav-top-row {
+  nav {
     height: 56px;
     padding: 0 12px;
   }
-  .nav-brand { font-size: 18px; gap: 8px; }
   .nav-logo { height: 32px; }
   .nav-tabs {
-    height: 44px;
-    padding: 0 8px;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
   }
-  .nav-tab {
-    padding: 0 16px;
-    font-size: 13px;
-  }
+  .nav-tab { padding: 0 12px; }
+  .nav-tab-icon { width: 20px; height: 20px; }
+  .nav-tab-label { font-size: 11px; }
   main { padding: 16px; }
   .form-row { flex-direction: column; gap: 0; }
   .dashboard-table { font-size: 13px; }
