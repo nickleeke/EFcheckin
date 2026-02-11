@@ -2375,7 +2375,14 @@ function printStudentReport() {
   // Logo + Header
   html += '<div class="report-logo"><img src="https://resources.finalsite.net/images/f_auto,q_auto/v1593114034/richfieldschoolsorg/nevtdqxgci8pdkldabzj/MS_Horiz_C.png" alt="Richfield Middle School"></div>';
   html += '<h1>' + esc(name) + '</h1>';
-  html += '<div class="subtitle">Grade ' + esc(grade) + ' &bull; Printed ' + new Date().toLocaleDateString() + '</div>';
+  var subtitleParts = ['Grade ' + esc(grade)];
+  var cmEmail = student.caseManagerEmail || '';
+  if (cmEmail) {
+    var cmName = getCaseManagerName(cmEmail);
+    subtitleParts.push('Case Manager: ' + esc(cmName) + ' (' + esc(cmEmail) + ')');
+  }
+  subtitleParts.push('Printed ' + new Date().toLocaleDateString());
+  html += '<div class="subtitle">' + subtitleParts.join(' &bull; ') + '</div>';
 
   // Schedule section
   if (sortedClasses.length > 0) {
