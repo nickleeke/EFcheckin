@@ -21,6 +21,8 @@ const GPA_MAP = {
   'F':0.0
 };
 
+var SUPERUSER_EMAIL = 'nicholas.leeke@rpsmn.org';
+
 // ───── User Identity ─────
 
 /** Get the authenticated user's email. Requires "Execute as: User accessing the web app". */
@@ -66,7 +68,8 @@ function getUserStatus() {
   return {
     isNewUser: !ssId,
     email: email,
-    pendingInvite: invite
+    pendingInvite: invite,
+    isSuperuser: email === SUPERUSER_EMAIL
   };
 }
 
@@ -164,7 +167,7 @@ function include(filename) {
 var STUDENT_HEADERS = [
   'id','firstName','lastName','grade','period',
   'focusGoal','accommodations','notes','classesJson',
-  'createdAt','updatedAt','iepGoal','goalsJson'
+  'createdAt','updatedAt','iepGoal','goalsJson','caseManagerEmail'
 ];
 var CHECKIN_HEADERS = [
   'id','studentId','weekOf',
@@ -285,6 +288,7 @@ function saveStudent(profile) {
         sheet.getRange(i+1, colIdx['classesJson']).setValue(classesJson);
         sheet.getRange(i+1, colIdx['iepGoal']).setValue(profile.iepGoal || '');
         sheet.getRange(i+1, colIdx['goalsJson']).setValue(profile.goalsJson || '');
+        sheet.getRange(i+1, colIdx['caseManagerEmail']).setValue(profile.caseManagerEmail || '');
         sheet.getRange(i+1, colIdx['updatedAt']).setValue(now);
         invalidateCache_();
         return { success: true, id: profile.id };
@@ -298,7 +302,7 @@ function saveStudent(profile) {
     profile.grade||'', profile.period||'',
     profile.focusGoal||'', profile.accommodations||'',
     profile.notes||'', classesJson, now, now,
-    profile.iepGoal||'', profile.goalsJson||''
+    profile.iepGoal||'', profile.goalsJson||'', profile.caseManagerEmail||''
   ]);
   invalidateCache_();
   return { success: true, id: id };
@@ -538,6 +542,7 @@ function getDashboardData() {
       focusGoal: s.focusGoal,
       iepGoal: s.iepGoal || '',
       goalsJson: s.goalsJson || '',
+      caseManagerEmail: s.caseManagerEmail || '',
       classes: s.classes || [],
       totalCheckIns: totalCheckIns,
       latestCheckInId: latest ? latest.id : null,
@@ -895,4 +900,115 @@ function showWebAppUrl() {
     '<input type="text" value="' + url + '" style="width:100%;padding:8px;font-size:13px;" onclick="this.select()" readonly>'
   ).setWidth(450).setHeight(100);
   SpreadsheetApp.getUi().showModalDialog(html, 'Web App URL');
+}
+
+// ───── Case Manager Management (Superuser Admin) ─────
+
+/** Get the global list of case managers. Accessible to all users. */
+function getCaseManagers() {
+  try {
+    var raw = PropertiesService.getScriptProperties().getProperty('case_managers');
+    if (raw) return JSON.parse(raw);
+  } catch(e) {}
+  return [];
+}
+
+/** Check if the current user is the superuser. */
+function isSuperuser() {
+  return getCurrentUserEmail_() === SUPERUSER_EMAIL;
+}
+
+/** Add a case manager to the global list. Superuser only. */
+function addCaseManager(email, name) {
+  if (getCurrentUserEmail_() !== SUPERUSER_EMAIL) {
+    return { success: false, error: 'Unauthorized' };
+  }
+  email = String(email || '').trim().toLowerCase();
+  name = String(name || '').trim();
+  if (!email || email.indexOf('@') === -1) {
+    return { success: false, error: 'Please enter a valid email address.' };
+  }
+  if (!name) {
+    return { success: false, error: 'Please enter a display name.' };
+  }
+
+  var scriptProps = PropertiesService.getScriptProperties();
+  var list = [];
+  try {
+    var raw = scriptProps.getProperty('case_managers');
+    if (raw) list = JSON.parse(raw);
+  } catch(e) {}
+
+  var exists = list.some(function(cm) { return cm.email === email; });
+  if (exists) {
+    return { success: false, error: 'This case manager already exists.' };
+  }
+
+  list.push({ email: email, name: name });
+  scriptProps.setProperty('case_managers', JSON.stringify(list));
+  return { success: true };
+}
+
+/** Remove a case manager from the global list. Superuser only. */
+function removeCaseManager(email) {
+  if (getCurrentUserEmail_() !== SUPERUSER_EMAIL) {
+    return { success: false, error: 'Unauthorized' };
+  }
+  email = String(email || '').trim().toLowerCase();
+
+  var scriptProps = PropertiesService.getScriptProperties();
+  var list = [];
+  try {
+    var raw = scriptProps.getProperty('case_managers');
+    if (raw) list = JSON.parse(raw);
+  } catch(e) {}
+
+  list = list.filter(function(cm) { return cm.email !== email; });
+  scriptProps.setProperty('case_managers', JSON.stringify(list));
+  return { success: true };
+}
+
+/** Get all students for the admin assignment view. Superuser only. */
+function getAllStudentsForAdmin() {
+  if (getCurrentUserEmail_() !== SUPERUSER_EMAIL) {
+    return { success: false, error: 'Unauthorized' };
+  }
+  var students = getStudents();
+  return students.map(function(s) {
+    return {
+      id: s.id,
+      firstName: s.firstName,
+      lastName: s.lastName,
+      grade: s.grade,
+      caseManagerEmail: s.caseManagerEmail || ''
+    };
+  });
+}
+
+/** Assign a case manager to a student. Superuser only. */
+function assignCaseManager(studentId, caseManagerEmail) {
+  if (getCurrentUserEmail_() !== SUPERUSER_EMAIL) {
+    return { success: false, error: 'Unauthorized' };
+  }
+  var ss = getSS_();
+  var sheet = ss.getSheetByName(SHEET_STUDENTS);
+  if (!sheet) return { success: false, error: 'Students sheet not found.' };
+
+  var data = sheet.getDataRange().getValues();
+  var headers = data[0];
+  var colIdx = {};
+  headers.forEach(function(h, i) { colIdx[h] = i + 1; });
+
+  if (!colIdx['caseManagerEmail']) {
+    return { success: false, error: 'caseManagerEmail column not found. Please reload.' };
+  }
+
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][0] === studentId) {
+      sheet.getRange(i + 1, colIdx['caseManagerEmail']).setValue(caseManagerEmail || '');
+      invalidateCache_();
+      return { success: true };
+    }
+  }
+  return { success: false, error: 'Student not found.' };
 }

@@ -2012,4 +2012,184 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
     width: 100%;
   }
 }
+
+/* ─── Dashboard Tabs ─── */
+.dashboard-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+.dashboard-tab {
+  height: 40px;
+  padding: 0 20px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  font-family: 'Roboto', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.1px;
+  line-height: 20px;
+  color: var(--md-on-surface-variant);
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+.dashboard-tab:hover {
+  background: rgba(196,30,58,0.08);
+  color: var(--md-on-surface);
+}
+.dashboard-tab.active {
+  color: var(--md-primary);
+  border-bottom-color: var(--md-primary);
+}
+
+/* Tab content panels */
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ─── Admin View (Superuser) ─── */
+.admin-cm-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--md-outline-variant);
+}
+.admin-cm-row:last-child { border-bottom: none; }
+.admin-cm-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.admin-cm-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--md-on-surface);
+}
+.admin-cm-email {
+  font-size: 12px;
+  color: var(--md-on-surface-variant);
+}
+.admin-add-form {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.admin-add-form input {
+  flex: 1;
+  padding: 10px 14px;
+  font-size: 14px;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-sm);
+  background: var(--md-surface);
+  color: var(--md-on-surface);
+  font-family: 'Roboto', sans-serif;
+}
+.admin-add-form input:focus {
+  outline: none;
+  border-color: var(--md-primary);
+  box-shadow: 0 0 0 1px var(--md-primary);
+}
+.admin-assign-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--md-surface);
+  border-radius: var(--md-shape-md);
+  overflow: hidden;
+  border: 1px solid var(--md-outline-variant);
+}
+.admin-assign-table th {
+  background: var(--md-surface-container);
+  padding: 12px 16px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  color: var(--md-on-surface-variant);
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--md-outline-variant);
+}
+.admin-assign-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--md-outline-variant);
+  font-size: 14px;
+}
+.admin-assign-table tbody tr:last-child td { border-bottom: none; }
+.admin-assign-table select {
+  padding: 8px 12px;
+  font-size: 14px;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-sm);
+  background: var(--md-surface);
+  color: var(--md-on-surface);
+  font-family: 'Roboto', sans-serif;
+  min-width: 200px;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23534343' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 32px;
+}
+.admin-assign-table select:focus {
+  outline: none;
+  border-color: var(--md-primary);
+  box-shadow: 0 0 0 1px var(--md-primary);
+}
+
+/* ─── My Caseload View ─── */
+.mycaseload-spedforms-btn {
+  margin-bottom: 16px;
+}
+
+/* ─── Case Manager Info in Side Panel ─── */
+.sp-case-manager {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+.sp-case-manager-name {
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.4px;
+  color: var(--md-on-surface-variant);
+}
+.sp-case-manager .btn-icon {
+  width: 28px;
+  height: 28px;
+}
+
+/* ─── Case Manager in Student Form ─── */
+.case-manager-display {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+@media (max-width: 768px) {
+  .dashboard-tabs {
+    flex-wrap: wrap;
+    gap: 0;
+  }
+  .dashboard-tab {
+    padding: 0 12px;
+    font-size: 13px;
+  }
+}
+@media (max-width: 600px) {
+  .admin-add-form {
+    flex-direction: column;
+  }
+  .admin-add-form input,
+  .admin-add-form .btn {
+    width: 100%;
+  }
+  .admin-assign-table select {
+    min-width: unset;
+    width: 100%;
+  }
+}
 </style>

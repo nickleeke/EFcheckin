@@ -36,15 +36,27 @@
       <div id="onboarding-container"></div>
     </div>
 
-    <!-- Dashboard View -->
+    <!-- Dashboard View (with tabs) -->
     <div id="dashboard-view" class="view">
       <div class="view-header" style="display:flex;justify-content:space-between;align-items:center;">
-        <h2>Caseload Dashboard</h2>
-        <button onclick="refreshDashboard()" class="btn-icon" aria-label="Refresh dashboard" title="Refresh data">
+        <div class="dashboard-tabs" id="dashboard-tabs">
+          <button class="dashboard-tab active" id="tab-caseload" onclick="switchDashboardTab('caseload')">Caseload Dashboard</button>
+          <button class="dashboard-tab" id="tab-mycaseload" onclick="switchDashboardTab('mycaseload')" style="display:none;">My Caseload</button>
+          <button class="dashboard-tab" id="tab-admin" onclick="switchDashboardTab('admin')" style="display:none;">Admin</button>
+        </div>
+        <button onclick="refreshDashboard()" class="btn-icon" id="dashboard-refresh-btn" aria-label="Refresh dashboard" title="Refresh data">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
         </button>
       </div>
-      <div id="dashboard-table-container"></div>
+      <div id="tab-panel-caseload" class="tab-panel active">
+        <div id="dashboard-table-container"></div>
+      </div>
+      <div id="tab-panel-mycaseload" class="tab-panel">
+        <div id="mycaseload-container"></div>
+      </div>
+      <div id="tab-panel-admin" class="tab-panel">
+        <div id="admin-content-container"></div>
+      </div>
     </div>
 
     <!-- Co-Teacher Management View -->

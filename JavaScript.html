@@ -14,7 +14,9 @@ var appState = {
   sortAsc: true,
   missingViewStudentId: null,
   feedbackLinks: null,
-  currentUserEmail: ''
+  currentUserEmail: '',
+  caseManagers: [],
+  isSuperuser: false
 };
 var _persistTimers = {};
 var _persistInFlight = 0;
@@ -67,6 +69,7 @@ document.addEventListener('DOMContentLoaded', function() {
       if (_authLoadingTimer) { clearTimeout(_authLoadingTimer); _authLoadingTimer = null; }
       try {
         appState.currentUserEmail = status.email || '';
+        appState.isSuperuser = status.isSuperuser || false;
 
         // Check for pending co-teacher invite
         if (status.pendingInvite) {
@@ -96,6 +99,26 @@ document.addEventListener('DOMContentLoaded', function() {
 /** Enter the main app (for returning users or after onboarding). */
 function enterApp() {
   document.getElementById('navbar').style.display = '';
+  // Load global case managers list
+  google.script.run
+    .withSuccessHandler(function(cms) {
+      appState.caseManagers = cms || [];
+      // Show My Caseload tab if current user is a case manager
+      var isCM = cms.some(function(cm) {
+        return cm.email === (appState.currentUserEmail || '').toLowerCase();
+      });
+      if (isCM) {
+        var myCaseloadTab = document.getElementById('tab-mycaseload');
+        if (myCaseloadTab) myCaseloadTab.style.display = '';
+      }
+      // Show Admin tab if superuser
+      if (appState.isSuperuser) {
+        var adminTab = document.getElementById('tab-admin');
+        if (adminTab) adminTab.style.display = '';
+      }
+    })
+    .withFailureHandler(function() {})
+    .getCaseManagers();
   showView('dashboard-view');
   showDashboardSkeleton();
 
@@ -180,6 +203,26 @@ function loadDashboard() {
         '</div>';
     })
     .getDashboardData();
+}
+
+function switchDashboardTab(tabName) {
+  // Deactivate all tabs and panels
+  document.querySelectorAll('.dashboard-tab').forEach(function(t) { t.classList.remove('active'); });
+  document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
+  // Activate selected
+  var tab = document.getElementById('tab-' + tabName);
+  var panel = document.getElementById('tab-panel-' + tabName);
+  if (tab) tab.classList.add('active');
+  if (panel) panel.classList.add('active');
+  // Show/hide refresh button (not relevant for admin)
+  var refreshBtn = document.getElementById('dashboard-refresh-btn');
+  if (refreshBtn) refreshBtn.style.display = (tabName === 'admin') ? 'none' : '';
+  // Render tab content
+  if (tabName === 'mycaseload') {
+    renderMyCaseload();
+  } else if (tabName === 'admin') {
+    loadAdminView();
+  }
 }
 
 function toggleSort(field) {
@@ -313,6 +356,18 @@ function openSidePanel(index) {
   // Student info subtitle
   if (s.grade) {
     content += '<div class="sp-subtitle" style="margin-bottom:16px;">Grade ' + esc(s.grade) + '</div>';
+  }
+
+  // Case manager
+  var cmEmail = s.caseManagerEmail || '';
+  if (cmEmail) {
+    var cmName = getCaseManagerName(cmEmail);
+    content += '<div class="sp-case-manager">' +
+      '<span class="sp-case-manager-name">Case Manager: ' + esc(cmName) + '</span>' +
+      '<a href="mailto:' + esc(cmEmail) + '" class="btn-icon" title="Email case manager" onclick="event.stopPropagation();" style="width:28px;height:28px;">' +
+        '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>' +
+      '</a>' +
+    '</div>';
   }
 
   // GPA
@@ -1786,7 +1841,29 @@ function renderStudentForm(student) {
       '<div class="form-group"><label>Last Name</label>' +
         '<input type="text" id="st-lastName" value="' + esc(student.lastName || '') + '" placeholder="Last name"></div>' +
     '</div>' +
-    '<div class="form-group"><label>Grade Level</label>' + gradeHtml + '</div>' +
+    '<div class="form-group"><label>Grade Level</label>' + gradeHtml + '</div>';
+
+  // Case Manager dropdown
+  var cmOptions = '<select id="st-caseManager">';
+  cmOptions += '<option value="">-- No Case Manager --</option>';
+  (appState.caseManagers || []).forEach(function(cm) {
+    var sel = (String(student.caseManagerEmail || '') === cm.email) ? ' selected' : '';
+    cmOptions += '<option value="' + esc(cm.email) + '"' + sel + '>' + esc(cm.name) + '</option>';
+  });
+  cmOptions += '</select>';
+
+  var cmDisplayHtml = '';
+  if (student.id && student.caseManagerEmail) {
+    var cmName = getCaseManagerName(student.caseManagerEmail);
+    cmDisplayHtml = '<div class="case-manager-display" style="margin-top:4px;">' +
+      '<span style="font-size:12px;color:var(--md-on-surface-variant);">Assigned: ' + esc(cmName) + '</span>' +
+      '<a href="mailto:' + esc(student.caseManagerEmail) + '" class="btn-icon" title="Email case manager" style="width:28px;height:28px;">' +
+        '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>' +
+      '</a>' +
+    '</div>';
+  }
+
+  html += '<div class="form-group"><label>Case Manager</label>' + cmOptions + cmDisplayHtml + '</div>' +
   '</div>';
 
   // Focus & Support
@@ -1935,6 +2012,7 @@ function saveStudentForm() {
     accommodations: document.getElementById('st-accommodations').value.trim(),
     iepGoal: document.getElementById('st-iepGoal').value.trim(),
     notes: document.getElementById('st-notes').value.trim(),
+    caseManagerEmail: document.getElementById('st-caseManager').value,
     classes: classes
   };
 
@@ -1953,6 +2031,7 @@ function saveStudentForm() {
         s.focusGoal = profile.focusGoal;
         s.iepGoal = profile.iepGoal;
         s.classes = profile.classes;
+        s.caseManagerEmail = profile.caseManagerEmail;
       }
     });
   } else {
@@ -1962,6 +2041,7 @@ function saveStudentForm() {
       grade: profile.grade, period: '',
       focusGoal: profile.focusGoal, iepGoal: profile.iepGoal,
       classes: profile.classes,
+      caseManagerEmail: profile.caseManagerEmail,
       totalCheckIns: 0, latestWeek: null, latestMicroGoal: null,
       avgRating: null, trend: 'none', gpa: null,
       totalMissing: 0, academicData: []
@@ -2949,5 +3029,277 @@ function skipFirstStudent() {
 
 function completeOnboarding() {
   enterApp();
+}
+
+// ─── Case Manager Helpers ───
+
+function getCaseManagerName(email) {
+  if (!email) return '';
+  var match = appState.caseManagers.find(function(cm) {
+    return cm.email === email;
+  });
+  return match ? match.name : email;
+}
+
+// ─── My Caseload View ───
+
+function renderMyCaseload() {
+  var container = document.getElementById('mycaseload-container');
+  if (!container) return;
+  var currentEmail = (appState.currentUserEmail || '').toLowerCase();
+
+  var myStudents = appState.dashboardData.filter(function(s) {
+    return (s.caseManagerEmail || '').toLowerCase() === currentEmail;
+  });
+
+  var html = '';
+
+  // Open SpEdForms button
+  html += '<div class="mycaseload-spedforms-btn">' +
+    '<a href="https://15.spedforms.org/students2020.php?login=1" target="_blank" class="btn btn-secondary">Open SpEdForms</a>' +
+  '</div>';
+
+  if (myStudents.length === 0) {
+    html += '<div class="empty-state">' +
+      '<h3>No Students Assigned</h3>' +
+      '<p>You have no students assigned to you as case manager.</p>' +
+    '</div>';
+    container.innerHTML = html;
+    return;
+  }
+
+  myStudents.sort(function(a, b) {
+    var cmp = String(a.firstName).localeCompare(String(b.firstName));
+    return cmp !== 0 ? cmp : String(a.lastName).localeCompare(String(b.lastName));
+  });
+
+  html += '<table class="dashboard-table"><thead><tr>' +
+    '<th>Name</th>' +
+    '<th>Grade</th>' +
+    '<th>GPA</th>' +
+    '<th>Missing</th>' +
+    '<th>Last Check-In</th>' +
+    '<th>Actions</th>' +
+  '</tr></thead><tbody>';
+
+  myStudents.forEach(function(s) {
+    var origIndex = appState.dashboardData.indexOf(s);
+    html += '<tr onclick="openSidePanel(' + origIndex + ')" title="Click for quick view">';
+    html += '<td><strong>' + esc(s.firstName + ' ' + s.lastName) + '</strong></td>';
+    html += '<td>' + esc(s.grade || '-') + '</td>';
+
+    if (s.gpa != null) {
+      var gpaClass = s.gpa >= 3.5 ? 'chip-green' : s.gpa >= 2.5 ? 'chip-yellow' : 'chip-red';
+      html += '<td><span class="chip ' + gpaClass + '">' + s.gpa.toFixed(2) + '</span></td>';
+    } else {
+      html += '<td><span class="chip chip-gray">--</span></td>';
+    }
+
+    if (s.totalMissing > 0) {
+      var missingClass = s.totalMissing >= 4 ? 'chip-red' : 'chip-yellow';
+      html += '<td><span class="chip chip-clickable ' + missingClass + '" onclick="event.stopPropagation(); showMissingAssignments(\'' + s.id + '\')" title="View missing assignments">' + s.totalMissing + '</span></td>';
+    } else {
+      html += '<td><span class="chip chip-clickable chip-green" onclick="event.stopPropagation(); showMissingAssignments(\'' + s.id + '\')" title="View missing assignments">0</span></td>';
+    }
+
+    html += '<td>' + esc(formatDateDisplay(s.latestWeek)) + '</td>';
+
+    html += '<td><div class="action-btns">' +
+      '<button class="action-btn" onclick="event.stopPropagation(); editStudent(\'' + s.id + '\')" title="Profile">' +
+        '<svg class="action-btn-icon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>' +
+        '<span class="action-btn-label">Profile</span>' +
+      '</button>' +
+    '</div></td>';
+
+    html += '</tr>';
+  });
+
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+// ─── Admin View (Superuser Only) ───
+
+function loadAdminView() {
+  if (!appState.isSuperuser) {
+    showToast('Unauthorized');
+    return;
+  }
+  var container = document.getElementById('admin-content-container');
+  if (!container) return;
+  container.innerHTML =
+    '<div class="skeleton-fade-in"><div class="form-card">' +
+      '<div class="skeleton skeleton-section-title" style="width:30%;"></div>' +
+      '<div class="skeleton skeleton-input" style="margin-bottom:12px;"></div>' +
+      '<div class="skeleton skeleton-input" style="margin-bottom:12px;"></div>' +
+    '</div></div>';
+
+  var loadedCMs = null;
+  var loadedStudents = null;
+
+  function tryRender() {
+    if (loadedCMs !== null && loadedStudents !== null) {
+      renderAdminView(loadedCMs, loadedStudents);
+    }
+  }
+
+  google.script.run
+    .withSuccessHandler(function(cms) {
+      appState.caseManagers = cms || [];
+      loadedCMs = cms || [];
+      tryRender();
+    })
+    .withFailureHandler(function() { loadedCMs = []; tryRender(); })
+    .getCaseManagers();
+
+  google.script.run
+    .withSuccessHandler(function(students) { loadedStudents = students || []; tryRender(); })
+    .withFailureHandler(function() { loadedStudents = []; tryRender(); })
+    .getAllStudentsForAdmin();
+}
+
+function renderAdminView(caseManagers, students) {
+  var container = document.getElementById('admin-content-container');
+  var html = '';
+
+  // Section 1: Manage Case Managers
+  html += '<div class="form-card">' +
+    '<div class="form-section-title">Case Managers</div>';
+
+  if (caseManagers.length === 0) {
+    html += '<p class="hint">No case managers configured yet.</p>';
+  } else {
+    caseManagers.forEach(function(cm) {
+      html += '<div class="admin-cm-row">' +
+        '<div class="admin-cm-info">' +
+          '<span class="admin-cm-name">' + esc(cm.name) + '</span>' +
+          '<span class="admin-cm-email">' + esc(cm.email) + '</span>' +
+        '</div>' +
+        '<button class="btn btn-sm btn-danger" onclick="confirmRemoveCaseManager(\'' + esc(cm.email) + '\')">Remove</button>' +
+      '</div>';
+    });
+  }
+
+  html += '<div style="margin-top:16px;">' +
+    '<div class="admin-add-form">' +
+      '<input type="email" id="admin-cm-email" placeholder="email@school.edu">' +
+      '<input type="text" id="admin-cm-name" placeholder="Display Name">' +
+      '<button class="btn btn-primary" onclick="addCaseManagerFromForm()">Add</button>' +
+    '</div>' +
+  '</div></div>';
+
+  // Section 2: Assign Students to Case Managers
+  html += '<div class="form-card">' +
+    '<div class="form-section-title">Student Case Manager Assignments</div>';
+
+  if (students.length === 0) {
+    html += '<p class="hint">No students found.</p>';
+  } else {
+    html += '<table class="admin-assign-table"><thead><tr>' +
+      '<th>Student</th><th>Grade</th><th>Case Manager</th>' +
+    '</tr></thead><tbody>';
+
+    students.sort(function(a, b) {
+      var cmp = String(a.lastName).localeCompare(String(b.lastName));
+      return cmp !== 0 ? cmp : String(a.firstName).localeCompare(String(b.firstName));
+    });
+
+    students.forEach(function(s) {
+      html += '<tr>';
+      html += '<td>' + esc(s.lastName + ', ' + s.firstName) + '</td>';
+      html += '<td>' + esc(s.grade || '-') + '</td>';
+      html += '<td><select onchange="adminAssignCaseManager(\'' + s.id + '\', this.value)">';
+      html += '<option value="">-- None --</option>';
+      caseManagers.forEach(function(cm) {
+        var sel = (s.caseManagerEmail === cm.email) ? ' selected' : '';
+        html += '<option value="' + esc(cm.email) + '"' + sel + '>' + esc(cm.name) + '</option>';
+      });
+      html += '</select></td></tr>';
+    });
+
+    html += '</tbody></table>';
+  }
+
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function addCaseManagerFromForm() {
+  var emailInput = document.getElementById('admin-cm-email');
+  var nameInput = document.getElementById('admin-cm-name');
+  var email = (emailInput.value || '').trim();
+  var name = (nameInput.value || '').trim();
+
+  if (!email) { showToast('Please enter an email address'); return; }
+  if (!name) { showToast('Please enter a display name'); return; }
+
+  showToast('Adding case manager\u2026');
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (result.success) {
+        showToast('Case manager added');
+        loadAdminView();
+      } else {
+        showToast(result.error || 'Error adding case manager');
+      }
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error: ' + (err && err.message ? err.message : String(err)));
+    })
+    .addCaseManager(email, name);
+}
+
+function confirmRemoveCaseManager(email) {
+  var overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+  overlay.innerHTML =
+    '<div class="confirm-dialog">' +
+      '<h3>Remove Case Manager?</h3>' +
+      '<p>This will remove <strong>' + esc(email) + '</strong> from the case managers list. Students already assigned will keep their assignment.</p>' +
+      '<div class="confirm-actions">' +
+        '<button class="btn btn-secondary" onclick="this.closest(\'.confirm-overlay\').remove()">Cancel</button>' +
+        '<button class="btn btn-danger" onclick="doRemoveCaseManager(\'' + esc(email) + '\'); this.closest(\'.confirm-overlay\').remove()">Remove</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+}
+
+function doRemoveCaseManager(email) {
+  showToast('Removing case manager\u2026');
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (result.success) {
+        showToast('Case manager removed');
+        loadAdminView();
+      } else {
+        showToast(result.error || 'Error removing case manager');
+      }
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error: ' + (err && err.message ? err.message : String(err)));
+    })
+    .removeCaseManager(email);
+}
+
+function adminAssignCaseManager(studentId, caseManagerEmail) {
+  showToast('Assigning case manager\u2026');
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (result.success) {
+        showToast('Case manager assigned');
+        appState.dashboardData.forEach(function(s) {
+          if (s.id === studentId) {
+            s.caseManagerEmail = caseManagerEmail;
+          }
+        });
+      } else {
+        showToast(result.error || 'Error assigning case manager');
+      }
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error: ' + (err && err.message ? err.message : String(err)));
+    })
+    .assignCaseManager(studentId, caseManagerEmail);
 }
 </script>
