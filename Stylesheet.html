@@ -222,14 +222,20 @@ body {
   opacity: 0.7;
 }
 
-/* ─── Top App Bar (M3 Small) ─── */
+/* ─── Top App Bar (M3 Small) with Persistent Tabs ─── */
 nav {
   background: var(--md-primary);
   color: var(--md-on-primary);
+  display: flex;
+  flex-direction: column;
+  position: sticky; top: 0; z-index: 100;
+}
+.nav-top-row {
   height: 64px;
   padding: 0 16px;
-  display: flex; align-items: center; justify-content: space-between;
-  position: sticky; top: 0; z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 .nav-brand {
   /* M3 Title Large */
@@ -273,6 +279,43 @@ nav {
   border: 1px solid rgba(255,255,255,0.40);
 }
 .nav-btn.btn-outline:hover { background: rgba(255,255,255,0.12); }
+
+/* ─── Navigation Tabs (M3 Primary Tabs on Primary Surface) ─── */
+.nav-tabs {
+  display: flex;
+  align-items: stretch;
+  height: 48px;
+  padding: 0 16px;
+}
+.nav-tab {
+  height: 48px;
+  padding: 0 24px;
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  font-family: 'Roboto', sans-serif;
+  /* M3 Title Small */
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.1px;
+  line-height: 20px;
+  color: rgba(255,255,255,0.70);
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  white-space: nowrap;
+}
+.nav-tab:hover {
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.90);
+}
+.nav-tab.active {
+  color: var(--md-on-primary);
+  border-bottom-color: var(--md-on-primary);
+}
 
 /* ─── Main Layout ─── */
 main { max-width: 1200px; margin: 0 auto; padding: 24px; }
@@ -1743,14 +1786,22 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 
 /* ─── Responsive ─── */
 @media (max-width: 768px) {
-  nav {
+  .nav-top-row {
     height: 56px;
     padding: 0 12px;
-    flex-wrap: wrap;
-    gap: 8px;
   }
   .nav-brand { font-size: 18px; gap: 8px; }
   .nav-logo { height: 32px; }
+  .nav-tabs {
+    height: 44px;
+    padding: 0 8px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .nav-tab {
+    padding: 0 16px;
+    font-size: 13px;
+  }
   main { padding: 16px; }
   .form-row { flex-direction: column; gap: 0; }
   .dashboard-table { font-size: 13px; }
@@ -2047,36 +2098,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   }
 }
 
-/* ─── Dashboard Tabs ─── */
-.dashboard-tabs {
-  display: flex;
-  align-items: center;
-  gap: 0;
-}
-.dashboard-tab {
-  height: 40px;
-  padding: 0 20px;
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  cursor: pointer;
-  font-family: 'Roboto', sans-serif;
-  font-size: 14px;
-  font-weight: 500;
-  letter-spacing: 0.1px;
-  line-height: 20px;
-  color: var(--md-on-surface-variant);
-  transition: color 0.2s, border-color 0.2s, background 0.2s;
-}
-.dashboard-tab:hover {
-  background: rgba(196,30,58,0.08);
-  color: var(--md-on-surface);
-}
-.dashboard-tab.active {
-  color: var(--md-primary);
-  border-bottom-color: var(--md-primary);
-}
-
 /* Tab content panels */
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
@@ -2203,16 +2224,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   gap: 4px;
 }
 
-@media (max-width: 768px) {
-  .dashboard-tabs {
-    flex-wrap: wrap;
-    gap: 0;
-  }
-  .dashboard-tab {
-    padding: 0 12px;
-    font-size: 13px;
-  }
-}
 @media (max-width: 600px) {
   .admin-add-form {
     flex-direction: column;
