@@ -9,18 +9,14 @@
 
   <!-- Navigation (hidden until auth resolves) -->
   <nav id="navbar" style="display:none">
-    <div class="nav-top-row">
-      <div class="nav-brand">
-        <img src="https://resources.finalsite.net/images/f_auto,q_auto/v1593114034/richfieldschoolsorg/jztydvqdo8o8hchpy6oy/MS_Horiz_W.png" alt="Richfield Public Schools Logo" class="nav-logo">
-      </div>
-      <div class="nav-actions">
-        <button onclick="showCoTeachers()" class="nav-btn btn-outline" title="Team">Team</button>
-      </div>
+    <div class="nav-brand">
+      <img src="https://resources.finalsite.net/images/f_auto,q_auto/v1593114034/richfieldschoolsorg/jztydvqdo8o8hchpy6oy/MS_Horiz_W.png" alt="Richfield Public Schools Logo" class="nav-logo">
     </div>
     <div class="nav-tabs" id="nav-tabs">
       <button class="nav-tab active" id="tab-caseload" onclick="switchDashboardTab('caseload')">Caseload Dashboard</button>
       <button class="nav-tab" id="tab-mycaseload" onclick="switchDashboardTab('mycaseload')" style="display:none;">My Caseload</button>
       <button class="nav-tab" id="tab-admin" onclick="switchDashboardTab('admin')" style="display:none;">Admin</button>
+      <button class="nav-tab" id="tab-team" onclick="showCoTeachers()">Team</button>
     </div>
   </nav>
 

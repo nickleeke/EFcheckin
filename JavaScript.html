@@ -2539,6 +2539,9 @@ function declineInvite(isNewUser) {
 // ─── Co-Teacher Management View ───
 
 function showCoTeachers() {
+  document.querySelectorAll('.nav-tab').forEach(function(t) { t.classList.remove('active'); });
+  var teamTab = document.getElementById('tab-team');
+  if (teamTab) teamTab.classList.add('active');
   showView('coteacher-view');
   document.getElementById('coteacher-content-container').innerHTML =
     '<div class="skeleton-fade-in"><div class="form-card">' +
