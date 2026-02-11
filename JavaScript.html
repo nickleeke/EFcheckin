@@ -463,6 +463,7 @@ function closeSidePanel() {
 function startCheckIn(studentId, existingCheckIn) {
   appState.currentStudentId = studentId;
   appState.editingCheckIn = existingCheckIn || null;
+  document.getElementById('checkin-view-title').innerHTML = '<span class="skeleton skeleton-title-inline"></span>';
   showCheckInSkeleton();
   showView('checkin-view');
 
@@ -1587,7 +1588,7 @@ function editStudent(studentId) {
 function showStudentProfile(studentId) {
   appState.currentStudentId = studentId;
   document.getElementById('student-view-breadcrumb').textContent = 'Student Profile';
-  document.getElementById('student-view-title').textContent = 'Loading\u2026';
+  document.getElementById('student-view-title').innerHTML = '<span class="skeleton skeleton-title-inline"></span>';
   showStudentProfileSkeleton();
   renderStudentMenu(studentId);
   showView('student-view');
