@@ -167,7 +167,7 @@ function include(filename) {
 var STUDENT_HEADERS = [
   'id','firstName','lastName','grade','period',
   'focusGoal','accommodations','notes','classesJson',
-  'createdAt','updatedAt','iepGoal','caseManagerEmail'
+  'createdAt','updatedAt','iepGoal','goalsJson','caseManagerEmail'
 ];
 var CHECKIN_HEADERS = [
   'id','studentId','weekOf',
@@ -249,6 +249,8 @@ function getStudents() {
     headers.forEach(function(h, idx) { row[h] = data[i][idx]; });
     try { row.classes = JSON.parse(row.classesJson || '[]'); }
     catch(e) { row.classes = []; }
+    try { row.goals = JSON.parse(row.goalsJson || '[]'); }
+    catch(e) { row.goals = []; }
     students.push(row);
   }
 
@@ -285,6 +287,7 @@ function saveStudent(profile) {
         sheet.getRange(i+1, colIdx['notes']).setValue(profile.notes || '');
         sheet.getRange(i+1, colIdx['classesJson']).setValue(classesJson);
         sheet.getRange(i+1, colIdx['iepGoal']).setValue(profile.iepGoal || '');
+        sheet.getRange(i+1, colIdx['goalsJson']).setValue(profile.goalsJson || '');
         sheet.getRange(i+1, colIdx['caseManagerEmail']).setValue(profile.caseManagerEmail || '');
         sheet.getRange(i+1, colIdx['updatedAt']).setValue(now);
         invalidateCache_();
@@ -299,10 +302,32 @@ function saveStudent(profile) {
     profile.grade||'', profile.period||'',
     profile.focusGoal||'', profile.accommodations||'',
     profile.notes||'', classesJson, now, now,
-    profile.iepGoal||'', profile.caseManagerEmail||''
+    profile.iepGoal||'', profile.goalsJson||'', profile.caseManagerEmail||''
   ]);
   invalidateCache_();
   return { success: true, id: id };
+}
+
+function saveStudentGoals(studentId, goalsJson) {
+  initializeSheetsIfNeeded_();
+  const ss = getSS_();
+  const sheet = ss.getSheetByName(SHEET_STUDENTS);
+  const now = new Date().toISOString();
+
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const colIdx = {};
+  headers.forEach(function(h, i) { colIdx[h] = i + 1; });
+
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === studentId) {
+      sheet.getRange(i+1, colIdx['goalsJson']).setValue(goalsJson || '');
+      sheet.getRange(i+1, colIdx['updatedAt']).setValue(now);
+      invalidateCache_();
+      return { success: true };
+    }
+  }
+  return { success: false, error: 'Student not found' };
 }
 
 function deleteStudent(studentId) {
@@ -516,6 +541,7 @@ function getDashboardData() {
       grade: s.grade, period: s.period,
       focusGoal: s.focusGoal,
       iepGoal: s.iepGoal || '',
+      goalsJson: s.goalsJson || '',
       caseManagerEmail: s.caseManagerEmail || '',
       classes: s.classes || [],
       totalCheckIns: totalCheckIns,
