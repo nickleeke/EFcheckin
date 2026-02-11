@@ -2636,6 +2636,11 @@ function refreshDashboard() {
       try {
         appState.dashboardData = data || [];
         renderDashboard(data);
+        // Also refresh My Caseload if that tab is active
+        var mcTab = document.getElementById('tab-mycaseload');
+        if (mcTab && mcTab.classList.contains('active')) {
+          renderMyCaseload();
+        }
         showToast('Dashboard refreshed');
       } catch(e) { showToast('Render error: ' + e.message); }
     })
