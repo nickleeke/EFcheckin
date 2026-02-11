@@ -187,6 +187,7 @@ function initializeSheets() {
     studentsSheet = ss.insertSheet(SHEET_STUDENTS);
   }
   ensureHeaders_(studentsSheet, STUDENT_HEADERS);
+  migrateStudentColumns_(studentsSheet);
 
   let checkInsSheet = ss.getSheetByName(SHEET_CHECKINS);
   if (!checkInsSheet) {
@@ -226,6 +227,45 @@ function ensureHeaders_(sheet, expectedHeaders) {
     sheet.getRange(1, 1, 1, expectedHeaders.length).setValues([expectedHeaders]);
     sheet.getRange('1:1').setFontWeight('bold');
   }
+}
+
+/**
+ * Fix column misalignment caused by merge of goalsJson and caseManagerEmail.
+ * Before the merge, caseManagerEmail was at column index 12. After the merge,
+ * goalsJson is at 12 and caseManagerEmail at 13. Existing data rows may still
+ * have email values in the goalsJson column. This migrates them to the correct column.
+ */
+function migrateStudentColumns_(sheet) {
+  if (!sheet || sheet.getLastRow() <= 1) return;
+
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var goalsIdx = -1, cmIdx = -1;
+  for (var i = 0; i < headers.length; i++) {
+    if (headers[i] === 'goalsJson') goalsIdx = i;
+    if (headers[i] === 'caseManagerEmail') cmIdx = i;
+  }
+  if (goalsIdx === -1 || cmIdx === -1 || goalsIdx >= cmIdx) return;
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return;
+
+  var data = sheet.getRange(2, 1, lastRow - 1, Math.max(goalsIdx, cmIdx) + 1).getValues();
+  var changed = false;
+
+  for (var i = 0; i < data.length; i++) {
+    var goalsVal = String(data[i][goalsIdx] || '').trim();
+    var cmVal = String(data[i][cmIdx] || '').trim();
+    // If goalsJson column has an email-like value (not JSON) and caseManagerEmail is empty,
+    // it's a misplaced caseManagerEmail from before the merge.
+    if (goalsVal && goalsVal.indexOf('@') !== -1 &&
+        goalsVal.charAt(0) !== '[' && goalsVal.charAt(0) !== '{' && !cmVal) {
+      sheet.getRange(i + 2, cmIdx + 1).setValue(goalsVal);
+      sheet.getRange(i + 2, goalsIdx + 1).setValue('');
+      changed = true;
+    }
+  }
+
+  if (changed) invalidateCache_();
 }
 
 // ───── Student CRUD ─────
