@@ -245,7 +245,7 @@ nav {
   flex-shrink: 0;
 }
 
-/* ─── Navigation Tabs (M3 Primary Tabs on Primary Surface) ─── */
+/* ─── Navigation Tabs (M3 Primary Tabs — Icon + Label) ─── */
 .nav-tabs {
   display: flex;
   align-items: stretch;
@@ -262,18 +262,28 @@ nav {
   border-bottom: 3px solid transparent;
   cursor: pointer;
   font-family: 'Roboto', sans-serif;
-  /* M3 Title Small */
-  font-size: 14px;
-  font-weight: 500;
-  letter-spacing: 0.1px;
-  line-height: 20px;
   color: rgba(255,255,255,0.70);
   transition: color 0.2s, border-color 0.2s, background 0.2s;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 2px;
   position: relative;
   white-space: nowrap;
+}
+.nav-tab-icon {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
+  flex-shrink: 0;
+}
+.nav-tab-label {
+  /* M3 Label Medium */
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  line-height: 16px;
 }
 .nav-tab:hover {
   background: rgba(255,255,255,0.08);
@@ -1766,10 +1776,9 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
   }
-  .nav-tab {
-    padding: 0 16px;
-    font-size: 13px;
-  }
+  .nav-tab { padding: 0 12px; }
+  .nav-tab-icon { width: 20px; height: 20px; }
+  .nav-tab-label { font-size: 11px; }
   main { padding: 16px; }
   .form-row { flex-direction: column; gap: 0; }
   .dashboard-table { font-size: 13px; }
