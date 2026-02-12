@@ -125,7 +125,17 @@ function enterApp() {
     .withFailureHandler(function() {})
     .getCaseManagers();
   showView('dashboard-view');
+  // Create sliding tab indicator
+  var tabsContainer = document.getElementById('nav-tabs');
+  if (tabsContainer && !document.getElementById('nav-tab-indicator')) {
+    var indicator = document.createElement('div');
+    indicator.id = 'nav-tab-indicator';
+    indicator.className = 'nav-tab-indicator';
+    tabsContainer.appendChild(indicator);
+  }
   showDashboardSkeleton();
+  // Position tab indicator after layout is ready
+  setTimeout(updateTabIndicator, 0);
 
   google.script.run
     .withSuccessHandler(function(result) {
@@ -150,18 +160,63 @@ document.addEventListener('keydown', function(e) {
     closeSidePanel();
     // Also close any confirmation dialogs
     var overlay = document.querySelector('.confirm-overlay');
-    if (overlay) overlay.remove();
+    if (overlay) closeConfirmDialog(overlay);
   }
 });
 
-// ─── View Management ───
-function showView(viewId) {
-  document.querySelectorAll('.view').forEach(function(v) {
-    v.classList.remove('active');
+function closeConfirmDialog(overlayEl) {
+  if (!overlayEl || overlayEl.classList.contains('dialog-closing')) return;
+  overlayEl.classList.add('dialog-closing');
+  overlayEl.addEventListener('animationend', function() {
+    overlayEl.remove();
   });
-  document.getElementById(viewId).classList.add('active');
+}
+
+// ─── View Management ───
+var VIEW_ORDER = {
+  'auth-loading': -1, 'onboarding-view': -1,
+  'dashboard-view': 0, 'coteacher-view': 1,
+  'student-view': 2, 'missing-view': 3, 'checkin-view': 4
+};
+var _currentViewId = 'auth-loading';
+
+function showView(viewId) {
+  var oldId = _currentViewId;
+  _currentViewId = viewId;
+
+  document.querySelectorAll('.view').forEach(function(v) {
+    v.classList.remove('active', 'view-enter-forward', 'view-enter-backward');
+  });
+
+  var el = document.getElementById(viewId);
+  el.classList.add('active');
+
+  var oldOrder = VIEW_ORDER[oldId] != null ? VIEW_ORDER[oldId] : 0;
+  var newOrder = VIEW_ORDER[viewId] != null ? VIEW_ORDER[viewId] : 0;
+
+  if (oldId !== viewId && oldOrder !== -1 && newOrder !== -1) {
+    var cls = newOrder >= oldOrder ? 'view-enter-forward' : 'view-enter-backward';
+    el.classList.add(cls);
+    el.addEventListener('animationend', function handler() {
+      el.classList.remove(cls);
+      el.removeEventListener('animationend', handler);
+    });
+  }
+
   window.scrollTo(0, 0);
 }
+
+function updateTabIndicator() {
+  var activeTab = document.querySelector('.nav-tab.active');
+  var indicator = document.getElementById('nav-tab-indicator');
+  if (!activeTab || !indicator) return;
+  var tabsRect = document.getElementById('nav-tabs').getBoundingClientRect();
+  var activeRect = activeTab.getBoundingClientRect();
+  indicator.style.left = (activeRect.left - tabsRect.left) + 'px';
+  indicator.style.width = activeRect.width + 'px';
+}
+
+window.addEventListener('resize', updateTabIndicator);
 
 // ─── Dashboard ───
 function showDashboard() {
@@ -217,6 +272,7 @@ function switchDashboardTab(tabName) {
   } else if (tabName === 'admin') {
     loadAdminView();
   }
+  updateTabIndicator();
 }
 
 function toggleSort(field) {
@@ -283,7 +339,8 @@ function renderDashboard(data) {
 
   sorted.forEach(function(s, index) {
     var origIndex = data.indexOf(s);
-    html += '<tr onclick="openSidePanel(' + origIndex + ')" title="Click for quick view">';
+    var delay = Math.min(index * 50, 400);
+    html += '<tr class="stagger-row" style="animation-delay:' + delay + 'ms" onclick="openSidePanel(' + origIndex + ')" title="Click for quick view">';
     html += '<td><strong>' + esc(s.firstName + ' ' + s.lastName) + '</strong></td>';
     html += '<td>' + esc(s.grade || '-') + '</td>';
 
@@ -336,6 +393,7 @@ function renderDashboard(data) {
   html += '<p class="hint" style="margin-top:8px;">Click any row for a quick academic overview.</p>';
 
   container.innerHTML = html;
+  animateContentIn(container);
 }
 
 // ─── Side Panel (Quick View on Double-Click) ───
@@ -676,6 +734,7 @@ function renderCheckInForm(student, checkIns, existingCheckIn) {
   html += '</div>'; // form-card
 
   container.innerHTML = html;
+  animateContentIn(container);
   setupCheckInAutosave();
 }
 
@@ -1246,6 +1305,7 @@ function renderMissingView(student) {
   '</div>';
 
   container.innerHTML = html;
+  animateContentIn(container);
 }
 
 function toggleMissingClass(idx) {
@@ -1731,6 +1791,7 @@ function renderStudentProfileDashboard(student) {
   html += '<div id="checkin-history-section"></div>';
 
   container.innerHTML = html;
+  animateContentIn(container);
 
   // Setup goals autosave listeners
   setupGoalsAutosave();
@@ -2187,7 +2248,7 @@ function renderStudentMenu(studentId) {
       '<button class="btn-icon" onclick="toggleStudentMenu(event)" aria-label="More options">' +
         '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>' +
       '</button>' +
-      '<div class="dropdown-menu" id="student-dropdown" style="display:none;">' +
+      '<div class="dropdown-menu" id="student-dropdown">' +
         items +
       '</div>' +
     '</div>';
@@ -2228,9 +2289,12 @@ function toggleStudentMenu(e) {
   e.stopPropagation();
   var menu = document.getElementById('student-dropdown');
   if (!menu) return;
-  var isOpen = menu.style.display !== 'none';
-  menu.style.display = isOpen ? 'none' : '';
-  if (!isOpen) {
+  var isOpen = menu.classList.contains('dropdown-open');
+  if (isOpen) {
+    menu.classList.remove('dropdown-open');
+    document.removeEventListener('click', closeStudentMenu);
+  } else {
+    menu.classList.add('dropdown-open');
     setTimeout(function() {
       document.addEventListener('click', closeStudentMenu);
     }, 0);
@@ -2239,7 +2303,7 @@ function toggleStudentMenu(e) {
 
 function closeStudentMenu() {
   var menu = document.getElementById('student-dropdown');
-  if (menu) menu.style.display = 'none';
+  if (menu) menu.classList.remove('dropdown-open');
   document.removeEventListener('click', closeStudentMenu);
 }
 
@@ -2542,6 +2606,7 @@ function showCoTeachers() {
   document.querySelectorAll('.nav-tab').forEach(function(t) { t.classList.remove('active'); });
   var teamTab = document.getElementById('tab-team');
   if (teamTab) teamTab.classList.add('active');
+  updateTabIndicator();
   showView('coteacher-view');
   document.getElementById('coteacher-content-container').innerHTML =
     '<div class="skeleton-fade-in"><div class="form-card">' +
@@ -2634,6 +2699,7 @@ function renderCoTeacherView(teamInfo) {
   }
 
   container.innerHTML = html;
+  animateContentIn(container);
 }
 
 function addTeamMemberFromForm() {
@@ -2869,8 +2935,20 @@ function showCheckInSkeleton() {
 function showToast(message) {
   var toast = document.getElementById('toast');
   toast.textContent = message;
+  toast.classList.remove('toast-hiding');
   toast.classList.add('show');
-  setTimeout(function() { toast.classList.remove('show'); }, 3000);
+  setTimeout(function() {
+    toast.classList.add('toast-hiding');
+    toast.classList.remove('show');
+  }, 3000);
+}
+
+function animateContentIn(container) {
+  container.classList.add('content-fade-in');
+  container.addEventListener('animationend', function handler() {
+    container.classList.remove('content-fade-in');
+    container.removeEventListener('animationend', handler);
+  });
 }
 
 function esc(str) {
@@ -2898,8 +2976,8 @@ function showConfirmDialog(opts) {
       '<p>' + (opts.body || '') + '</p>' +
       (opts.hint ? '<p class="hint">' + opts.hint + '</p>' : '') +
       '<div class="confirm-actions">' +
-        '<button class="btn btn-secondary" onclick="this.closest(\'.confirm-overlay\').remove()">' + (opts.cancelLabel || 'Cancel') + '</button>' +
-        '<button class="btn ' + (opts.confirmClass || 'btn-danger') + '" onclick="' + opts.onConfirm + '; this.closest(\'.confirm-overlay\').remove()">' + (opts.confirmLabel || 'Confirm') + '</button>' +
+        '<button class="btn btn-secondary" onclick="closeConfirmDialog(this.closest(\'.confirm-overlay\'))">' + (opts.cancelLabel || 'Cancel') + '</button>' +
+        '<button class="btn ' + (opts.confirmClass || 'btn-danger') + '" onclick="' + opts.onConfirm + '; closeConfirmDialog(this.closest(\'.confirm-overlay\'))">' + (opts.confirmLabel || 'Confirm') + '</button>' +
       '</div>' +
     '</div>';
   document.body.appendChild(overlay);
@@ -3241,6 +3319,7 @@ function renderMyCaseload() {
 
   html += '</tbody></table>';
   container.innerHTML = html;
+  animateContentIn(container);
 }
 
 // ─── Admin View (Superuser Only) ───
@@ -3347,6 +3426,7 @@ function renderAdminView(caseManagers, students) {
 
   html += '</div>';
   container.innerHTML = html;
+  animateContentIn(container);
 }
 
 function addCaseManagerFromForm() {
@@ -3421,4 +3501,21 @@ function adminAssignCaseManager(studentId, caseManagerEmail) {
     })
     .assignCaseManager(studentId, caseManagerEmail);
 }
+
+// ─── Button Ripple Effect (delegated) ───
+function createRipple(target, clientX, clientY) {
+  var rect = target.getBoundingClientRect();
+  var ripple = document.createElement('span');
+  ripple.className = 'ripple-effect';
+  var size = Math.max(rect.width, rect.height);
+  ripple.style.width = ripple.style.height = size + 'px';
+  ripple.style.left = (clientX - rect.left - size / 2) + 'px';
+  ripple.style.top = (clientY - rect.top - size / 2) + 'px';
+  target.appendChild(ripple);
+  ripple.addEventListener('animationend', function() { ripple.remove(); });
+}
+document.addEventListener('click', function(e) {
+  var btn = e.target.closest('.btn, .btn-icon, .btn-ghost, .action-btn, .rating-btn, .nav-tab');
+  if (btn) createRipple(btn, e.clientX, e.clientY);
+});
 </script>

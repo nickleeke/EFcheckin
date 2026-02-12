@@ -278,7 +278,6 @@ nav {
   padding: 0 24px;
   background: none;
   border: none;
-  border-bottom: 3px solid transparent;
   cursor: pointer;
   font-family: 'Roboto', sans-serif;
   color: rgba(255,255,255,0.70);
@@ -310,7 +309,6 @@ nav {
 }
 .nav-tab.active {
   color: var(--md-on-primary);
-  border-bottom-color: var(--md-on-primary);
 }
 
 /* ─── Main Layout ─── */
@@ -2184,6 +2182,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   background: var(--md-surface);
   color: var(--md-on-surface);
   font-family: 'Roboto', sans-serif;
+  transition: border-color var(--md-duration-short4) var(--md-easing-standard), box-shadow var(--md-duration-short4) var(--md-easing-standard);
 }
 .ct-email-input:focus {
   outline: none;
@@ -2207,6 +2206,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   padding-right: 32px;
   cursor: pointer;
   min-width: 160px;
+  transition: border-color var(--md-duration-short4) var(--md-easing-standard), box-shadow var(--md-duration-short4) var(--md-easing-standard);
 }
 .ct-role-select:focus {
   outline: none;
@@ -2265,6 +2265,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   background: var(--md-surface);
   color: var(--md-on-surface);
   font-family: 'Roboto', sans-serif;
+  transition: border-color var(--md-duration-short4) var(--md-easing-standard), box-shadow var(--md-duration-short4) var(--md-easing-standard);
 }
 .admin-add-form input:focus {
   outline: none;
@@ -2313,6 +2314,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   background-repeat: no-repeat;
   background-position: right 10px center;
   padding-right: 32px;
+  transition: border-color var(--md-duration-short4) var(--md-easing-standard), box-shadow var(--md-duration-short4) var(--md-easing-standard);
 }
 .admin-assign-table select:focus {
   outline: none;
