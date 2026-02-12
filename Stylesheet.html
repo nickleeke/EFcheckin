@@ -278,6 +278,7 @@ nav {
   padding: 0 24px;
   background: none;
   border: none;
+  border-bottom: 3px solid transparent;
   cursor: pointer;
   font-family: 'Roboto', sans-serif;
   color: rgba(255,255,255,0.70);
@@ -309,6 +310,7 @@ nav {
 }
 .nav-tab.active {
   color: var(--md-on-primary);
+  border-bottom-color: var(--md-on-primary);
 }
 
 /* ─── Main Layout ─── */
@@ -1483,7 +1485,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   to   { opacity: 1; transform: translateY(0); }
 }
 .stagger-row {
-  opacity: 0;
   animation: rowFadeIn var(--md-duration-short4) var(--md-easing-emphasized-decelerate) both;
 }
 
@@ -1491,6 +1492,10 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .btn, .btn-icon, .btn-ghost, .action-btn, .rating-btn, .nav-tab {
   position: relative;
   overflow: hidden;
+}
+/* Undo overflow:hidden on segmented buttons (overlapping borders) */
+.rating-btn {
+  overflow: visible;
 }
 .ripple-effect {
   position: absolute;
