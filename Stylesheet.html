@@ -241,15 +241,22 @@ body {
   opacity: 0.7;
 }
 
-/* ─── Top App Bar (M3 Small) with Inline Tabs ─── */
-nav {
+/* ─── Top App Bar (M3 Small — Center-aligned) ─── */
+.top-app-bar {
   background: var(--md-primary);
   color: var(--md-on-primary);
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  position: sticky; top: 0; z-index: 100;
+  position: sticky;
+  top: 0;
+  z-index: 100;
   height: 64px;
+}
+.top-app-bar-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
   padding: 0 16px;
 }
 .nav-brand {
@@ -264,30 +271,42 @@ nav {
   flex-shrink: 0;
 }
 
-/* ─── Navigation Tabs (M3 Primary Tabs — Icon + Label) ─── */
-.nav-tabs {
+/* ─── Tab Bar (M3 Primary Tabs — Icon + Label, on surface) ─── */
+.tab-bar {
+  background: var(--md-surface);
+  border-bottom: 1px solid var(--md-outline-variant);
+  position: sticky;
+  top: 64px;
+  z-index: 99;
+}
+.tab-bar-content {
   display: flex;
   align-items: stretch;
   justify-content: center;
-  height: 100%;
-  flex: 1;
-  min-width: 0;
+  height: 64px;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 16px;
+  gap: 0;
 }
+
+/* ─── Individual Tab (M3 Primary Tab) ─── */
 .nav-tab {
   height: 100%;
+  min-width: 90px;
   padding: 0 24px;
   background: none;
   border: none;
-  border-bottom: 3px solid transparent;
   cursor: pointer;
   font-family: 'Roboto', sans-serif;
-  color: rgba(255,255,255,0.70);
-  transition: color var(--md-duration-short4) var(--md-easing-standard), border-color var(--md-duration-short4) var(--md-easing-standard), background var(--md-duration-short4) var(--md-easing-standard);
+  color: var(--md-on-surface-variant);
+  transition: color var(--md-duration-short4) var(--md-easing-standard),
+              background var(--md-duration-short4) var(--md-easing-standard);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 4px;
   position: relative;
   white-space: nowrap;
 }
@@ -298,19 +317,38 @@ nav {
   flex-shrink: 0;
 }
 .nav-tab-label {
-  /* M3 Label Medium */
-  font-size: 12px;
+  /* M3 Title Small */
+  font-size: 14px;
   font-weight: 500;
-  letter-spacing: 0.5px;
-  line-height: 16px;
+  letter-spacing: 0.1px;
+  line-height: 20px;
 }
+
+/* Tab active indicator (MD3 pill shape) */
+.tab-indicator {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%) scaleX(0);
+  width: calc(100% - 16px);
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: var(--md-primary);
+  transition: transform var(--md-duration-short4) var(--md-easing-standard);
+}
+
+/* Hover state layer (MD3: primary color at 8% opacity) */
 .nav-tab:hover {
-  background: rgba(255,255,255,0.08);
-  color: rgba(255,255,255,0.90);
+  background: rgba(196, 30, 58, 0.08);
+  color: var(--md-on-surface);
 }
+
+/* Active tab */
 .nav-tab.active {
-  color: var(--md-on-primary);
-  border-bottom-color: var(--md-on-primary);
+  color: var(--md-primary);
+}
+.nav-tab.active .tab-indicator {
+  transform: translateX(-50%) scaleX(1);
 }
 
 /* ─── Main Layout ─── */
@@ -1455,8 +1493,8 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   pointer-events: auto;
 }
 
-/* ─── Tab Indicator ─── */
-.nav-tabs {
+/* ─── Tab Bar positioning helper ─── */
+.tab-bar-content {
   position: relative;
 }
 
@@ -1485,10 +1523,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 }
 /* Undo overflow:hidden on segmented buttons (overlapping borders) */
 .rating-btn {
-  overflow: visible;
-}
-/* Undo overflow:hidden on nav tabs (border-bottom indicator needs to be visible) */
-.nav-tab {
   overflow: visible;
 }
 .ripple-effect {
@@ -1913,18 +1947,29 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 
 /* ─── Responsive ─── */
 @media (max-width: 768px) {
-  nav {
+  .top-app-bar {
     height: 56px;
+  }
+  .top-app-bar-content {
     padding: 0 12px;
   }
   .nav-logo { height: 32px; }
-  .nav-tabs {
+  .tab-bar {
+    top: 56px;
+  }
+  .tab-bar-content {
+    height: 56px;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    justify-content: flex-start;
+    padding: 0 8px;
   }
-  .nav-tab { padding: 0 12px; }
+  .nav-tab {
+    padding: 0 16px;
+    min-width: 72px;
+  }
   .nav-tab-icon { width: 20px; height: 20px; }
-  .nav-tab-label { font-size: 11px; }
+  .nav-tab-label { font-size: 12px; }
   main { padding: 16px; }
   .form-row { flex-direction: column; gap: 0; }
   .dashboard-table { font-size: 13px; }

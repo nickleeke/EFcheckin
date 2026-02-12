@@ -104,6 +104,7 @@ document.addEventListener('DOMContentLoaded', function() {
 /** Enter the main app (for returning users or after onboarding). */
 function enterApp() {
   document.getElementById('navbar').style.display = '';
+  document.getElementById('tab-bar').style.display = '';
   // Load global case managers list
   google.script.run
     .withSuccessHandler(function(cms) {
@@ -2513,6 +2514,7 @@ function saveFeedbackSetup() {
 
 function showInviteModal(invite, isNewUser) {
   document.getElementById('navbar').style.display = '';
+  document.getElementById('tab-bar').style.display = '';
   showView('auth-loading'); // keep loading state visible behind the modal
   if (!isNewUser) showView('dashboard-view');
 

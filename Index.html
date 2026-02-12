@@ -7,30 +7,40 @@
 </head>
 <body>
 
-  <!-- Navigation (hidden until auth resolves) -->
-  <nav id="navbar" style="display:none">
-    <div class="nav-brand">
-      <img src="https://resources.finalsite.net/images/f_auto,q_auto/v1593114034/richfieldschoolsorg/jztydvqdo8o8hchpy6oy/MS_Horiz_W.png" alt="Richfield Public Schools Logo" class="nav-logo">
+  <!-- Top App Bar (hidden until auth resolves) -->
+  <header id="navbar" class="top-app-bar" style="display:none">
+    <div class="top-app-bar-content">
+      <div class="nav-brand">
+        <img src="https://resources.finalsite.net/images/f_auto,q_auto/v1593114034/richfieldschoolsorg/jztydvqdo8o8hchpy6oy/MS_Horiz_W.png" alt="Richfield Public Schools Logo" class="nav-logo">
+      </div>
     </div>
-    <div class="nav-tabs" id="nav-tabs">
+  </header>
+
+  <!-- MD3 Primary Tabs (separate from app bar) -->
+  <div id="tab-bar" class="tab-bar" style="display:none">
+    <div class="tab-bar-content">
       <button class="nav-tab active" id="tab-caseload" onclick="switchDashboardTab('caseload')">
         <svg class="nav-tab-icon" viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
         <span class="nav-tab-label">Dashboard</span>
+        <span class="tab-indicator"></span>
       </button>
       <button class="nav-tab" id="tab-mycaseload" onclick="switchDashboardTab('mycaseload')" style="display:none;">
         <svg class="nav-tab-icon" viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13zm-3 3c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zm4 8H6v-1c0-1.33 2.67-2 4-2s4 .67 4 2v1z"/></svg>
         <span class="nav-tab-label">My Caseload</span>
+        <span class="tab-indicator"></span>
       </button>
       <button class="nav-tab" id="tab-admin" onclick="switchDashboardTab('admin')" style="display:none;">
         <svg class="nav-tab-icon" viewBox="0 0 24 24"><path d="M17 11c.34 0 .67.04 1 .09V6.27L10.5 3 3 6.27v4.91c0 4.54 3.2 8.79 7.5 9.82.55-.13 1.08-.32 1.6-.55-.69-.98-1.1-2.17-1.1-3.45 0-3.31 2.69-6 6-6z"/><path d="M17 13c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 1.38c.62 0 1.12.51 1.12 1.12s-.51 1.12-1.12 1.12-1.12-.51-1.12-1.12.5-1.12 1.12-1.12zm0 5.37c-.93 0-1.74-.46-2.24-1.17.05-.72 1.51-1.08 2.24-1.08s2.19.36 2.24 1.08c-.5.71-1.31 1.17-2.24 1.17z"/></svg>
         <span class="nav-tab-label">Admin</span>
+        <span class="tab-indicator"></span>
       </button>
       <button class="nav-tab" id="tab-team" onclick="showCoTeachers()">
         <svg class="nav-tab-icon" viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
         <span class="nav-tab-label">Team</span>
+        <span class="tab-indicator"></span>
       </button>
     </div>
-  </nav>
+  </div>
 
   <main id="main-content">
 
