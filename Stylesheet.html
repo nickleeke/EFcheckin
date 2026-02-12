@@ -1459,16 +1459,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .nav-tabs {
   position: relative;
 }
-.nav-tab-indicator {
-  position: absolute;
-  bottom: 0;
-  height: 3px;
-  background: var(--md-on-primary);
-  border-radius: 3px 3px 0 0;
-  transition: left var(--md-duration-medium1) var(--md-easing-standard),
-              width var(--md-duration-medium1) var(--md-easing-standard);
-  pointer-events: none;
-}
 
 /* ─── Skeleton → Content Cross-Fade ─── */
 @keyframes contentFadeIn {
@@ -1495,6 +1485,10 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 }
 /* Undo overflow:hidden on segmented buttons (overlapping borders) */
 .rating-btn {
+  overflow: visible;
+}
+/* Undo overflow:hidden on nav tabs (border-bottom indicator needs to be visible) */
+.nav-tab {
   overflow: visible;
 }
 .ripple-effect {
