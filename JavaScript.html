@@ -167,7 +167,9 @@ document.addEventListener('keydown', function(e) {
 function closeConfirmDialog(overlayEl) {
   if (!overlayEl || overlayEl.classList.contains('dialog-closing')) return;
   overlayEl.classList.add('dialog-closing');
+  var fallback = setTimeout(function() { overlayEl.remove(); }, 300);
   overlayEl.addEventListener('animationend', function() {
+    clearTimeout(fallback);
     overlayEl.remove();
   });
 }
@@ -2932,14 +2934,17 @@ function showCheckInSkeleton() {
   container.innerHTML = html;
 }
 
+var _toastTimer = null;
 function showToast(message) {
   var toast = document.getElementById('toast');
+  if (_toastTimer) clearTimeout(_toastTimer);
   toast.textContent = message;
   toast.classList.remove('toast-hiding');
   toast.classList.add('show');
-  setTimeout(function() {
+  _toastTimer = setTimeout(function() {
     toast.classList.add('toast-hiding');
     toast.classList.remove('show');
+    _toastTimer = null;
   }, 3000);
 }
 
