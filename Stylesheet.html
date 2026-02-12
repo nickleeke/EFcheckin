@@ -1085,85 +1085,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   font-weight: 500;
   color: var(--md-on-surface);
 }
-/* ─── Schedule Table ─── */
-.schedule-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-.schedule-table th {
-  font-size: 11px;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--md-on-surface-variant);
-  text-align: left;
-  padding: 8px 12px;
-  border-bottom: 2px solid var(--md-outline-variant);
-}
-.schedule-table td {
-  padding: 8px 12px;
-  font-size: 14px;
-  border-bottom: 1px solid var(--md-outline-variant);
-}
-.schedule-table .schedule-period {
-  width: 64px;
-  text-align: center;
-  font-weight: 500;
-  color: var(--md-primary);
-}
-
-.profile-gpa-bar {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 12px 16px;
-  background: var(--md-surface-container-low);
-  border-radius: var(--md-shape-sm);
-  margin-bottom: 12px;
-}
-.profile-gpa-bar .gpa-label {
-  font-size: 13px;
-  color: var(--md-on-surface-variant);
-}
-.profile-gpa-bar .gpa-value {
-  font-size: 18px;
-  font-weight: 600;
-}
-.profile-gpa-bar .gpa-value.high { color: #1B5E20; }
-.profile-gpa-bar .gpa-value.mid  { color: #7A5900; }
-.profile-gpa-bar .gpa-value.low  { color: var(--md-error); }
-
-/* Reuse missing-class-card pattern for profile class cards */
-.profile-class-cards { display: flex; flex-direction: column; gap: 4px; }
-.profile-class-card {
-  border: 1px solid var(--md-outline-variant);
-  border-radius: var(--md-shape-md);
-  overflow: hidden;
-}
-.profile-class-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px;
-  cursor: pointer;
-  transition: background var(--md-duration-short3) var(--md-easing-standard);
-}
-.profile-class-header:hover {
-  background: rgba(196,30,58,0.04);
-}
-.profile-class-info {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.profile-class-name {
-  font-weight: 500;
-  font-size: 14px;
-}
-.profile-class-grade {
-  font-size: 14px;
-  color: var(--md-on-surface-variant);
-}
 .profile-grade-select {
   font-size: 14px;
   font-family: inherit;
@@ -1186,40 +1107,139 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   border-color: var(--md-primary);
   box-shadow: 0 0 0 1px var(--md-primary);
 }
-.profile-class-right {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+
+/* ─── Profile Academics Two-Column Layout ─── */
+.profile-academics-layout {
+  display: grid;
+  grid-template-columns: 1fr 240px;
+  gap: 16px;
+  align-items: start;
 }
-.profile-class-badge {
-  min-width: 32px;
-  height: 32px;
+.profile-academics-left {
+  min-width: 0;
+}
+
+/* ─── Merged Schedule + Academics Table ─── */
+.profile-schedule-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.profile-schedule-table thead th {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--md-on-surface-variant);
+  padding: 8px 12px;
+  border-bottom: 2px solid var(--md-outline-variant);
+  text-align: left;
+}
+.pst-col-period { width: 64px; text-align: center; }
+.pst-col-grade  { width: 72px; text-align: right; }
+.pst-col-missing { width: 80px; text-align: center; }
+.profile-schedule-row td {
+  padding: 10px 12px;
+  font-size: 14px;
+  border-bottom: 1px solid var(--md-outline-variant);
+  vertical-align: middle;
+}
+.profile-schedule-row[data-expandable="true"] {
+  cursor: pointer;
+  transition: background var(--md-duration-short3) var(--md-easing-standard);
+}
+.profile-schedule-row[data-expandable="true"]:hover {
+  background: rgba(196, 30, 58, 0.04);
+}
+.profile-schedule-row.expanded {
+  background: var(--md-surface-container-low);
+}
+.pst-period {
+  text-align: center;
+  font-weight: 500;
+  color: var(--md-primary);
+}
+.pst-grade { text-align: right; }
+.pst-missing { text-align: center; }
+
+/* Missing pill badge (non-clickable) */
+.profile-missing-pill {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  min-width: 28px;
+  height: 24px;
+  padding: 0 8px;
   border-radius: var(--md-shape-full);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
-  padding: 0 12px;
 }
-.profile-class-badge.badge-green  { background: #D6F5D6; color: #1B5E20; }
-.profile-class-badge.badge-yellow { background: #FFF3CD; color: #7A5900; }
-.profile-class-badge.badge-red    { background: var(--md-error-container); color: var(--md-on-error-container); }
-.profile-class-header .expand-icon {
-  transition: transform var(--md-duration-short4) var(--md-easing-standard);
+.profile-missing-pill.badge-yellow { background: #FFF3CD; color: #7A5900; }
+.profile-missing-pill.badge-red    { background: var(--md-error-container); color: var(--md-on-error-container); }
+
+/* Expandable detail row */
+.profile-row-detail { display: none; }
+.profile-row-detail.expanded { display: table-row; }
+.profile-row-detail-cell {
+  padding: 0;
+  border-bottom: 1px solid var(--md-outline-variant);
+  background: var(--md-surface-container-lowest);
+}
+
+/* ─── Stat Cards (right column) ─── */
+.profile-academics-right {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.profile-stat-card {
+  background: var(--md-surface);
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-md);
+  padding: 20px;
+  text-align: center;
+}
+.profile-stat-clickable {
+  cursor: pointer;
+  transition: box-shadow var(--md-duration-short3) var(--md-easing-standard),
+              transform var(--md-duration-short3) var(--md-easing-standard);
+}
+.profile-stat-clickable:hover {
+  box-shadow: var(--md-elevation-1);
+  transform: translateY(-1px);
+}
+.profile-stat-label {
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
   color: var(--md-on-surface-variant);
-  margin-left: 8px;
+  margin-bottom: 8px;
 }
-.profile-class-card.expanded .profile-class-header .expand-icon {
-  transform: rotate(180deg);
+.profile-stat-value {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
-.profile-class-detail {
-  max-height: 0;
-  overflow: hidden;
-  transition: max-height var(--md-duration-medium2) var(--md-easing-standard);
+.profile-stat-number {
+  font-size: 36px;
+  font-weight: 400;
+  line-height: 1.2;
 }
-.profile-class-card.expanded .profile-class-detail {
-  max-height: 2000px;
+.profile-stat-number.gpa-gold { color: #7A5900; }
+.profile-stat-number.gpa-default { color: var(--md-on-surface); }
+.profile-stat-number.missing-zero { color: #1B5E20; }
+.profile-stat-number.missing-alert { color: var(--md-error); }
+.profile-trophy {
+  font-size: 28px;
+  display: none;
+}
+.profile-trophy.visible { display: inline; }
+.profile-stat-action {
+  margin-top: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--md-primary);
 }
 
 /* ─── Goals & Objectives ─── */
@@ -2010,6 +2030,11 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   .mv-add-form-row { flex-wrap: wrap; }
   .mv-add-form-row input[type="text"] { flex: 1 1 100%; }
   .mv-add-form-row select { flex: 1; }
+  .profile-academics-layout { grid-template-columns: 1fr; }
+  .profile-academics-right { flex-direction: row; gap: 12px; }
+  .profile-stat-card { flex: 1; }
+  .pst-col-grade { width: 64px; }
+  .pst-col-missing { width: 64px; }
 }
 
 /* ─── Onboarding Wizard ─── */
