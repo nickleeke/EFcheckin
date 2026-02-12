@@ -1441,6 +1441,39 @@ function showProfileAddMissing(studentId, classIdx) {
   showAddMissingForm(studentId, classIdx, 'pv');
 }
 
+function profileChangeGrade(studentId, classIdx, newGrade) {
+  var student = getStudentById(studentId);
+  if (!student || !student.academicData || !student.academicData[classIdx]) return;
+
+  student.academicData[classIdx].grade = newGrade;
+
+  // Recalculate GPA locally
+  var GPA_MAP = {'A':4.0,'A-':3.7,'B+':3.3,'B':3.0,'B-':2.7,'C+':2.3,'C':2.0,'C-':1.7,'D+':1.3,'D':1.0,'D-':0.7,'F':0.0};
+  var gpaValues = [];
+  student.academicData.forEach(function(c) {
+    if (c.grade && GPA_MAP.hasOwnProperty(c.grade)) gpaValues.push(GPA_MAP[c.grade]);
+  });
+  student.gpa = gpaValues.length > 0
+    ? gpaValues.reduce(function(a, b) { return a + b; }, 0) / gpaValues.length
+    : null;
+
+  // Update the GPA bar in the profile without full re-render
+  var gpaBar = document.querySelector('.profile-gpa-bar');
+  if (gpaBar) {
+    var gpaValueEl = gpaBar.querySelector('.gpa-value');
+    if (gpaValueEl && student.gpa != null) {
+      gpaValueEl.textContent = student.gpa.toFixed(2);
+      gpaValueEl.className = 'gpa-value ' + (student.gpa >= 3.5 ? 'high' : student.gpa >= 2.5 ? 'mid' : 'low');
+    } else if (gpaValueEl) {
+      gpaValueEl.textContent = '--';
+      gpaValueEl.className = 'gpa-value';
+    }
+  }
+
+  persistAcademicData_(student);
+  showToast('Grade updated');
+}
+
 /** Shared logic for adding a missing assignment from an inline form. */
 function addMissingFromForm_(studentId, classIdx, prefix, renderFn, opts) {
   var nameInput = document.getElementById(prefix + '-add-name-' + classIdx);
@@ -1665,11 +1698,20 @@ function renderStudentProfileDashboard(student) {
       var matchedClass = (student.classes || []).find(function(cl) { return cl.name === c.className; });
       if (matchedClass && matchedClass.period) classLabel += ' (P' + matchedClass.period + ')';
 
+      var gradeOptions = ['', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'D-', 'F'];
+      var gradeSelect = '<select class="profile-grade-select" onclick="event.stopPropagation()" onchange="profileChangeGrade(\'' + student.id + '\', ' + idx + ', this.value)">';
+      gradeOptions.forEach(function(g) {
+        var selected = (c.grade || '') === g ? ' selected' : '';
+        var label = g || '--';
+        gradeSelect += '<option value="' + esc(g) + '"' + selected + '>' + esc(label) + '</option>';
+      });
+      gradeSelect += '</select>';
+
       html += '<div class="profile-class-card" id="profile-card-' + idx + '">' +
         '<div class="profile-class-header" onclick="toggleProfileClass(' + idx + ')">' +
           '<div class="profile-class-info">' +
             '<span class="profile-class-name">' + esc(classLabel) + '</span>' +
-            '<span class="profile-class-grade">' + esc(c.grade || '--') + '</span>' +
+            gradeSelect +
           '</div>' +
           '<div class="profile-class-right">' +
             '<div class="profile-class-badge ' + badgeClass + '">' + missingNum + '</div>' +

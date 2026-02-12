@@ -1164,6 +1164,28 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   font-size: 14px;
   color: var(--md-on-surface-variant);
 }
+.profile-grade-select {
+  font-size: 14px;
+  font-family: inherit;
+  font-weight: 500;
+  color: var(--md-on-surface);
+  background: transparent;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-xs);
+  padding: 2px 6px;
+  cursor: pointer;
+  transition: border-color var(--md-duration-short3) var(--md-easing-standard),
+              background var(--md-duration-short3) var(--md-easing-standard);
+}
+.profile-grade-select:hover {
+  border-color: var(--md-outline);
+  background: rgba(0,0,0,0.04);
+}
+.profile-grade-select:focus {
+  outline: none;
+  border-color: var(--md-primary);
+  box-shadow: 0 0 0 1px var(--md-primary);
+}
 .profile-class-right {
   display: flex;
   align-items: center;
