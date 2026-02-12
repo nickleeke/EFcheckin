@@ -167,3 +167,4 @@ Delegated click handler creates `<span class="ripple-effect">` inside buttons. B
 - Private backend functions use trailing underscore convention (e.g., `getSS_()`)
 - XSS prevention via `esc()` function for all user-generated content in HTML
 - No external JS/CSS libraries — everything is hand-coded
+- **GAS iframe quirk:** `<button>` elements require `appearance: none` to strip native OS chrome. The global reset in `Stylesheet.html` (`button { appearance: none; -webkit-appearance: none; }`) handles this — do not remove it. Without it, buttons render with default browser styling inside the GAS sandbox.
