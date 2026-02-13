@@ -167,7 +167,8 @@ function include(filename) {
 var STUDENT_HEADERS = [
   'id','firstName','lastName','grade','period',
   'focusGoal','accommodations','notes','classesJson',
-  'createdAt','updatedAt','iepGoal','goalsJson','caseManagerEmail'
+  'createdAt','updatedAt','iepGoal','goalsJson','caseManagerEmail',
+  'contactsJson'
 ];
 var CHECKIN_HEADERS = [
   'id','studentId','weekOf',
@@ -291,6 +292,8 @@ function getStudents() {
     catch(e) { row.classes = []; }
     try { row.goals = JSON.parse(row.goalsJson || '[]'); }
     catch(e) { row.goals = []; }
+    try { row.contacts = JSON.parse(row.contactsJson || '[]'); }
+    catch(e) { row.contacts = []; }
     students.push(row);
   }
 
@@ -309,6 +312,7 @@ function saveStudent(profile) {
   const sheet = ss.getSheetByName(SHEET_STUDENTS);
   const now = new Date().toISOString();
   const classesJson = JSON.stringify(profile.classes || []);
+  const contactsJson = JSON.stringify(profile.contacts || []);
 
   if (profile.id) {
     var found = findRowById_(sheet, profile.id);
@@ -325,6 +329,7 @@ function saveStudent(profile) {
         iepGoal: profile.iepGoal || '',
         goalsJson: profile.goalsJson || '',
         caseManagerEmail: profile.caseManagerEmail || '',
+        contactsJson: contactsJson,
         updatedAt: now
       });
       invalidateCache_();
@@ -338,7 +343,8 @@ function saveStudent(profile) {
     profile.grade||'', profile.period||'',
     profile.focusGoal||'', profile.accommodations||'',
     profile.notes||'', classesJson, now, now,
-    profile.iepGoal||'', profile.goalsJson||'', profile.caseManagerEmail||''
+    profile.iepGoal||'', profile.goalsJson||'', profile.caseManagerEmail||'',
+    contactsJson
   ]);
   invalidateCache_();
   return { success: true, id: id };
@@ -354,6 +360,24 @@ function saveStudentGoals(studentId, goalsJson) {
   if (found) {
     batchSetValues_(sheet, found.rowIndex, found.colIdx, {
       goalsJson: goalsJson || '',
+      updatedAt: now
+    });
+    invalidateCache_();
+    return { success: true };
+  }
+  return { success: false, error: 'Student not found' };
+}
+
+function saveStudentContacts(studentId, contactsJson) {
+  initializeSheetsIfNeeded_();
+  const ss = getSS_();
+  const sheet = ss.getSheetByName(SHEET_STUDENTS);
+  const now = new Date().toISOString();
+
+  var found = findRowById_(sheet, studentId);
+  if (found) {
+    batchSetValues_(sheet, found.rowIndex, found.colIdx, {
+      contactsJson: contactsJson || '',
       updatedAt: now
     });
     invalidateCache_();
@@ -567,6 +591,8 @@ function getDashboardData() {
       iepGoal: s.iepGoal || '',
       goalsJson: s.goalsJson || '',
       caseManagerEmail: s.caseManagerEmail || '',
+      contactsJson: s.contactsJson || '',
+      contacts: s.contacts || [],
       classes: s.classes || [],
       totalCheckIns: totalCheckIns,
       latestCheckInId: latest ? latest.id : null,
