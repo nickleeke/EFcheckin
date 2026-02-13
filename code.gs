@@ -185,6 +185,8 @@ var CHECKIN_HEADERS = [
 ];
 var COTEACHER_HEADERS = ['email', 'role', 'addedAt'];
 var EVALUATION_HEADERS = ['id', 'studentId', 'type', 'itemsJson', 'createdAt', 'updatedAt', 'filesJson'];
+var VALID_EVAL_TYPES = ['annual-iep', '3-year-reeval', 'initial-eval', 'eval', 'reeval'];
+var EVAL_INITIAL_TYPES_ = ['initial-eval', 'eval'];
 
 function initializeSheets() {
   const ss = getSS_();
@@ -1064,8 +1066,6 @@ function getEvaluation(studentId) {
   return null;
 }
 
-var VALID_EVAL_TYPES = ['annual-iep', '3-year-reeval', 'initial-eval', 'eval', 'reeval'];
-
 function createEvaluation(studentId, type) {
   initializeSheetsIfNeeded_();
   if (VALID_EVAL_TYPES.indexOf(type) === -1) {
@@ -1084,8 +1084,7 @@ function createEvaluation(studentId, type) {
     ensureHeaders_(sheet, EVALUATION_HEADERS);
   }
 
-  // initial-eval and legacy 'eval' use the eval template; others use re-eval template
-  var items = (type === 'initial-eval' || type === 'eval') ? getEvalTemplateItems_() : getReEvalTemplateItems_();
+  var items = EVAL_INITIAL_TYPES_.indexOf(type) !== -1 ? getEvalTemplateItems_() : getReEvalTemplateItems_();
   var now = new Date().toISOString();
   var id = Utilities.getUuid();
 
