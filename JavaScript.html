@@ -103,8 +103,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
 /** Enter the main app (for returning users or after onboarding). */
 function enterApp() {
-  document.getElementById('navbar').style.display = '';
-  document.getElementById('tab-bar').style.display = '';
+  var navbar = document.getElementById('navbar');
+  var tabBar = document.getElementById('tab-bar');
+  if (navbar) navbar.style.display = '';
+  if (tabBar) tabBar.style.display = '';
   // Load global case managers list
   google.script.run
     .withSuccessHandler(function(cms) {
@@ -747,6 +749,7 @@ function renderCheckInMissingItem(clsIdx, name, type) {
 
 function toggleCheckInMissing(clsIdx) {
   var row = document.getElementById('acad-missing-row-' + clsIdx);
+  if (!row) return;
   if (row.style.display === 'none') {
     row.style.display = '';
   } else {
@@ -1815,10 +1818,10 @@ function renderStudentProfileDashboard(student) {
   if (student.gpa != null) {
     var gpaColorClass = student.gpa >= 3.0 ? 'gpa-gold' : 'gpa-default';
     html += '<span class="profile-stat-number ' + gpaColorClass + '" id="profile-gpa-number">' + student.gpa.toFixed(2) + '</span>';
-    html += '<span class="profile-trophy' + (student.gpa >= 3.7 ? ' visible' : '') + '" id="profile-gpa-trophy">&#127942;</span>';
+    html += '<span class="profile-trophy' + (student.gpa >= 3.7 ? ' visible' : '') + '" id="profile-gpa-trophy">&#x1F3C6;</span>';
   } else {
     html += '<span class="profile-stat-number gpa-default" id="profile-gpa-number">--</span>';
-    html += '<span class="profile-trophy" id="profile-gpa-trophy">&#127942;</span>';
+    html += '<span class="profile-trophy" id="profile-gpa-trophy">&#x1F3C6;</span>';
   }
   html += '</div></div>';
 
@@ -2617,8 +2620,10 @@ function saveFeedbackSetup() {
 // ─── Co-Teacher Invite Modal ───
 
 function showInviteModal(invite, isNewUser) {
-  document.getElementById('navbar').style.display = '';
-  document.getElementById('tab-bar').style.display = '';
+  var navbar = document.getElementById('navbar');
+  var tabBar = document.getElementById('tab-bar');
+  if (navbar) navbar.style.display = '';
+  if (tabBar) tabBar.style.display = '';
   showView('auth-loading'); // keep loading state visible behind the modal
   if (!isNewUser) showView('dashboard-view');
 
