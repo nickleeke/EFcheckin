@@ -4357,6 +4357,9 @@ function showEvalChecklistView(studentId, evaluation) {
 
   document.getElementById('eval-checklist-title').textContent = studentName;
 
+  document.getElementById('eval-checklist-actions').innerHTML =
+    '<a href="https://15.spedforms.org/students2020.php?login=1" target="_blank" class="btn btn-secondary">Open SpEdForms</a>';
+
   renderEvalChecklist(evaluation);
   showView('eval-checklist-view');
 }
@@ -4377,11 +4380,6 @@ function renderEvalChecklist(evaluation) {
   }).length;
 
   var html = '';
-
-  // SpEdForms button (right-aligned, above progress card)
-  html += '<div class="eval-spedforms-row">' +
-    '<a href="https://15.spedforms.org/students2020.php?login=1" target="_blank" class="btn btn-secondary">Open SpEdForms</a>' +
-  '</div>';
 
   // Two-column layout: checklist (3/4) + files (1/4)
   html += '<div class="eval-checklist-layout">';
@@ -4406,6 +4404,13 @@ function renderEvalChecklist(evaluation) {
 
   // Checklist items
   html += '<div class="eval-items-card">';
+  html += '<div class="eval-items-header">' +
+    '<span class="eval-items-header-task">Task</span>' +
+    '<div class="eval-items-header-meta">' +
+      '<span class="eval-items-header-due">Due Date</span>' +
+      '<span class="eval-items-header-completed">Completed</span>' +
+    '</div>' +
+  '</div>';
   items.forEach(function(item) {
     var checkedClass = item.checked ? ' eval-item-checked' : '';
     var completedDate = '';

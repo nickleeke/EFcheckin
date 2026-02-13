@@ -3193,6 +3193,41 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   overflow: hidden;
   margin-bottom: 16px;
 }
+.eval-items-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--md-outline-variant);
+  background: var(--md-surface-container-low);
+}
+.eval-items-header-task {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--md-on-surface-variant);
+  padding-left: 32px;
+}
+.eval-items-header-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.eval-items-header-due {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--md-on-surface-variant);
+  width: 130px;
+  text-align: center;
+}
+.eval-items-header-completed {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--md-on-surface-variant);
+  margin-left: 12px;
+  width: 70px;
+  text-align: center;
+}
 .eval-item {
   display: flex;
   align-items: center;
@@ -3274,11 +3309,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 }
 
 /* ─── Eval Checklist View: Two-Column Layout ─── */
-.eval-spedforms-row {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 16px;
-}
 .eval-checklist-layout {
   display: grid;
   grid-template-columns: 3fr 1fr;
