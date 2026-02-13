@@ -1867,8 +1867,9 @@ function renderStudentProfileDashboard(student) {
 
   html += '</div>'; // end .profile-academics-right
   html += '</div>'; // end .profile-academics-layout
+  html += '</div>'; // end .profile-section-card (Academics)
 
-  // Contacts Card (full-width, below academics grid)
+  // Contacts Card (full-width, below academics section)
   var contacts = student.contacts || [];
   if (!contacts.length && student.contactsJson) {
     try { contacts = JSON.parse(student.contactsJson); } catch(e) { contacts = []; }
@@ -1889,7 +1890,6 @@ function renderStudentProfileDashboard(student) {
     });
   }
   html += '</div></div>';
-  html += '</div>'; // end .profile-section-card
 
   // ─── Section 2: Goals & Objectives ───
   html += '<div class="profile-section-card">';
