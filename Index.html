@@ -13,9 +13,14 @@
     <div id="nav-drawer-scrim" class="nav-drawer-scrim" onclick="closeNavDrawer()"></div>
 
     <!-- MD3 Navigation Drawer (hidden until auth resolves) -->
-    <aside id="nav-drawer" class="nav-drawer" style="display:none">
+    <aside id="nav-drawer" class="nav-drawer" role="navigation" aria-label="Main navigation" style="display:none">
       <div class="nav-drawer-header"></div>
       <nav class="nav-drawer-items">
+        <button class="nav-drawer-item active" id="drawer-dashboard" onclick="switchDashboardTab('dashboard')">
+          <span class="nav-drawer-active-indicator"></span>
+          <svg class="nav-drawer-icon" viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+          <span class="nav-drawer-label">Dashboard</span>
+        </button>
         <div class="nav-drawer-group" id="nav-group-students">
           <div class="nav-drawer-item nav-drawer-parent">
             <svg class="nav-drawer-icon" viewBox="0 0 24 24"><path d="M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3L1 9l11 6 9-4.91V17h2V9L12 3z"/></svg>
@@ -23,7 +28,7 @@
             <svg class="nav-drawer-expand-icon" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
           </div>
           <div class="nav-drawer-submenu">
-            <button class="nav-drawer-item nav-drawer-child active" id="drawer-caseload" onclick="switchDashboardTab('caseload')">
+            <button class="nav-drawer-item nav-drawer-child" id="drawer-caseload" onclick="switchDashboardTab('caseload')">
               <span class="nav-drawer-active-indicator"></span>
               <span class="nav-drawer-label">All Students</span>
             </button>
@@ -56,7 +61,7 @@
           <button id="nav-drawer-toggle" class="nav-drawer-toggle" onclick="toggleNavDrawer()" aria-label="Open navigation menu">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
           </button>
-          <div class="nav-brand">
+          <div class="nav-brand" onclick="showDashboard()" role="button" tabindex="0" aria-label="Go to dashboard" onkeydown="if(event.key==='Enter')showDashboard()">
             <img src="https://resources.finalsite.net/images/f_auto,q_auto/v1593114034/richfieldschoolsorg/jztydvqdo8o8hchpy6oy/MS_Horiz_W.png" alt="Richfield Public Schools Logo" class="nav-logo">
           </div>
           <div class="top-app-bar-spacer"></div>
