@@ -7,8 +7,8 @@ A Google Apps Script web application for Richfield Public Schools educators to m
 ## Tech Stack
 
 - **Backend:** Google Apps Script (`code.gs`)
-- **Frontend:** Vanilla JavaScript (`JavaScript.html`, ~3,500 lines)
-- **Styling:** Vanilla CSS implementing Material Design 3 (`Stylesheet.html`, ~2,200 lines)
+- **Frontend:** Vanilla JavaScript (`JavaScript.html`, ~3,600 lines)
+- **Styling:** Vanilla CSS implementing Material Design 3 (`Stylesheet.html`, ~2,500 lines)
 - **Data:** Google Sheets (per-user, auto-provisioned in Drive)
 - **Auth:** Google Session API (`Session.getActiveUser()`)
 - **Hosting:** Google Apps Script web app deployment
@@ -168,3 +168,8 @@ Delegated click handler creates `<span class="ripple-effect">` inside buttons. B
 - XSS prevention via `esc()` function for all user-generated content in HTML
 - No external JS/CSS libraries — everything is hand-coded
 - **GAS iframe quirk:** `<button>` elements require `appearance: none` to strip native OS chrome. The global reset in `Stylesheet.html` (`button { appearance: none; -webkit-appearance: none; }`) handles this — do not remove it. Without it, buttons render with default browser styling inside the GAS sandbox.
+
+### HtmlService Gotchas
+
+- **HTML entities inside `<script>` blocks:** `HtmlService.createHtmlOutputFromFile().getContent()` may misprocess decimal numeric entities (e.g., `&#127942;`) inside `<script>` tags, corrupting the JavaScript output and breaking the page. Always use **hex entities** (`&#x1F3C6;`) instead of decimal (`&#127942;`) for characters inside script content. Existing hex entities like `&#x1F4AF;` work correctly.
+- **Null-guard `.style` accesses:** Always null-check `getElementById()` results before accessing `.style` in initialization code (`enterApp`, `showInviteModal`). If `HtmlService` corrupts the template output, DOM elements may not exist.
