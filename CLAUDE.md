@@ -153,7 +153,7 @@ GPA values are color-coded consistently across three surfaces using MD3 containe
 
 | Surface | CSS Classes | Notes |
 |---|---|---|
-| **Dashboard table** | `.chip-green`, `.chip-yellow`, `.chip-red` | GPA chip; trophy `&#x1F3C6;` appended inline at >= 3.7 |
+| **Dashboard table** | `.chip-gold`, `.chip-green`, `.chip-red` | GPA chip; trophy `&#x1F3C6;` appended inline at >= 3.7 |
 | **Side panel** | `.sp-gpa.high`, `.sp-gpa.mid`, `.sp-gpa.low`, `.sp-gpa.none` | Large display (Display Small typography) |
 | **Profile stat card** | `.gpa-honor-roll`, `.gpa-good-standing`, `.gpa-at-risk` | Card-level background + border; trophy via `.profile-trophy.visible` at >= 3.7 |
 
@@ -169,8 +169,9 @@ Status chips (`.chip`) use a consistent traffic-light scheme across the app for 
 
 | Class | Background | Text | Usage |
 |---|---|---|---|
-| `.chip-green` | `#D6F5D6` | `#1B5E20` | Good: GPA >= 3.5, EF rating >= 4, missing = 0 |
-| `.chip-yellow` | `#FFF3CD` | `#7A5900` | Caution: GPA 2.5–3.49, EF rating 3–3.9, missing 1–3 |
+| `.chip-gold` | `#FFDEAB` | `#2A1800` | Honor Roll: GPA >= 3.5 |
+| `.chip-green` | `#D6F5D6` | `#1B5E20` | Good: GPA >= 2.5, EF rating >= 4, missing = 0 |
+| `.chip-yellow` | `#FFF3CD` | `#7A5900` | Caution: EF rating 3–3.9, missing 1–3 |
 | `.chip-red` | `--md-error-container` | `--md-on-error-container` | Concern: GPA < 2.5, EF rating < 3, missing >= 4 |
 | `.chip-gray` | `--md-surface-container-high` | `--md-on-surface-variant` | No data available |
 
