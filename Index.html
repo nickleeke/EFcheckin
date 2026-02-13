@@ -14,7 +14,9 @@
 
     <!-- MD3 Navigation Drawer (hidden until auth resolves) -->
     <aside id="nav-drawer" class="nav-drawer" role="navigation" aria-label="Main navigation" style="display:none">
-      <div class="nav-drawer-header"></div>
+      <div class="nav-drawer-header" onclick="showDashboard()" role="button" tabindex="0" aria-label="Go to dashboard" onkeydown="if(event.key==='Enter')showDashboard()">
+        <img src="https://resources.finalsite.net/images/f_auto,q_auto/v1593114034/richfieldschoolsorg/fbdgkdnvwf9nhuugg19c/MS_Stacked_C.png" alt="Richfield Public Schools Logo" class="nav-logo">
+      </div>
       <nav class="nav-drawer-items">
         <button class="nav-drawer-item active" id="drawer-dashboard" onclick="switchDashboardTab('dashboard')">
           <span class="nav-drawer-active-indicator"></span>
@@ -61,10 +63,6 @@
           <button id="nav-drawer-toggle" class="nav-drawer-toggle" onclick="toggleNavDrawer()" aria-label="Open navigation menu">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
           </button>
-          <div class="nav-brand" onclick="showDashboard()" role="button" tabindex="0" aria-label="Go to dashboard" onkeydown="if(event.key==='Enter')showDashboard()">
-            <img src="https://resources.finalsite.net/images/f_auto,q_auto/v1593114034/richfieldschoolsorg/jztydvqdo8o8hchpy6oy/MS_Horiz_W.png" alt="Richfield Public Schools Logo" class="nav-logo">
-          </div>
-          <div class="top-app-bar-spacer"></div>
         </div>
       </header>
 
