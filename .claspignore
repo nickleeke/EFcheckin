@@ -1,0 +1,18 @@
+# Git
+.git/**
+
+# Documentation
+README.md
+LICENSE
+CLAUDE.md
+
+# Clasp config
+.claspignore
+
+# Node (if added later)
+node_modules/**
+package.json
+package-lock.json
+
+# GitHub
+.github/**
