@@ -2267,9 +2267,10 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   .mv-add-form-row input[type="text"] { flex: 1 1 100%; }
   .mv-add-form-row select { flex: 1; }
   .profile-academics-layout { grid-template-columns: 1fr; }
-  .profile-academics-layout.has-eval-card { grid-template-columns: 1fr; }
-  .profile-eval-card { order: -1; }
   .profile-academics-right { flex-direction: row; flex-wrap: wrap; gap: 12px; }
+  .eval-checklist-layout { grid-template-columns: 1fr; }
+  .eval-checklist-sidebar { position: static; }
+  .eval-item-meta { flex-wrap: wrap; }
   .profile-stat-card { flex: 1; }
   .profile-contact-item { max-width: none; }
   .pst-col-grade { width: 64px; }
@@ -2698,10 +2699,75 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   }
 }
 
-/* ─── Eval Checklist: Profile Card (3-column layout) ─── */
-.profile-academics-layout.has-eval-card {
-  grid-template-columns: 1fr 240px 240px;
+/* ─── Eval Section Card (profile, above academics — collapsible) ─── */
+.profile-eval-section {
+  background: var(--md-primary-container);
+  border: 2px solid var(--md-primary);
+  border-radius: var(--md-shape-md);
+  padding: 0;
+  margin-bottom: 16px;
 }
+.profile-eval-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  cursor: pointer;
+  transition: background var(--md-duration-short3) var(--md-easing-standard);
+}
+.profile-eval-section-header:hover {
+  background: rgba(196, 30, 58, 0.06);
+}
+.profile-eval-section-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.profile-eval-section-title {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--md-on-primary-container);
+}
+.profile-eval-section-progress {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--md-primary);
+  background: var(--md-surface);
+  padding: 2px 10px;
+  border-radius: var(--md-shape-full);
+}
+.profile-eval-overdue-badge {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--md-on-error-container);
+  background: var(--md-error-container);
+  padding: 2px 8px;
+  border-radius: var(--md-shape-full);
+}
+.eval-collapse-btn {
+  transition: transform var(--md-duration-short4) var(--md-easing-standard);
+}
+.eval-collapse-btn.rotated {
+  transform: rotate(180deg);
+}
+.profile-eval-section-body {
+  padding: 0 20px 16px;
+  transition: max-height var(--md-duration-medium2) var(--md-easing-standard),
+              opacity var(--md-duration-short4) var(--md-easing-standard),
+              padding var(--md-duration-medium2) var(--md-easing-standard);
+  max-height: 800px;
+  opacity: 1;
+  overflow: hidden;
+}
+.profile-eval-section-body.collapsed {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+/* ─── Eval Checklist: Profile Card (inner, clickable) ─── */
 .profile-eval-card {
   background: var(--md-surface);
   border: 1px solid var(--md-outline-variant);
@@ -2891,6 +2957,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   font-size: 14px;
   color: var(--md-on-surface);
   line-height: 20px;
+  cursor: text;
 }
 .eval-item-checked .eval-item-text {
   text-decoration: line-through;
@@ -2907,6 +2974,266 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   margin-top: 16px;
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
+}
+
+/* ─── Eval Checklist View: Two-Column Layout ─── */
+.eval-spedforms-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+}
+.eval-checklist-layout {
+  display: grid;
+  grid-template-columns: 3fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+/* ─── Eval Files Sidebar ─── */
+.eval-checklist-sidebar {
+  background: var(--md-surface);
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-md);
+  padding: 16px;
+  position: sticky;
+  top: 80px;
+}
+.eval-files-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.eval-files-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--md-on-surface);
+}
+.eval-files-empty {
+  font-size: 13px;
+  color: var(--md-on-surface-variant);
+  text-align: center;
+  padding: 16px 0;
+}
+.eval-files-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.eval-file-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px;
+  border-radius: var(--md-shape-sm);
+  transition: background var(--md-duration-short3) var(--md-easing-standard);
+}
+.eval-file-item:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+.eval-file-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  color: var(--md-on-surface);
+  min-width: 0;
+  flex: 1;
+}
+.eval-file-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+.eval-file-name {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.eval-file-link:hover .eval-file-name {
+  color: var(--md-primary);
+}
+.eval-file-remove {
+  opacity: 0;
+  transition: opacity var(--md-duration-short3) var(--md-easing-standard);
+}
+.eval-file-item:hover .eval-file-remove {
+  opacity: 1;
+}
+
+/* ─── Editable Eval Items ─── */
+.eval-item-edit-input {
+  font-size: 14px;
+  font-family: 'Roboto', sans-serif;
+  color: var(--md-on-surface);
+  border: 1px solid var(--md-primary);
+  border-radius: var(--md-shape-xs);
+  padding: 4px 8px;
+  outline: none;
+  background: var(--md-surface);
+  flex: 1;
+  min-width: 0;
+}
+.eval-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.eval-item-due-date {
+  font-size: 12px;
+  font-family: 'Roboto', sans-serif;
+  color: var(--md-on-surface-variant);
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-xs);
+  padding: 3px 6px;
+  background: var(--md-surface);
+  cursor: pointer;
+  transition: border-color var(--md-duration-short3) var(--md-easing-standard);
+  width: 130px;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.eval-item-due-date:focus {
+  outline: none;
+  border-color: var(--md-primary);
+}
+.eval-item-due-date::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+}
+.eval-item-delete {
+  opacity: 0;
+  transition: opacity var(--md-duration-short3) var(--md-easing-standard);
+  color: var(--md-error);
+}
+.eval-item:hover .eval-item-delete {
+  opacity: 1;
+}
+
+/* ─── Overdue Badges ─── */
+.eval-overdue-badge {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--md-on-error-container);
+  background: var(--md-error-container);
+  padding: 2px 8px;
+  border-radius: var(--md-shape-full);
+  white-space: nowrap;
+}
+.eval-item-overdue {
+  background: rgba(186, 26, 26, 0.04);
+}
+.eval-item-overdue:hover {
+  background: rgba(186, 26, 26, 0.07);
+}
+.eval-card-overdue-badge {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--md-on-error-container);
+  background: var(--md-error-container);
+  padding: 2px 8px;
+  border-radius: var(--md-shape-full);
+  margin-left: 8px;
+}
+.eval-overdue-count {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--md-error);
+  margin-left: 8px;
+}
+
+/* ─── Add Task Form ─── */
+.eval-add-task-row {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.eval-add-task-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+.eval-add-task-input {
+  flex: 1;
+  min-width: 200px;
+  height: 36px;
+  padding: 6px 12px;
+  border: 1px solid var(--md-outline);
+  border-radius: var(--md-shape-xs);
+  font-size: 14px;
+  font-family: 'Roboto', sans-serif;
+  color: var(--md-on-surface);
+  background: var(--md-surface);
+  appearance: none;
+  -webkit-appearance: none;
+}
+.eval-add-task-input:focus {
+  outline: none;
+  border-color: var(--md-primary);
+  border-width: 2px;
+  padding: 5px 11px;
+}
+.eval-add-task-due {
+  height: 36px;
+  padding: 6px 8px;
+  border: 1px solid var(--md-outline);
+  border-radius: var(--md-shape-xs);
+  font-size: 13px;
+  font-family: 'Roboto', sans-serif;
+  color: var(--md-on-surface-variant);
+  background: var(--md-surface);
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+/* ─── Drive File Picker Fallback ─── */
+.eval-file-url-form {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.eval-file-url-input {
+  flex: 1;
+  min-width: 150px;
+  height: 36px;
+  padding: 6px 12px;
+  border: 1px solid var(--md-outline);
+  border-radius: var(--md-shape-xs);
+  font-size: 13px;
+  font-family: 'Roboto', sans-serif;
+  color: var(--md-on-surface);
+  background: var(--md-surface);
+  appearance: none;
+  -webkit-appearance: none;
+}
+.eval-file-url-input:focus {
+  outline: none;
+  border-color: var(--md-primary);
+}
+.eval-file-name-input {
+  width: 140px;
+  height: 36px;
+  padding: 6px 12px;
+  border: 1px solid var(--md-outline);
+  border-radius: var(--md-shape-xs);
+  font-size: 13px;
+  font-family: 'Roboto', sans-serif;
+  color: var(--md-on-surface);
+  background: var(--md-surface);
+  appearance: none;
+  -webkit-appearance: none;
+}
+.eval-file-name-input:focus {
+  outline: none;
+  border-color: var(--md-primary);
 }
 
 /* ─── Reduced Motion ─── */

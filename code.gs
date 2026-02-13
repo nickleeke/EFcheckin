@@ -184,7 +184,7 @@ var CHECKIN_HEADERS = [
   'teacherNotes','academicDataJson','createdAt'
 ];
 var COTEACHER_HEADERS = ['email', 'role', 'addedAt'];
-var EVALUATION_HEADERS = ['id', 'studentId', 'type', 'itemsJson', 'createdAt', 'updatedAt'];
+var EVALUATION_HEADERS = ['id', 'studentId', 'type', 'itemsJson', 'createdAt', 'updatedAt', 'filesJson'];
 
 function initializeSheets() {
   const ss = getSS_();
@@ -928,6 +928,8 @@ function getEvaluation(studentId) {
       headers.forEach(function(h, idx) { row[h] = data[i][idx]; });
       try { row.items = JSON.parse(row.itemsJson || '[]'); }
       catch(e) { row.items = []; }
+      try { row.files = JSON.parse(row.filesJson || '[]'); }
+      catch(e) { row.files = []; }
       return row;
     }
   }
@@ -957,12 +959,17 @@ function createEvaluation(studentId, type) {
   var now = new Date().toISOString();
   var id = Utilities.getUuid();
 
-  sheet.appendRow([id, studentId, type, JSON.stringify(items), now, now]);
+  sheet.appendRow([id, studentId, type, JSON.stringify(items), now, now, JSON.stringify([])]);
 
-  return { success: true, id: id, studentId: studentId, type: type, items: items };
+  return { success: true, id: id, studentId: studentId, type: type, items: items, files: [] };
 }
 
-function updateEvaluationItem(evalId, itemId, checked) {
+function updateEvaluationItem(evalId, itemId, updates) {
+  // Backward compat: old callers pass a boolean for checked
+  if (typeof updates === 'boolean') {
+    updates = { checked: updates };
+  }
+
   initializeSheetsIfNeeded_();
   var ss = getSS_();
   var sheet = ss.getSheetByName(SHEET_EVALUATIONS);
@@ -979,8 +986,16 @@ function updateEvaluationItem(evalId, itemId, checked) {
   var updated = false;
   for (var i = 0; i < items.length; i++) {
     if (items[i].id === itemId) {
-      items[i].checked = !!checked;
-      items[i].completedAt = checked ? new Date().toISOString() : null;
+      if (updates.hasOwnProperty('checked')) {
+        items[i].checked = !!updates.checked;
+        items[i].completedAt = updates.checked ? new Date().toISOString() : null;
+      }
+      if (updates.hasOwnProperty('text')) {
+        items[i].text = String(updates.text).trim();
+      }
+      if (updates.hasOwnProperty('dueDate')) {
+        items[i].dueDate = updates.dueDate || null;
+      }
       updated = true;
       break;
     }
@@ -1011,6 +1026,135 @@ function deleteEvaluation(evalId) {
   return { success: false };
 }
 
+function addEvaluationItem(evalId, itemData) {
+  initializeSheetsIfNeeded_();
+  var ss = getSS_();
+  var sheet = ss.getSheetByName(SHEET_EVALUATIONS);
+  if (!sheet) return { success: false, error: 'Evaluations sheet not found.' };
+
+  var found = findRowById_(sheet, evalId);
+  if (!found) return { success: false, error: 'Evaluation not found.' };
+
+  var itemsRaw = sheet.getRange(found.rowIndex, found.colIdx['itemsJson']).getValue();
+  var items;
+  try { items = JSON.parse(itemsRaw || '[]'); } catch(e) { items = []; }
+
+  var newItem = {
+    id: 'item-custom-' + Utilities.getUuid().substr(0, 8),
+    text: String(itemData.text || '').trim(),
+    checked: false,
+    completedAt: null,
+    dueDate: itemData.dueDate || null
+  };
+
+  if (!newItem.text) return { success: false, error: 'Task text is required.' };
+
+  items.push(newItem);
+
+  batchSetValues_(sheet, found.rowIndex, found.colIdx, {
+    itemsJson: JSON.stringify(items),
+    updatedAt: new Date().toISOString()
+  });
+
+  return { success: true, items: items, newItem: newItem };
+}
+
+function deleteEvaluationItem(evalId, itemId) {
+  initializeSheetsIfNeeded_();
+  var ss = getSS_();
+  var sheet = ss.getSheetByName(SHEET_EVALUATIONS);
+  if (!sheet) return { success: false, error: 'Evaluations sheet not found.' };
+
+  var found = findRowById_(sheet, evalId);
+  if (!found) return { success: false, error: 'Evaluation not found.' };
+
+  var itemsRaw = sheet.getRange(found.rowIndex, found.colIdx['itemsJson']).getValue();
+  var items;
+  try { items = JSON.parse(itemsRaw || '[]'); } catch(e) { items = []; }
+
+  var originalLength = items.length;
+  items = items.filter(function(it) { return it.id !== itemId; });
+
+  if (items.length === originalLength) return { success: false, error: 'Item not found.' };
+
+  batchSetValues_(sheet, found.rowIndex, found.colIdx, {
+    itemsJson: JSON.stringify(items),
+    updatedAt: new Date().toISOString()
+  });
+
+  return { success: true, items: items };
+}
+
+// ───── Drive Picker & Eval Files ─────
+
+/** Trigger Drive scope for the Picker API — never called, but ensures the scope is added. */
+function triggerDriveScope_() { DriveApp.getRootFolder(); }
+
+function getDrivePickerConfig() {
+  return {
+    token: ScriptApp.getOAuthToken()
+  };
+}
+
+function addEvalFile(evalId, fileData) {
+  initializeSheetsIfNeeded_();
+  var ss = getSS_();
+  var sheet = ss.getSheetByName(SHEET_EVALUATIONS);
+  if (!sheet) return { success: false, error: 'Evaluations sheet not found.' };
+
+  var found = findRowById_(sheet, evalId);
+  if (!found) return { success: false, error: 'Evaluation not found.' };
+
+  var filesCol = found.colIdx['filesJson'];
+  var filesRaw = filesCol ? sheet.getRange(found.rowIndex, filesCol).getValue() : '';
+  var files;
+  try { files = JSON.parse(filesRaw || '[]'); } catch(e) { files = []; }
+
+  var newFile = {
+    id: 'file-' + Utilities.getUuid().substr(0, 8),
+    driveFileId: fileData.driveFileId || '',
+    name: fileData.name || 'Untitled',
+    mimeType: fileData.mimeType || '',
+    url: fileData.url || '',
+    addedAt: new Date().toISOString()
+  };
+
+  files.push(newFile);
+
+  batchSetValues_(sheet, found.rowIndex, found.colIdx, {
+    filesJson: JSON.stringify(files),
+    updatedAt: new Date().toISOString()
+  });
+
+  return { success: true, files: files, newFile: newFile };
+}
+
+function removeEvalFile(evalId, fileId) {
+  initializeSheetsIfNeeded_();
+  var ss = getSS_();
+  var sheet = ss.getSheetByName(SHEET_EVALUATIONS);
+  if (!sheet) return { success: false, error: 'Evaluations sheet not found.' };
+
+  var found = findRowById_(sheet, evalId);
+  if (!found) return { success: false, error: 'Evaluation not found.' };
+
+  var filesCol = found.colIdx['filesJson'];
+  var filesRaw = filesCol ? sheet.getRange(found.rowIndex, filesCol).getValue() : '';
+  var files;
+  try { files = JSON.parse(filesRaw || '[]'); } catch(e) { files = []; }
+
+  files = files.filter(function(f) { return f.id !== fileId; });
+
+  batchSetValues_(sheet, found.rowIndex, found.colIdx, {
+    filesJson: JSON.stringify(files),
+    updatedAt: new Date().toISOString()
+  });
+
+  return { success: true, files: files };
+}
+
+// ───── Eval Template Items ─────
+
 function getEvalTemplateItems_() {
   var items = [
     'Review referral and obtain parent consent',
@@ -1027,7 +1171,7 @@ function getEvalTemplateItems_() {
     'Finalize evaluation documentation'
   ];
   return items.map(function(text, idx) {
-    return { id: 'item-' + (idx + 1), text: text, checked: false, completedAt: null };
+    return { id: 'item-' + (idx + 1), text: text, checked: false, completedAt: null, dueDate: null };
   });
 }
 
@@ -1046,7 +1190,7 @@ function getReEvalTemplateItems_() {
     'Finalize re-evaluation documentation'
   ];
   return items.map(function(text, idx) {
-    return { id: 'item-' + (idx + 1), text: text, checked: false, completedAt: null };
+    return { id: 'item-' + (idx + 1), text: text, checked: false, completedAt: null, dueDate: null };
   });
 }
 
