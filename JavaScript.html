@@ -3657,6 +3657,65 @@ function showCheckInSkeleton() {
   container.innerHTML = html;
 }
 
+function showEvalChecklistSkeleton() {
+  var container = document.getElementById('eval-checklist-content');
+  var html = '<div class="skeleton-fade-in">';
+  // Two-column layout matching eval checklist
+  html += '<div class="eval-checklist-layout">';
+  // Left column: main checklist
+  html += '<div class="eval-checklist-main">';
+  // Summary card skeleton
+  html += '<div class="eval-summary-card">' +
+    '<div class="eval-summary-left" style="flex:1;">' +
+      '<div class="skeleton skeleton-text w-30" style="height:20px;margin-bottom:8px;"></div>' +
+      '<div class="skeleton skeleton-text w-50" style="height:14px;margin-bottom:8px;"></div>' +
+      '<div class="skeleton" style="width:100%;height:6px;border-radius:var(--md-shape-full);"></div>' +
+    '</div>' +
+    '<div class="eval-summary-right">' +
+      '<div class="skeleton" style="width:48px;height:32px;border-radius:var(--md-shape-sm);margin:0 auto 4px;"></div>' +
+      '<div class="skeleton skeleton-text" style="width:48px;height:10px;margin:0 auto;"></div>' +
+    '</div>' +
+  '</div>';
+  // Items card skeleton
+  html += '<div class="eval-items-card">';
+  html += '<div class="eval-items-header">' +
+    '<span class="eval-items-header-task">Task</span>' +
+    '<div class="eval-items-header-meta">' +
+      '<span class="eval-items-header-due">Due Date</span>' +
+      '<span class="eval-items-header-completed">Completed</span>' +
+      '<span class="eval-items-header-actions"></span>' +
+    '</div>' +
+  '</div>';
+  for (var i = 0; i < 6; i++) {
+    var w = i % 3 === 0 ? 'w-75' : (i % 3 === 1 ? 'w-50' : 'w-40');
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--md-outline-variant);">' +
+      '<div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;">' +
+        '<div class="skeleton" style="width:20px;height:20px;border-radius:var(--md-shape-xs);flex-shrink:0;"></div>' +
+        '<div class="skeleton skeleton-text ' + w + '" style="margin:0;"></div>' +
+      '</div>' +
+      '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">' +
+        '<div class="skeleton" style="width:130px;height:28px;border-radius:var(--md-shape-xs);"></div>' +
+        '<div class="skeleton skeleton-text" style="width:70px;height:12px;margin:0 12px;"></div>' +
+        '<div style="width:36px;"></div>' +
+      '</div>' +
+    '</div>';
+  }
+  html += '</div>';
+  html += '</div>'; // end .eval-checklist-main
+  // Right column: files sidebar skeleton
+  html += '<div class="eval-checklist-sidebar">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
+      '<div class="skeleton skeleton-text w-30" style="margin:0;height:16px;"></div>' +
+      '<div class="skeleton" style="width:28px;height:28px;border-radius:var(--md-shape-sm);"></div>' +
+    '</div>' +
+    '<div class="skeleton skeleton-text w-75" style="height:12px;"></div>' +
+    '<div class="skeleton skeleton-text w-50" style="height:12px;"></div>' +
+  '</div>';
+  html += '</div>'; // end .eval-checklist-layout
+  html += '</div>'; // end .skeleton-fade-in
+  container.innerHTML = html;
+}
+
 var _toastTimer = null;
 function showToast(message) {
   var toast = document.getElementById('toast');
@@ -4328,17 +4387,35 @@ function handleEvalCardClick(studentId) {
 }
 
 function openEvalFromBadge(studentId) {
+  // Optimistic UI: navigate immediately and show skeleton
+  appState.currentStudentId = studentId;
+  var student = getStudentById(studentId);
+  var studentName = student ? (student.firstName + ' ' + student.lastName) : 'Student';
+  document.getElementById('eval-checklist-title').innerHTML = '<span class="skeleton skeleton-title-inline"></span>';
+  updateEvalBreadcrumb_('Eval Checklist');
+  document.getElementById('eval-checklist-actions').innerHTML = '';
+  showEvalChecklistSkeleton();
+  showView('eval-checklist-view');
+
   google.script.run
     .withSuccessHandler(function(evaluation) {
       if (evaluation) {
-        appState.currentStudentId = studentId;
-        showEvalChecklistView(studentId, evaluation);
+        appState.currentEvaluation = evaluation;
+        appState.evalChecklistStudentId = studentId;
+        var typeLabel = getEvalTypeLabel(evaluation.type);
+        updateEvalBreadcrumb_(typeLabel);
+        document.getElementById('eval-checklist-title').textContent = studentName;
+        document.getElementById('eval-checklist-actions').innerHTML =
+          '<a href="https://15.spedforms.org/students2020.php?login=1" target="_blank" class="btn btn-secondary">Open SpEdForms</a>';
+        renderEvalChecklist(evaluation);
       } else {
         showToast('No active evaluation found');
+        goBackFromEvalChecklist();
       }
     })
     .withFailureHandler(function(err) {
       showToast('Error loading evaluation');
+      goBackFromEvalChecklist();
     })
     .getEvaluation(studentId);
 }
@@ -4453,6 +4530,7 @@ function renderEvalChecklist(evaluation) {
     '<div class="eval-items-header-meta">' +
       '<span class="eval-items-header-due">Due Date</span>' +
       '<span class="eval-items-header-completed">Completed</span>' +
+      '<span class="eval-items-header-actions"></span>' +
     '</div>' +
   '</div>';
   items.forEach(function(item) {
