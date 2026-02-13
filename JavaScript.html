@@ -16,7 +16,9 @@ var appState = {
   feedbackLinks: null,
   currentUserEmail: '',
   caseManagers: [],
-  isSuperuser: false
+  isSuperuser: false,
+  evalChecklistStudentId: null,
+  currentEvaluation: null
 };
 var _persistTimers = {};
 var _persistInFlight = 0;
@@ -171,7 +173,7 @@ function closeConfirmDialog(overlayEl) {
 var VIEW_ORDER = {
   'auth-loading': -1, 'onboarding-view': -1,
   'dashboard-view': 0, 'coteacher-view': 1,
-  'student-view': 2, 'missing-view': 3, 'checkin-view': 4
+  'student-view': 2, 'missing-view': 3, 'eval-checklist-view': 3, 'checkin-view': 4
 };
 var _currentViewId = 'auth-loading';
 
@@ -1808,6 +1810,9 @@ function renderStudentProfileDashboard(student) {
   }
   html += '</div>'; // end .profile-academics-left
 
+  // ── Middle column: eval card (populated async, hidden by default) ──
+  html += '<div class="profile-eval-card" id="profile-eval-card" style="display:none" onclick="handleEvalCardClick(\'' + student.id + '\')"></div>';
+
   // ── Right column: stat cards ──
   html += '<div class="profile-academics-right">';
 
@@ -1898,6 +1903,9 @@ function renderStudentProfileDashboard(student) {
 
   // Setup goals autosave listeners
   setupGoalsAutosave();
+
+  // Async-load eval checklist card state
+  loadEvalCardState(student.id);
 }
 
 function renderGoalItem(goal) {
@@ -2666,6 +2674,11 @@ function renderStudentMenu(studentId) {
   if (hasSheet) {
     items += '<button class="dropdown-item" onclick="handleViewFeedbackClick()">View Teacher Feedback</button>';
   }
+
+  // Eval checklist items (visibility toggled async by loadEvalCardState)
+  items += '<button class="dropdown-item" id="menu-create-eval" style="display:none" onclick="handleCreateEvalChecklist(\'eval\')">Create Eval Checklist</button>';
+  items += '<button class="dropdown-item" id="menu-create-reeval" style="display:none" onclick="handleCreateEvalChecklist(\'reeval\')">Create Re-eval Checklist</button>';
+  items += '<button class="dropdown-item" id="menu-view-eval" style="display:none" onclick="handleViewEvalChecklist()">View Checklist</button>';
 
   container.innerHTML =
     '<div class="menu-anchor">' +
@@ -3929,6 +3942,293 @@ function adminAssignCaseManager(studentId, caseManagerEmail) {
       showToast('Error: ' + (err && err.message ? err.message : String(err)));
     })
     .assignCaseManager(studentId, caseManagerEmail);
+}
+
+// ─── Evaluation Checklist ───
+
+function loadEvalCardState(studentId) {
+  google.script.run
+    .withSuccessHandler(function(evaluation) {
+      var cardEl = document.getElementById('profile-eval-card');
+      var menuCreateEval = document.getElementById('menu-create-eval');
+      var menuCreateReeval = document.getElementById('menu-create-reeval');
+      var menuViewEval = document.getElementById('menu-view-eval');
+
+      if (evaluation) {
+        appState.currentEvaluation = evaluation;
+
+        // Show eval card in profile
+        if (cardEl) {
+          var items = evaluation.items || [];
+          var remaining = items.filter(function(it) { return !it.checked; });
+          var done = items.length - remaining.length;
+          var typeLabel = evaluation.type === 'eval' ? 'Eval Checklist' : 'Re-eval Checklist';
+
+          var cardHtml = '<div class="eval-card-header">' +
+            '<span class="eval-card-type">' + esc(typeLabel) + '</span>' +
+            '<span class="eval-card-progress">' + done + '/' + items.length + '</span>' +
+          '</div>';
+          cardHtml += '<ul class="eval-card-tasks">';
+          var show = remaining.slice(0, 6);
+          show.forEach(function(item) {
+            cardHtml += '<li class="eval-card-task">' + esc(item.text) + '</li>';
+          });
+          if (remaining.length > 6) {
+            cardHtml += '<li class="eval-card-task" style="color:var(--md-on-surface-variant);font-style:italic;">+' + (remaining.length - 6) + ' more</li>';
+          }
+          if (remaining.length === 0) {
+            cardHtml += '<li class="eval-card-task" style="color:var(--md-primary);font-style:italic;">All tasks complete!</li>';
+          }
+          cardHtml += '</ul>';
+          cardHtml += '<div class="eval-card-action">View all &rarr;</div>';
+
+          cardEl.innerHTML = cardHtml;
+          cardEl.style.display = '';
+          var layout = cardEl.closest('.profile-academics-layout');
+          if (layout) layout.classList.add('has-eval-card');
+        }
+
+        // Update menu items
+        if (menuCreateEval) menuCreateEval.style.display = 'none';
+        if (menuCreateReeval) menuCreateReeval.style.display = 'none';
+        if (menuViewEval) menuViewEval.style.display = '';
+      } else {
+        appState.currentEvaluation = null;
+
+        // Hide eval card
+        if (cardEl) {
+          cardEl.style.display = 'none';
+          var layout = cardEl.closest('.profile-academics-layout');
+          if (layout) layout.classList.remove('has-eval-card');
+        }
+
+        // Show create menu items
+        if (menuCreateEval) menuCreateEval.style.display = '';
+        if (menuCreateReeval) menuCreateReeval.style.display = '';
+        if (menuViewEval) menuViewEval.style.display = 'none';
+      }
+    })
+    .withFailureHandler(function() {
+      // On error, show create options in menu
+      var menuCreateEval = document.getElementById('menu-create-eval');
+      var menuCreateReeval = document.getElementById('menu-create-reeval');
+      if (menuCreateEval) menuCreateEval.style.display = '';
+      if (menuCreateReeval) menuCreateReeval.style.display = '';
+    })
+    .getEvaluation(studentId);
+}
+
+function handleEvalCardClick(studentId) {
+  if (appState.currentEvaluation) {
+    showEvalChecklistView(studentId, appState.currentEvaluation);
+  }
+}
+
+function handleCreateEvalChecklist(type) {
+  closeStudentMenu();
+  var studentId = appState.currentStudentId;
+  if (!studentId) return;
+
+  var typeLabel = type === 'eval' ? 'Eval' : 'Re-eval';
+  showConfirmDialog({
+    title: 'Create ' + typeLabel + ' Checklist?',
+    body: 'This will create a new <strong>' + typeLabel + ' Checklist</strong> for this student. Only one checklist can be active at a time.',
+    confirmLabel: 'Create',
+    confirmClass: 'btn-primary',
+    onConfirm: "doCreateEvalChecklist('" + studentId + "', '" + type + "')"
+  });
+}
+
+function doCreateEvalChecklist(studentId, type) {
+  showToast('Creating checklist\u2026');
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (result.success) {
+        showToast('Checklist created');
+        var evaluation = {
+          id: result.id,
+          studentId: result.studentId,
+          type: result.type,
+          items: result.items
+        };
+        appState.currentEvaluation = evaluation;
+        showEvalChecklistView(studentId, evaluation);
+      } else {
+        showToast(result.error || 'Error creating checklist');
+      }
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error: ' + (err && err.message ? err.message : String(err)));
+    })
+    .createEvaluation(studentId, type);
+}
+
+function handleViewEvalChecklist() {
+  closeStudentMenu();
+  var studentId = appState.currentStudentId;
+  if (!studentId || !appState.currentEvaluation) return;
+  showEvalChecklistView(studentId, appState.currentEvaluation);
+}
+
+function showEvalChecklistView(studentId, evaluation) {
+  appState.evalChecklistStudentId = studentId;
+  appState.currentEvaluation = evaluation;
+
+  var student = getStudentById(studentId);
+  var studentName = student ? (student.firstName + ' ' + student.lastName) : 'Student';
+  var typeLabel = evaluation.type === 'eval' ? 'Eval Checklist' : 'Re-eval Checklist';
+
+  document.getElementById('eval-checklist-breadcrumb').innerHTML =
+    '<button class="breadcrumb-link" onclick="goBackFromEvalChecklist()">Student Profile</button> ' +
+    '<svg class="breadcrumb-chevron" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg> ' +
+    esc(typeLabel);
+
+  document.getElementById('eval-checklist-title').textContent = studentName;
+
+  renderEvalChecklist(evaluation);
+  showView('eval-checklist-view');
+}
+
+function renderEvalChecklist(evaluation) {
+  var container = document.getElementById('eval-checklist-content');
+  var items = evaluation.items || [];
+  var done = items.filter(function(it) { return it.checked; }).length;
+  var total = items.length;
+  var pct = total > 0 ? Math.round(done / total * 100) : 0;
+  var typeLabel = evaluation.type === 'eval' ? 'Eval Checklist' : 'Re-eval Checklist';
+
+  var html = '';
+
+  // Summary card
+  html += '<div class="eval-summary-card">';
+  html += '<div class="eval-summary-left">' +
+    '<div class="eval-summary-type">' + esc(typeLabel) + '</div>' +
+    '<div class="eval-summary-progress" id="eval-summary-progress">' + done + ' of ' + total + ' tasks completed</div>' +
+    '<div class="eval-progress-bar"><div class="eval-progress-fill" id="eval-progress-fill" style="width:' + pct + '%"></div></div>' +
+  '</div>';
+  html += '<div class="eval-summary-right">' +
+    '<div class="eval-summary-percent" id="eval-summary-percent">' + pct + '%</div>' +
+    '<span class="eval-summary-pct-label">complete</span>' +
+  '</div>';
+  html += '</div>';
+
+  // Checklist items
+  html += '<div class="eval-items-card">';
+  items.forEach(function(item) {
+    var checkedClass = item.checked ? ' eval-item-checked' : '';
+    var completedDate = '';
+    if (item.checked && item.completedAt) {
+      var d = new Date(item.completedAt);
+      completedDate = (d.getMonth() + 1) + '/' + d.getDate() + '/' + d.getFullYear();
+    }
+    html += '<div class="eval-item' + checkedClass + '" data-item-id="' + esc(item.id) + '">' +
+      '<label class="eval-item-label">' +
+        '<input type="checkbox" class="eval-item-checkbox"' + (item.checked ? ' checked' : '') +
+          ' onchange="toggleEvalItem(\'' + esc(evaluation.id) + '\', \'' + esc(item.id) + '\', this.checked)">' +
+        '<span class="eval-item-text">' + esc(item.text) + '</span>' +
+      '</label>' +
+      '<span class="eval-item-date">' + (completedDate ? esc(completedDate) : '') + '</span>' +
+    '</div>';
+  });
+  html += '</div>';
+
+  // Delete button
+  html += '<div class="eval-actions">' +
+    '<button class="btn btn-danger btn-sm" onclick="confirmDeleteEvaluation(\'' + esc(evaluation.id) + '\')">Delete Checklist</button>' +
+  '</div>';
+
+  container.innerHTML = html;
+  animateContentIn(container);
+}
+
+function toggleEvalItem(evalId, itemId, checked) {
+  // Optimistic UI
+  var itemEl = document.querySelector('.eval-item[data-item-id="' + itemId + '"]');
+  if (itemEl) {
+    if (checked) {
+      itemEl.classList.add('eval-item-checked');
+      var dateSpan = itemEl.querySelector('.eval-item-date');
+      if (dateSpan) {
+        var now = new Date();
+        dateSpan.textContent = (now.getMonth() + 1) + '/' + now.getDate() + '/' + now.getFullYear();
+      }
+    } else {
+      itemEl.classList.remove('eval-item-checked');
+      var dateSpan = itemEl.querySelector('.eval-item-date');
+      if (dateSpan) dateSpan.textContent = '';
+    }
+  }
+
+  // Update local state
+  if (appState.currentEvaluation && appState.currentEvaluation.items) {
+    appState.currentEvaluation.items.forEach(function(it) {
+      if (it.id === itemId) {
+        it.checked = checked;
+        it.completedAt = checked ? new Date().toISOString() : null;
+      }
+    });
+  }
+
+  updateEvalProgress();
+
+  // Save to backend
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (!result.success) {
+        showToast('Error saving: ' + (result.error || 'Unknown error'));
+      }
+    })
+    .withFailureHandler(function(err) {
+      showToast('Save error: ' + (err && err.message ? err.message : String(err)));
+    })
+    .updateEvaluationItem(evalId, itemId, checked);
+}
+
+function updateEvalProgress() {
+  var items = appState.currentEvaluation ? appState.currentEvaluation.items : [];
+  var done = items.filter(function(it) { return it.checked; }).length;
+  var total = items.length;
+  var pct = total > 0 ? Math.round(done / total * 100) : 0;
+
+  var progressEl = document.getElementById('eval-summary-progress');
+  if (progressEl) progressEl.textContent = done + ' of ' + total + ' tasks completed';
+
+  var fillEl = document.getElementById('eval-progress-fill');
+  if (fillEl) fillEl.style.width = pct + '%';
+
+  var percentEl = document.getElementById('eval-summary-percent');
+  if (percentEl) percentEl.textContent = pct + '%';
+}
+
+function confirmDeleteEvaluation(evalId) {
+  showConfirmDialog({
+    title: 'Delete Checklist?',
+    body: 'This will permanently delete this evaluation checklist and all its progress.',
+    confirmLabel: 'Delete',
+    onConfirm: "doDeleteEvaluation('" + evalId + "')"
+  });
+}
+
+function doDeleteEvaluation(evalId) {
+  showToast('Deleting checklist\u2026');
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (result.success) {
+        showToast('Checklist deleted');
+        appState.currentEvaluation = null;
+        showStudentProfile(appState.evalChecklistStudentId);
+      } else {
+        showToast('Error deleting checklist');
+      }
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error: ' + (err && err.message ? err.message : String(err)));
+    })
+    .deleteEvaluation(evalId);
+}
+
+function goBackFromEvalChecklist() {
+  showStudentProfile(appState.evalChecklistStudentId);
 }
 
 // ─── Button Ripple Effect (delegated) ───

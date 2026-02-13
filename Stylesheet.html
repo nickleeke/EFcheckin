@@ -2238,6 +2238,8 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   .mv-add-form-row input[type="text"] { flex: 1 1 100%; }
   .mv-add-form-row select { flex: 1; }
   .profile-academics-layout { grid-template-columns: 1fr; }
+  .profile-academics-layout.has-eval-card { grid-template-columns: 1fr; }
+  .profile-eval-card { order: -1; }
   .profile-academics-right { flex-direction: row; flex-wrap: wrap; gap: 12px; }
   .profile-stat-card { flex: 1; }
   .profile-contacts-card { flex-basis: 100%; }
@@ -2665,6 +2667,217 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
     min-width: unset;
     width: 100%;
   }
+}
+
+/* ─── Eval Checklist: Profile Card (3-column layout) ─── */
+.profile-academics-layout.has-eval-card {
+  grid-template-columns: 1fr 240px 240px;
+}
+.profile-eval-card {
+  background: var(--md-surface);
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-md);
+  padding: 16px;
+  cursor: pointer;
+  transition: box-shadow var(--md-duration-short3) var(--md-easing-standard),
+              transform var(--md-duration-short3) var(--md-easing-standard);
+  display: flex;
+  flex-direction: column;
+}
+.profile-eval-card:hover {
+  box-shadow: var(--md-elevation-1);
+  transform: translateY(-1px);
+}
+.eval-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.eval-card-type {
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--md-on-surface-variant);
+}
+.eval-card-progress {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--md-primary);
+  background: var(--md-primary-container);
+  padding: 2px 8px;
+  border-radius: var(--md-shape-full);
+}
+.eval-card-tasks {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  flex: 1;
+  overflow: hidden;
+}
+.eval-card-task {
+  font-size: 13px;
+  color: var(--md-on-surface);
+  padding: 4px 0;
+  border-bottom: 1px solid var(--md-outline-variant);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.eval-card-task:last-child {
+  border-bottom: none;
+}
+.eval-card-task::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--md-outline);
+  flex-shrink: 0;
+}
+.eval-card-action {
+  margin-top: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--md-primary);
+  text-align: right;
+}
+
+/* ─── Eval Checklist View ─── */
+.eval-summary-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--md-surface);
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-md);
+  padding: 20px 24px;
+  margin-bottom: 16px;
+}
+.eval-summary-left {}
+.eval-summary-type {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--md-on-surface);
+  margin-bottom: 4px;
+}
+.eval-summary-progress {
+  font-size: 14px;
+  color: var(--md-on-surface-variant);
+}
+.eval-summary-right {
+  text-align: center;
+}
+.eval-summary-percent {
+  font-size: 24px;
+  font-weight: 500;
+  color: var(--md-primary);
+}
+.eval-summary-pct-label {
+  font-size: 11px;
+  color: var(--md-on-surface-variant);
+  display: block;
+}
+.eval-progress-bar {
+  height: 6px;
+  background: var(--md-surface-container-high);
+  border-radius: var(--md-shape-full);
+  overflow: hidden;
+  margin-top: 8px;
+}
+.eval-progress-fill {
+  height: 100%;
+  background: var(--md-primary);
+  border-radius: var(--md-shape-full);
+  transition: width var(--md-duration-medium2) var(--md-easing-emphasized-decelerate);
+}
+.eval-items-card {
+  background: var(--md-surface);
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-md);
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+.eval-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--md-outline-variant);
+  transition: background var(--md-duration-short3) var(--md-easing-standard);
+}
+.eval-item:last-child {
+  border-bottom: none;
+}
+.eval-item:hover {
+  background: rgba(0, 0, 0, 0.02);
+}
+.eval-item-checked {
+  background: rgba(0, 128, 0, 0.04);
+}
+.eval-item-checked:hover {
+  background: rgba(0, 128, 0, 0.07);
+}
+.eval-item-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  flex: 1;
+  min-width: 0;
+}
+.eval-item-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--md-outline);
+  border-radius: var(--md-shape-xs);
+  flex-shrink: 0;
+  cursor: pointer;
+  position: relative;
+  transition: background var(--md-duration-short3) var(--md-easing-standard),
+              border-color var(--md-duration-short3) var(--md-easing-standard);
+}
+.eval-item-checkbox:checked {
+  background: var(--md-primary);
+  border-color: var(--md-primary);
+}
+.eval-item-checkbox:checked::after {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 1px;
+  width: 6px;
+  height: 10px;
+  border: solid var(--md-on-primary);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.eval-item-text {
+  font-size: 14px;
+  color: var(--md-on-surface);
+  line-height: 20px;
+}
+.eval-item-checked .eval-item-text {
+  text-decoration: line-through;
+  color: var(--md-on-surface-variant);
+}
+.eval-item-date {
+  font-size: 12px;
+  color: var(--md-on-surface-variant);
+  white-space: nowrap;
+  margin-left: 12px;
+  flex-shrink: 0;
+}
+.eval-actions {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
 }
 
 /* ─── Reduced Motion ─── */

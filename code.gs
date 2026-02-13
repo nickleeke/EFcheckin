@@ -12,6 +12,7 @@
 const SHEET_STUDENTS = 'Students';
 const SHEET_CHECKINS = 'CheckIns';
 const SHEET_COTEACHERS = 'CoTeachers';
+const SHEET_EVALUATIONS = 'Evaluations';
 
 const GPA_MAP = {
   'A':4.0, 'A-':3.7,
@@ -138,6 +139,10 @@ function provisionUserSpreadsheet() {
   ensureHeaders_(ctSheet, COTEACHER_HEADERS);
   ctSheet.appendRow([email, 'caseload-manager', new Date().toISOString()]);
 
+  // Initialize Evaluations sheet
+  var evalSheet = ss.insertSheet(SHEET_EVALUATIONS);
+  ensureHeaders_(evalSheet, EVALUATION_HEADERS);
+
   // Store the new spreadsheet ID in UserProperties
   var ssId = ss.getId();
   props.setProperty('spreadsheet_id', ssId);
@@ -179,6 +184,7 @@ var CHECKIN_HEADERS = [
   'teacherNotes','academicDataJson','createdAt'
 ];
 var COTEACHER_HEADERS = ['email', 'role', 'addedAt'];
+var EVALUATION_HEADERS = ['id', 'studentId', 'type', 'itemsJson', 'createdAt', 'updatedAt'];
 
 function initializeSheets() {
   const ss = getSS_();
@@ -206,6 +212,10 @@ function initializeSheets() {
   } else {
     ensureHeaders_(ctSheet, COTEACHER_HEADERS);
   }
+
+  let evalSheet = ss.getSheetByName(SHEET_EVALUATIONS);
+  if (!evalSheet) evalSheet = ss.insertSheet(SHEET_EVALUATIONS);
+  ensureHeaders_(evalSheet, EVALUATION_HEADERS);
 
   return { success: true, feedbackLinks: getFeedbackLinks() };
 }
@@ -400,6 +410,13 @@ function deleteStudent(studentId) {
     const cData = checkInsSheet.getDataRange().getValues();
     for (let i = cData.length - 1; i >= 1; i--) {
       if (cData[i][1] === studentId) checkInsSheet.deleteRow(i + 1);
+    }
+  }
+  const evalSheet = ss.getSheetByName(SHEET_EVALUATIONS);
+  if (evalSheet && evalSheet.getLastRow() > 1) {
+    const eData = evalSheet.getDataRange().getValues();
+    for (let i = eData.length - 1; i >= 1; i--) {
+      if (eData[i][1] === studentId) evalSheet.deleteRow(i + 1);
     }
   }
   invalidateCache_();
@@ -892,6 +909,145 @@ function leaveCoTeacherTeam() {
 function refreshDashboardData() {
   invalidateCache_();
   return getDashboardData();
+}
+
+// ───── Evaluation Checklist CRUD ─────
+
+function getEvaluation(studentId) {
+  initializeSheetsIfNeeded_();
+  var ss = getSS_();
+  var sheet = ss.getSheetByName(SHEET_EVALUATIONS);
+  if (!sheet || sheet.getLastRow() <= 1) return null;
+
+  var data = sheet.getDataRange().getValues();
+  var headers = data[0];
+
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][1] === studentId) {
+      var row = {};
+      headers.forEach(function(h, idx) { row[h] = data[i][idx]; });
+      try { row.items = JSON.parse(row.itemsJson || '[]'); }
+      catch(e) { row.items = []; }
+      return row;
+    }
+  }
+  return null;
+}
+
+function createEvaluation(studentId, type) {
+  initializeSheetsIfNeeded_();
+  if (type !== 'eval' && type !== 'reeval') {
+    return { success: false, error: 'Invalid evaluation type.' };
+  }
+
+  var existing = getEvaluation(studentId);
+  if (existing) {
+    return { success: false, error: 'This student already has an active ' +
+      (existing.type === 'eval' ? 'Eval' : 'Re-eval') + ' checklist.' };
+  }
+
+  var ss = getSS_();
+  var sheet = ss.getSheetByName(SHEET_EVALUATIONS);
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_EVALUATIONS);
+    ensureHeaders_(sheet, EVALUATION_HEADERS);
+  }
+
+  var items = type === 'eval' ? getEvalTemplateItems_() : getReEvalTemplateItems_();
+  var now = new Date().toISOString();
+  var id = Utilities.getUuid();
+
+  sheet.appendRow([id, studentId, type, JSON.stringify(items), now, now]);
+
+  return { success: true, id: id, studentId: studentId, type: type, items: items };
+}
+
+function updateEvaluationItem(evalId, itemId, checked) {
+  initializeSheetsIfNeeded_();
+  var ss = getSS_();
+  var sheet = ss.getSheetByName(SHEET_EVALUATIONS);
+  if (!sheet) return { success: false, error: 'Evaluations sheet not found.' };
+
+  var found = findRowById_(sheet, evalId);
+  if (!found) return { success: false, error: 'Evaluation not found.' };
+
+  var itemsRaw = sheet.getRange(found.rowIndex, found.colIdx['itemsJson']).getValue();
+  var items;
+  try { items = JSON.parse(itemsRaw || '[]'); }
+  catch(e) { items = []; }
+
+  var updated = false;
+  for (var i = 0; i < items.length; i++) {
+    if (items[i].id === itemId) {
+      items[i].checked = !!checked;
+      items[i].completedAt = checked ? new Date().toISOString() : null;
+      updated = true;
+      break;
+    }
+  }
+
+  if (!updated) return { success: false, error: 'Item not found.' };
+
+  batchSetValues_(sheet, found.rowIndex, found.colIdx, {
+    itemsJson: JSON.stringify(items),
+    updatedAt: new Date().toISOString()
+  });
+
+  return { success: true, items: items };
+}
+
+function deleteEvaluation(evalId) {
+  var ss = getSS_();
+  var sheet = ss.getSheetByName(SHEET_EVALUATIONS);
+  if (!sheet) return { success: false };
+
+  var data = sheet.getDataRange().getValues();
+  for (var i = data.length - 1; i >= 1; i--) {
+    if (data[i][0] === evalId) {
+      sheet.deleteRow(i + 1);
+      return { success: true };
+    }
+  }
+  return { success: false };
+}
+
+function getEvalTemplateItems_() {
+  var items = [
+    'Review referral and obtain parent consent',
+    'Conduct record review',
+    'Conduct classroom observations',
+    'Administer academic assessments',
+    'Administer cognitive assessments',
+    'Administer behavioral/social-emotional assessments',
+    'Gather teacher input',
+    'Gather parent input',
+    'Write evaluation report',
+    'Schedule eligibility determination meeting',
+    'Hold eligibility determination meeting',
+    'Finalize evaluation documentation'
+  ];
+  return items.map(function(text, idx) {
+    return { id: 'item-' + (idx + 1), text: text, checked: false, completedAt: null };
+  });
+}
+
+function getReEvalTemplateItems_() {
+  var items = [
+    'Review existing evaluation data',
+    'Send parent notification and obtain consent',
+    'Gather teacher input on current performance',
+    'Gather parent input on current concerns',
+    'Review progress monitoring data',
+    'Determine if additional assessments are needed',
+    'Conduct additional assessments (if needed)',
+    'Write re-evaluation report',
+    'Schedule re-evaluation meeting',
+    'Hold re-evaluation meeting',
+    'Finalize re-evaluation documentation'
+  ];
+  return items.map(function(text, idx) {
+    return { id: 'item-' + (idx + 1), text: text, checked: false, completedAt: null };
+  });
 }
 
 // ───── Helpers ─────
