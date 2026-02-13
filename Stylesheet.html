@@ -293,15 +293,7 @@ body {
   z-index: 100;
 }
 .nav-drawer-header {
-  padding: 16px 16px 8px 16px;
-  display: flex;
-  align-items: center;
-  min-height: 64px;
-}
-.nav-drawer-logo {
-  height: 36px;
-  width: auto;
-  object-fit: contain;
+  padding: 8px 0;
 }
 .nav-drawer-items {
   padding: 0 12px;
@@ -363,6 +355,47 @@ body {
 .nav-drawer-label {
   z-index: 1;
 }
+/* ─── Nav Drawer Expandable Group ─── */
+.nav-drawer-group {
+  position: relative;
+}
+.nav-drawer-parent {
+  cursor: default;
+}
+.nav-drawer-parent:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+.nav-drawer-expand-icon {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+  flex-shrink: 0;
+  margin-left: auto;
+  transition: transform var(--md-duration-short4) var(--md-easing-standard);
+}
+.nav-drawer-submenu {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height var(--md-duration-medium2) var(--md-easing-standard);
+}
+.nav-drawer-group:hover .nav-drawer-submenu,
+.nav-drawer-group.submenu-open .nav-drawer-submenu {
+  max-height: 200px;
+}
+.nav-drawer-group:hover .nav-drawer-expand-icon,
+.nav-drawer-group.submenu-open .nav-drawer-expand-icon {
+  transform: rotate(180deg);
+}
+.nav-drawer-child {
+  height: 48px;
+  padding-left: 52px;
+  font-size: 13px;
+}
+.nav-drawer-child .nav-drawer-active-indicator {
+  left: 12px;
+  width: calc(100% - 12px);
+}
+
 .nav-drawer-divider {
   height: 1px;
   background: var(--md-outline-variant);
@@ -2301,6 +2334,25 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   .nav-drawer-toggle { display: none !important; }
   .top-app-bar-spacer { display: none !important; }
   .nav-drawer-scrim { display: none !important; }
+}
+
+/* Mobile: disable hover for submenu, rely on JS click toggle */
+@media (max-width: 840px) {
+  .nav-drawer-group:hover .nav-drawer-submenu {
+    max-height: 0;
+  }
+  .nav-drawer-group:hover .nav-drawer-expand-icon {
+    transform: none;
+  }
+  .nav-drawer-group.submenu-open .nav-drawer-submenu {
+    max-height: 200px;
+  }
+  .nav-drawer-group.submenu-open .nav-drawer-expand-icon {
+    transform: rotate(180deg);
+  }
+  .nav-drawer-parent {
+    cursor: pointer;
+  }
 }
 
 /* Mobile: modal drawer with scrim */
