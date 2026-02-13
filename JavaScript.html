@@ -2129,12 +2129,59 @@ function removeClass(btn) {
   btn.parentElement.remove();
 }
 
+// ─── Contact Validation ───
+
+var CONTACT_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function isValidContactEmail(val) {
+  return val === '' || CONTACT_EMAIL_RE.test(val);
+}
+
+function extractDigits(val) {
+  return (val || '').replace(/\D/g, '');
+}
+
+function isValidContactPhone(val) {
+  if (val === '') return true;
+  return extractDigits(val).length === 10;
+}
+
+function validateContactField(input, validatorFn, errorMsg) {
+  var val = input.value.trim();
+  var wrapper = input.closest('.form-group') || input.parentElement;
+  var existing = wrapper.querySelector('.contact-field-error');
+  if (!validatorFn(val)) {
+    input.classList.add('contact-input-error');
+    if (!existing) {
+      var errEl = document.createElement('div');
+      errEl.className = 'contact-field-error';
+      errEl.textContent = errorMsg;
+      wrapper.appendChild(errEl);
+    }
+    return false;
+  } else {
+    input.classList.remove('contact-input-error');
+    if (existing) existing.remove();
+    return true;
+  }
+}
+
+function hasContactValidationErrors(container) {
+  return container.querySelectorAll('.contact-input-error').length > 0;
+}
+
 // ─── Student Contacts ───
 
 function renderProfileContactItem(studentId, contact, idx) {
   var html = '<div class="profile-contact-item" data-contact-idx="' + idx + '">';
   html += '<div class="profile-contact-info">';
-  html += '<div class="profile-contact-name">' + esc(contact.name || 'Unnamed') +
+  html += '<div class="profile-contact-name">';
+  if (contact.primary) {
+    html += '<span class="contact-primary-badge" title="Primary contact">' +
+      '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>' +
+      'Primary</span> ';
+  }
+  html += esc(contact.name || 'Unnamed') +
     (contact.relationship ? ' <span class="profile-contact-rel">(' + esc(contact.relationship) + ')</span>' : '') +
   '</div>';
   if (contact.email) {
@@ -2200,6 +2247,7 @@ function refreshContactsList_(studentId) {
 function showContactFormDialog(studentId, contact, idx) {
   var isEdit = (typeof idx === 'number');
   contact = contact || {};
+  var primaryChecked = contact.primary ? ' checked' : '';
   var overlay = document.createElement('div');
   overlay.className = 'confirm-overlay';
   overlay.innerHTML =
@@ -2214,6 +2262,7 @@ function showContactFormDialog(studentId, contact, idx) {
           '<input type="email" id="cf-email" value="' + esc(contact.email || '') + '" placeholder="email@example.com"></div>' +
         '<div class="form-group"><label>Phone</label>' +
           '<input type="tel" id="cf-phone" value="' + esc(contact.phone || '') + '" placeholder="(555) 123-4567"></div>' +
+        '<label class="contact-primary-check"><input type="checkbox" id="cf-primary"' + primaryChecked + '> Primary contact</label>' +
       '</div>' +
       '<div class="confirm-actions">' +
         '<button class="btn btn-secondary" id="cf-cancel">Cancel</button>' +
@@ -2227,17 +2276,39 @@ function showContactFormDialog(studentId, contact, idx) {
   var nameInput = overlay.querySelector('#cf-name');
   nameInput.focus();
 
+  // Blur validation for email and phone
+  var emailInput = overlay.querySelector('#cf-email');
+  var phoneInput = overlay.querySelector('#cf-phone');
+  emailInput.addEventListener('blur', function() {
+    validateContactField(emailInput, isValidContactEmail, 'Please enter a valid email address');
+  });
+  phoneInput.addEventListener('blur', function() {
+    validateContactField(phoneInput, isValidContactPhone, 'Phone number must have 10 digits');
+  });
+
   overlay.querySelector('#cf-cancel').onclick = function() { closeConfirmDialog(overlay); };
   overlay.querySelector('#cf-save').onclick = function() {
     var name = overlay.querySelector('#cf-name').value.trim();
     if (!name) { showToast('Contact name is required'); return; }
+
+    // Run validation on email and phone before saving
+    var emailOk = validateContactField(emailInput, isValidContactEmail, 'Please enter a valid email address');
+    var phoneOk = validateContactField(phoneInput, isValidContactPhone, 'Phone number must have 10 digits');
+    if (!emailOk || !phoneOk) { showToast('Please fix validation errors'); return; }
+
+    var isPrimary = overlay.querySelector('#cf-primary').checked;
     var newContact = {
       name: name,
       relationship: overlay.querySelector('#cf-relationship').value.trim(),
-      email: overlay.querySelector('#cf-email').value.trim(),
-      phone: overlay.querySelector('#cf-phone').value.trim()
+      email: emailInput.value.trim(),
+      phone: phoneInput.value.trim(),
+      primary: isPrimary
     };
     var contacts = getStudentContacts_(studentId);
+    // If marking as primary, unmark others
+    if (isPrimary) {
+      contacts.forEach(function(c) { c.primary = false; });
+    }
     if (isEdit) {
       contacts[idx] = newContact;
     } else {
@@ -2282,13 +2353,15 @@ function removeProfileContact(studentId, idx) {
 
 function renderContactFormRow(contact, idx) {
   contact = contact || {};
+  var primaryChecked = contact.primary ? ' checked' : '';
   var html = '<div class="contact-list-item" data-contact-idx="' + idx + '">';
   html += '<div class="contact-fields-grid">';
   html += '<input type="text" class="contact-name" value="' + esc(contact.name || '') + '" placeholder="Name">';
   html += '<input type="text" class="contact-relationship" value="' + esc(contact.relationship || '') + '" placeholder="Relationship">';
-  html += '<input type="email" class="contact-email" value="' + esc(contact.email || '') + '" placeholder="Email">';
-  html += '<input type="tel" class="contact-phone" value="' + esc(contact.phone || '') + '" placeholder="Phone">';
+  html += '<div class="form-group" style="margin:0;"><input type="email" class="contact-email" value="' + esc(contact.email || '') + '" placeholder="Email" onblur="validateContactField(this, isValidContactEmail, \'Please enter a valid email address\')"></div>';
+  html += '<div class="form-group" style="margin:0;"><input type="tel" class="contact-phone" value="' + esc(contact.phone || '') + '" placeholder="Phone" onblur="validateContactField(this, isValidContactPhone, \'Phone number must have 10 digits\')"></div>';
   html += '</div>';
+  html += '<label class="contact-primary-check contact-primary-inline"><input type="checkbox" class="contact-primary-cb"' + primaryChecked + ' onchange="handleFormPrimaryToggle(this)"> Primary</label>';
   html += '<button type="button" class="btn-remove-class" onclick="removeFormContact(this)">&times;</button>';
   html += '</div>';
   return html;
@@ -2306,6 +2379,31 @@ function removeFormContact(btn) {
   btn.parentElement.remove();
 }
 
+function handleFormPrimaryToggle(cb) {
+  if (cb.checked) {
+    // Uncheck all other primary checkboxes in the form
+    var container = document.getElementById('contact-list-container');
+    if (container) {
+      container.querySelectorAll('.contact-primary-cb').forEach(function(other) {
+        if (other !== cb) other.checked = false;
+      });
+    }
+  }
+}
+
+function validateFormContacts_() {
+  var container = document.getElementById('contact-list-container');
+  if (!container) return true;
+  var valid = true;
+  container.querySelectorAll('.contact-list-item').forEach(function(item) {
+    var emailInput = item.querySelector('.contact-email');
+    var phoneInput = item.querySelector('.contact-phone');
+    if (emailInput && !validateContactField(emailInput, isValidContactEmail, 'Please enter a valid email address')) valid = false;
+    if (phoneInput && !validateContactField(phoneInput, isValidContactPhone, 'Phone number must have 10 digits')) valid = false;
+  });
+  return valid;
+}
+
 function collectFormContacts() {
   var contactItems = document.querySelectorAll('#contact-list-container .contact-list-item');
   var contacts = [];
@@ -2314,7 +2412,9 @@ function collectFormContacts() {
     var relationship = item.querySelector('.contact-relationship').value.trim();
     var email = item.querySelector('.contact-email').value.trim();
     var phone = item.querySelector('.contact-phone').value.trim();
-    if (name) contacts.push({ name: name, relationship: relationship, email: email, phone: phone });
+    var primaryCb = item.querySelector('.contact-primary-cb');
+    var primary = primaryCb ? primaryCb.checked : false;
+    if (name) contacts.push({ name: name, relationship: relationship, email: email, phone: phone, primary: primary });
   });
   return contacts;
 }
@@ -2350,6 +2450,11 @@ function saveStudentForm() {
 
   if (!profile.firstName || !profile.lastName) {
     showToast('First and last name are required');
+    return;
+  }
+
+  if (!validateFormContacts_()) {
+    showToast('Please fix contact validation errors before saving');
     return;
   }
 
