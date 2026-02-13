@@ -20,7 +20,9 @@ var appState = {
   evalChecklistStudentId: null,
   currentEvaluation: null,
   drivePickerLoaded: false,
-  drivePickerConfig: null
+  drivePickerConfig: null,
+  evalSummary: null,
+  timelineExpandedDay: null
 };
 var _persistTimers = {};
 var _persistInFlight = 0;
@@ -215,9 +217,11 @@ function loadDashboard() {
   // local optimistic state to avoid overwriting unsaved changes.
   if (Object.keys(_persistTimers).length > 0 || _persistInFlight > 0) {
     renderDashboard(appState.dashboardData);
+    if (appState.evalSummary) renderEvalSummary(appState.evalSummary);
     return;
   }
   showDashboardSkeleton();
+  loadEvalSummary();
   google.script.run
     .withSuccessHandler(function(data) {
       try {
@@ -381,6 +385,174 @@ function renderDashboard(data) {
 
   container.innerHTML = html;
   animateContentIn(container);
+}
+
+// ─── Eval Summary Cards + Next 7 Days Timeline ───
+
+function loadEvalSummary() {
+  google.script.run
+    .withSuccessHandler(function(summary) {
+      try {
+        appState.evalSummary = summary;
+        renderEvalSummary(summary);
+      } catch(e) {
+        var el = document.getElementById('eval-summary-strip');
+        if (el) el.style.display = 'none';
+      }
+    })
+    .withFailureHandler(function() {
+      var el = document.getElementById('eval-summary-strip');
+      if (el) el.style.display = 'none';
+    })
+    .getEvalTaskSummary();
+}
+
+function renderEvalSummary(summary) {
+  var container = document.getElementById('eval-summary-strip');
+  if (!container) return;
+
+  var hasAnyData = summary.dueThisWeekCount > 0 || summary.overdueCount > 0 ||
+    summary.timeline.some(function(d) { return d.tasks.length > 0; });
+  if (!hasAnyData) {
+    container.style.display = 'none';
+    return;
+  }
+  container.style.display = '';
+
+  var html = '';
+
+  // ── Summary Cards ──
+  html += '<div class="eval-metric-cards">';
+
+  // Due This Week card
+  html += '<div class="eval-metric-card">' +
+    '<div class="eval-metric-icon">' +
+      '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">' +
+        '<path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM9 10H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2z"/>' +
+      '</svg>' +
+    '</div>' +
+    '<div class="eval-metric-info">' +
+      '<span class="eval-metric-label">Due This Week</span>' +
+      '<span class="eval-metric-value">' + summary.dueThisWeekCount + '</span>' +
+    '</div>' +
+  '</div>';
+
+  // Overdue card
+  var overdueClass = summary.overdueCount > 0 ? ' eval-metric-card-alert' : '';
+  html += '<div class="eval-metric-card' + overdueClass + '">' +
+    '<div class="eval-metric-icon' + (summary.overdueCount > 0 ? ' eval-metric-icon-alert' : '') + '">' +
+      '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">' +
+        '<path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>' +
+      '</svg>' +
+    '</div>' +
+    '<div class="eval-metric-info">' +
+      '<span class="eval-metric-label">Overdue</span>' +
+      '<span class="eval-metric-value' + (summary.overdueCount > 0 ? ' eval-metric-value-alert' : '') + '">' + summary.overdueCount + '</span>' +
+    '</div>' +
+  '</div>';
+
+  html += '</div>';
+
+  // ── Timeline Strip ──
+  html += '<div class="eval-timeline-strip">';
+  html += '<div class="eval-timeline-header">' +
+    '<span class="eval-timeline-title">Next 7 Days</span>' +
+  '</div>';
+
+  html += '<div class="eval-timeline-days">';
+
+  summary.timeline.forEach(function(day, idx) {
+    var isToday = (idx === 0);
+    var isWeekend = (day.dayOfWeek === 0 || day.dayOfWeek === 6);
+    var isExpanded = (appState.timelineExpandedDay === idx);
+    var hasTasks = day.tasks.length > 0;
+
+    var dayClass = 'eval-timeline-day';
+    if (isToday) dayClass += ' eval-timeline-today';
+    if (isWeekend) dayClass += ' eval-timeline-weekend';
+    if (isExpanded) dayClass += ' eval-timeline-day-expanded';
+
+    html += '<button class="' + dayClass + '" onclick="toggleTimelineDay(' + idx + ')">';
+    html += '<span class="eval-timeline-day-abbr">' + (isToday ? 'Today' : esc(day.dayAbbr)) + '</span>';
+    html += '<span class="eval-timeline-day-num">' + day.dayNum + '</span>';
+
+    if (hasTasks) {
+      html += '<div class="eval-timeline-dots">';
+      var dotCount = Math.min(day.tasks.length, 3);
+      for (var d = 0; d < dotCount; d++) {
+        html += '<span class="eval-timeline-dot"></span>';
+      }
+      if (day.tasks.length > 3) {
+        html += '<span class="eval-timeline-dot-more">+' + (day.tasks.length - 3) + '</span>';
+      }
+      html += '</div>';
+    }
+    html += '</button>';
+  });
+  html += '</div>';
+
+  // Expanded day details
+  if (appState.timelineExpandedDay !== null) {
+    var expandedDay = summary.timeline[appState.timelineExpandedDay];
+    if (expandedDay && expandedDay.tasks.length > 0) {
+      var isExpandedToday = (appState.timelineExpandedDay === 0);
+      var dayLabel = isExpandedToday ? 'Today' : (esc(expandedDay.dayAbbr) + ', ' + esc(expandedDay.monthShort) + ' ' + expandedDay.dayNum);
+      html += '<div class="eval-timeline-detail">';
+      html += '<div class="eval-timeline-detail-header">' +
+        dayLabel +
+        ' <span class="eval-timeline-detail-count">' + expandedDay.tasks.length + ' task' + (expandedDay.tasks.length !== 1 ? 's' : '') + '</span>' +
+      '</div>';
+
+      expandedDay.tasks.forEach(function(task) {
+        var typeLabel = task.evalType === 'eval' ? 'Eval' : 'Re-eval';
+        html += '<div class="eval-timeline-task" onclick="navigateToEvalTask(\'' + esc(task.studentId) + '\')">' +
+          '<span class="eval-timeline-task-dot"></span>' +
+          '<div class="eval-timeline-task-info">' +
+            '<span class="eval-timeline-task-text">' + esc(task.text) + '</span>' +
+            '<span class="eval-timeline-task-student">' + esc(task.studentName) + ' &middot; ' + esc(typeLabel) + '</span>' +
+          '</div>' +
+        '</div>';
+      });
+
+      html += '</div>';
+    } else if (expandedDay) {
+      var emptyLabel = (appState.timelineExpandedDay === 0) ? 'today' : (esc(expandedDay.dayAbbr) + ', ' + esc(expandedDay.monthShort) + ' ' + expandedDay.dayNum);
+      html += '<div class="eval-timeline-detail eval-timeline-detail-empty">' +
+        '<span>No tasks due ' + emptyLabel + '</span>' +
+      '</div>';
+    }
+  }
+
+  html += '</div>';
+
+  container.innerHTML = html;
+  animateContentIn(container);
+}
+
+function toggleTimelineDay(dayIndex) {
+  if (appState.timelineExpandedDay === dayIndex) {
+    appState.timelineExpandedDay = null;
+  } else {
+    appState.timelineExpandedDay = dayIndex;
+  }
+  if (appState.evalSummary) {
+    renderEvalSummary(appState.evalSummary);
+  }
+}
+
+function navigateToEvalTask(studentId) {
+  google.script.run
+    .withSuccessHandler(function(evaluation) {
+      if (evaluation) {
+        showEvalChecklistView(studentId, evaluation);
+      } else {
+        showToast('No active evaluation found for this student.');
+      }
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error loading evaluation: ' + (err && err.message ? err.message : String(err)));
+    })
+    .getEvaluation(studentId);
 }
 
 // ─── Side Panel (Quick View on Double-Click) ───
@@ -3249,6 +3421,7 @@ function refreshDashboard() {
     return;
   }
   showDashboardSkeleton();
+  loadEvalSummary();
   google.script.run
     .withSuccessHandler(function(data) {
       try {
@@ -3270,6 +3443,25 @@ function refreshDashboard() {
 
 // ─── Skeleton Loading Functions ───
 function showDashboardSkeleton() {
+  // Eval summary skeleton
+  var summaryContainer = document.getElementById('eval-summary-strip');
+  if (summaryContainer) {
+    summaryContainer.style.display = '';
+    var skelHtml = '<div class="skeleton-fade-in">' +
+      '<div class="eval-metric-cards">' +
+        '<div class="eval-metric-card"><div class="skeleton" style="width:120px;height:40px;border-radius:8px;"></div></div>' +
+        '<div class="eval-metric-card"><div class="skeleton" style="width:120px;height:40px;border-radius:8px;"></div></div>' +
+      '</div>' +
+      '<div class="eval-timeline-strip" style="padding:16px;">' +
+        '<div style="display:flex;gap:8px;justify-content:space-between;">';
+    for (var s = 0; s < 7; s++) {
+      skelHtml += '<div class="skeleton" style="width:48px;height:64px;border-radius:12px;flex:1;"></div>';
+    }
+    skelHtml += '</div></div></div>';
+    summaryContainer.innerHTML = skelHtml;
+  }
+
+  // Dashboard table skeleton
   var container = document.getElementById('dashboard-table-container');
   var html = '<div class="skeleton-fade-in"><table class="skeleton-table"><thead><tr>' +
     '<th><div class="skeleton skeleton-text w-50" style="margin:0;"></div></th>' +
