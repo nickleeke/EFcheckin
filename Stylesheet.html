@@ -662,7 +662,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   border-radius: var(--md-shape-md);
   margin-bottom: 4px;
 }
-.sp-gpa.high { background: #D6F5D6; color: #1B5E20; }
+.sp-gpa.high { background: #FFDEAB; color: #2A1800; }
 .sp-gpa.mid  { background: #FFF3CD; color: #7A5900; }
 .sp-gpa.low  { background: var(--md-error-container); color: var(--md-on-error-container); }
 .sp-gpa.none { background: var(--md-surface-container); color: var(--md-on-surface-variant); font-size: 16px; line-height: 24px; }
@@ -1205,6 +1205,26 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   padding: 20px;
   text-align: center;
 }
+/* ─── GPA Card Tier Backgrounds (MD3 container colors) ─── */
+.profile-stat-card.gpa-honor-roll {
+  background: #FFDEAB;
+  border-color: #D4A854;
+}
+.profile-stat-card.gpa-honor-roll .profile-stat-label { color: #5D4200; }
+.profile-stat-card.gpa-honor-roll .profile-stat-number { color: #2A1800; }
+.profile-stat-card.gpa-honor-roll .profile-trophy { color: #2A1800; }
+.profile-stat-card.gpa-good-standing {
+  background: #D6F5D6;
+  border-color: #A5D6A7;
+}
+.profile-stat-card.gpa-good-standing .profile-stat-label { color: #2E7D32; }
+.profile-stat-card.gpa-good-standing .profile-stat-number { color: #1B5E20; }
+.profile-stat-card.gpa-at-risk {
+  background: var(--md-error-container);
+  border-color: #E57373;
+}
+.profile-stat-card.gpa-at-risk .profile-stat-label { color: var(--md-on-error-container); }
+.profile-stat-card.gpa-at-risk .profile-stat-number { color: var(--md-on-error-container); }
 .profile-stat-clickable {
   cursor: pointer;
   transition: box-shadow var(--md-duration-short3) var(--md-easing-standard),
@@ -1233,8 +1253,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   font-weight: 400;
   line-height: 1.2;
 }
-.profile-stat-number.gpa-gold { color: #7A5900; }
-.profile-stat-number.gpa-default { color: var(--md-on-surface); }
+.profile-stat-number { color: var(--md-on-surface); }
 .profile-stat-number.missing-zero { color: #1B5E20; }
 .profile-stat-number.missing-alert { color: var(--md-error); }
 .profile-trophy {
