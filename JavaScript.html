@@ -344,7 +344,8 @@ function renderDashboard(data) {
     // GPA
     if (s.gpa != null) {
       var gpaClass = s.gpa >= 3.5 ? 'chip-green' : s.gpa >= 2.5 ? 'chip-yellow' : 'chip-red';
-      html += '<td><span class="chip ' + gpaClass + '">' + s.gpa.toFixed(2) + '</span></td>';
+      var trophy = s.gpa >= 3.7 ? ' &#x1F3C6;' : '';
+      html += '<td><span class="chip ' + gpaClass + '">' + s.gpa.toFixed(2) + trophy + '</span></td>';
     } else {
       html += '<td><span class="chip chip-gray">--</span></td>';
     }
