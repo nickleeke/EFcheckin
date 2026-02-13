@@ -2804,6 +2804,87 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   padding-bottom: 0;
 }
 
+/* ─── Eval Cards Carousel ─── */
+.eval-cards-carousel {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  margin-bottom: 16px;
+  scrollbar-width: thin;
+}
+.eval-cards-carousel::-webkit-scrollbar {
+  height: 4px;
+}
+.eval-cards-carousel::-webkit-scrollbar-thumb {
+  background: var(--md-outline-variant);
+  border-radius: var(--md-shape-full);
+}
+.eval-carousel-card {
+  flex: 0 0 180px;
+  background: var(--md-surface);
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-md);
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: box-shadow var(--md-duration-short3) var(--md-easing-standard),
+              border-color var(--md-duration-short3) var(--md-easing-standard);
+}
+.eval-carousel-card:hover {
+  box-shadow: var(--md-elevation-1);
+  border-color: var(--md-outline);
+}
+.eval-carousel-card-alert {
+  border-color: var(--md-error);
+}
+.eval-carousel-card-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--md-on-surface);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.eval-carousel-card-type {
+  font-size: 12px;
+  color: var(--md-on-surface-variant);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.eval-carousel-card-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.eval-carousel-bar {
+  flex: 1;
+  height: 4px;
+  background: var(--md-surface-container-high);
+  border-radius: var(--md-shape-full);
+  overflow: hidden;
+}
+.eval-carousel-bar-fill {
+  height: 100%;
+  background: var(--md-primary);
+  border-radius: var(--md-shape-full);
+}
+.eval-carousel-card-pct {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--md-on-surface-variant);
+  flex-shrink: 0;
+}
+.eval-carousel-card-overdue {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--md-error);
+  margin-top: 6px;
+}
+
 /* ─── Eval Summary Cards + Next 7 Days Timeline ─── */
 
 .eval-metric-cards {
@@ -3156,6 +3237,22 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   color: var(--md-on-surface);
   margin-bottom: 4px;
 }
+.eval-type-select {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--md-on-surface);
+  background: transparent;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-sm);
+  padding: 4px 8px;
+  cursor: pointer;
+  appearance: auto;
+  -webkit-appearance: auto;
+}
+.eval-type-select:focus {
+  outline: 2px solid var(--md-primary);
+  outline-offset: -2px;
+}
 .eval-summary-progress {
   font-size: 14px;
   color: var(--md-on-surface-variant);
@@ -3192,6 +3289,41 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   border-radius: var(--md-shape-md);
   overflow: hidden;
   margin-bottom: 16px;
+}
+.eval-items-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--md-outline-variant);
+  background: var(--md-surface-container-low);
+}
+.eval-items-header-task {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--md-on-surface-variant);
+  padding-left: 32px;
+}
+.eval-items-header-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.eval-items-header-due {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--md-on-surface-variant);
+  width: 130px;
+  text-align: center;
+}
+.eval-items-header-completed {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--md-on-surface-variant);
+  margin-left: 12px;
+  width: 70px;
+  text-align: center;
 }
 .eval-item {
   display: flex;
@@ -3274,11 +3406,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 }
 
 /* ─── Eval Checklist View: Two-Column Layout ─── */
-.eval-spedforms-row {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 16px;
-}
 .eval-checklist-layout {
   display: grid;
   grid-template-columns: 3fr 1fr;

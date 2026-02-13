@@ -45,6 +45,20 @@ Each user gets their own Google Sheet stored in UserProperties. The web app must
 
 **CoTeachers sheet:** email, role, addedAt
 
+**Evaluations sheet:** id, studentId, type, itemsJson, createdAt, updatedAt, filesJson
+
+### Eval Types
+
+| Internal Value | Display Label | Template Used |
+|---|---|---|
+| `annual-iep` | Annual IEP | Re-eval template |
+| `3-year-reeval` | 3 Year Re-Eval | Re-eval template |
+| `initial-eval` | Initial Eval | Eval template |
+| `eval` (legacy) | Initial Eval | Eval template |
+| `reeval` (legacy) | 3 Year Re-Eval | Re-eval template |
+
+Type definitions live in `EVAL_TYPES` array + `EVAL_TYPE_ALIASES` map (frontend) and `VALID_EVAL_TYPES` + `EVAL_INITIAL_TYPES_` (backend). Always use `getEvalTypeLabel(type)` for display — never inline ternaries or hardcoded label strings.
+
 ### Roles
 
 - `caseload-manager` — Full access, can add/remove team members
@@ -84,8 +98,14 @@ Read-through cache in UserProperties with 2-minute TTL. Invalidated on writes. C
 - `animateContentIn(container)` — Cross-fade from skeleton to content
 - `createRipple(target, clientX, clientY)` — MD3 ripple effect on buttons (delegated click handler)
 - `updateTabIndicator()` — Positions the sliding tab indicator on the active nav tab
+- `getEvalTypeLabel(type)` — Resolves eval type value (including legacy aliases) to display label
+- `setEvalMenuVisibility_(hasEval)` — Toggles create/view menu items for eval checklists
+- `updateEvalBreadcrumb_(typeLabel)` — Updates eval checklist breadcrumb text
+- `buildEvalTypeDropdown_(evalId, currentType)` — Builds `<select>` HTML for eval type picker
 
 ## UI Design System — Material Design 3
+
+**Reference:** [Material Design 3 Web Components](https://github.com/material-components/material-web/tree/main/docs) — canonical docs for MD3 patterns, tokens, and component specs.
 
 ### Seed Color
 
@@ -195,6 +215,73 @@ Delegated click handler creates `<span class="ripple-effect">` inside buttons. B
 - **Always add timeout fallbacks** for `animationend`-dependent cleanup (e.g., `closeConfirmDialog` uses 300ms timeout).
 - **Debounce repeated animations** (e.g., `showToast` clears previous timer before starting a new one).
 - **Respect `prefers-reduced-motion`**: global `@media` rule reduces all durations to `0.01ms`.
+
+## Code Patterns & Anti-Patterns
+
+### Single Source of Truth for Enumerated Values
+
+**Do:** Define label arrays/maps in one place and derive everything else.
+
+```javascript
+// One definition — all labels, dropdowns, and lookups derive from this
+var EVAL_TYPES = [
+  { value: 'annual-iep', label: 'Annual IEP' },
+  ...
+];
+var EVAL_TYPE_ALIASES = { 'eval': 'initial-eval', 'reeval': '3-year-reeval' };
+
+function getEvalTypeLabel(type) {
+  var resolved = EVAL_TYPE_ALIASES[type] || type;
+  for (var i = 0; i < EVAL_TYPES.length; i++) {
+    if (EVAL_TYPES[i].value === resolved) return EVAL_TYPES[i].label;
+  }
+  return 'Eval';
+}
+```
+
+**Don't:** Duplicate labels in separate objects or scatter inline ternaries like `type === 'eval' ? 'Eval' : 'Re-eval'` across multiple files. When a new type is added, every ternary must be found and updated.
+
+### Extract Repeated DOM Manipulation into Helpers
+
+**Do:** Create a helper when the same set of DOM operations appears more than once.
+
+```javascript
+// One call replaces 6+ getElementById + style.display lines
+function setEvalMenuVisibility_(hasEval) {
+  var createIds = ['menu-create-annual-iep', 'menu-create-3-year-reeval', 'menu-create-initial-eval'];
+  createIds.forEach(function(id) { ... });
+  ...
+}
+```
+
+**Don't:** Copy-paste blocks of `getElementById()` + `style.display` toggling across success handlers, else branches, and error handlers. Each copy drifts independently when element IDs change.
+
+### Centralize Repeated HTML Fragments
+
+**Do:** Extract HTML builders for fragments used in multiple places (breadcrumbs, dropdowns, badges).
+
+```javascript
+function updateEvalBreadcrumb_(typeLabel) { /* one place for the SVG + link HTML */ }
+function buildEvalTypeDropdown_(evalId, currentType) { /* one place for <select> construction */ }
+```
+
+**Don't:** Inline the same SVG + `innerHTML` assignment in multiple functions. When the markup changes, only one copy gets updated.
+
+### Constants Belong at the Top of the File
+
+**Do:** Declare configuration arrays and validation lists near other constants (e.g., `VALID_EVAL_TYPES` next to `EVALUATION_HEADERS` in `code.gs`).
+
+**Don't:** Declare constants mid-file just above the first function that uses them. They become invisible to anyone scanning the file structure.
+
+### Backend Summary Endpoints Should Return All Relevant Data
+
+**Do:** When building a summary endpoint (like `getEvalTaskSummary`), include all data the frontend might need to decide visibility — e.g., return `activeEvals` alongside aggregate counts.
+
+**Don't:** Return only aggregate metrics (due this week, overdue count) that require items to have due dates set. If the frontend hides the entire section when aggregates are zero, newly created records with no due dates become invisible.
+
+### Use `.view-title-row` for Header + Action Layouts
+
+The existing `.view-title-row` utility class (`display: flex; align-items: center; justify-content: space-between`) is the standard pattern for placing a view title alongside action buttons (e.g., student name + SpEdForms link). Don't create standalone button rows above content — embed the action in the title row to reduce whitespace.
 
 ## Development Notes
 
