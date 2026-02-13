@@ -530,6 +530,20 @@ function getDashboardData() {
   const ss = getSS_();
   const ciSheet = ss.getSheetByName(SHEET_CHECKINS);
 
+  // Build eval type lookup (studentId -> 'eval' or 'reeval')
+  const evalTypeMap = {};
+  const evalSheet = ss.getSheetByName(SHEET_EVALUATIONS);
+  if (evalSheet && evalSheet.getLastRow() > 1) {
+    const evalData = evalSheet.getDataRange().getValues();
+    const evalHeaders = evalData[0];
+    const evalColIdx = buildColIdx_(evalHeaders);
+    for (let i = 1; i < evalData.length; i++) {
+      const sid = evalData[i][evalColIdx['studentId'] - 1];
+      const etype = evalData[i][evalColIdx['type'] - 1];
+      if (sid) evalTypeMap[sid] = etype || 'eval';
+    }
+  }
+
   // Build all check-ins once
   const allCheckIns = [];
   if (ciSheet && ciSheet.getLastRow() > 1) {
@@ -619,7 +633,8 @@ function getDashboardData() {
       trend: trend,
       gpa: gpa,
       totalMissing: totalMissing,
-      academicData: academicData
+      academicData: academicData,
+      evalType: evalTypeMap[s.id] || null
     };
   });
 

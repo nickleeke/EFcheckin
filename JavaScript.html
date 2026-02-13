@@ -331,7 +331,12 @@ function renderDashboard(data) {
     var origIndex = data.indexOf(s);
     var delay = Math.min(index * 50, 400);
     html += '<tr class="stagger-row" style="animation-delay:' + delay + 'ms" onclick="openSidePanel(' + origIndex + ')" title="Click for quick view">';
-    html += '<td><strong>' + esc(s.firstName + ' ' + s.lastName) + '</strong></td>';
+    html += '<td><strong>' + esc(s.firstName + ' ' + s.lastName) + '</strong>';
+    if (s.evalType) {
+      var evalLabel = s.evalType === 'reeval' ? 'Re-eval' : 'Eval';
+      html += ' <span class="chip chip-clickable eval-badge" onclick="event.stopPropagation(); openEvalFromBadge(\'' + s.id + '\')" title="View ' + evalLabel + ' checklist">' + evalLabel + '</span>';
+    }
+    html += '</td>';
     html += '<td>' + esc(s.grade || '-') + '</td>';
 
     // EF Average
@@ -3947,7 +3952,12 @@ function renderMyCaseload() {
   myStudents.forEach(function(s) {
     var origIndex = appState.dashboardData.indexOf(s);
     html += '<tr onclick="openSidePanel(' + origIndex + ')" title="Click for quick view">';
-    html += '<td><strong>' + esc(s.firstName + ' ' + s.lastName) + '</strong></td>';
+    html += '<td><strong>' + esc(s.firstName + ' ' + s.lastName) + '</strong>';
+    if (s.evalType) {
+      var evalLabel = s.evalType === 'reeval' ? 'Re-eval' : 'Eval';
+      html += ' <span class="chip chip-clickable eval-badge" onclick="event.stopPropagation(); openEvalFromBadge(\'' + s.id + '\')" title="View ' + evalLabel + ' checklist">' + evalLabel + '</span>';
+    }
+    html += '</td>';
     html += '<td>' + esc(s.grade || '-') + '</td>';
 
     if (s.gpa != null) {
@@ -4267,6 +4277,22 @@ function handleEvalCardClick(studentId) {
   if (appState.currentEvaluation) {
     showEvalChecklistView(studentId, appState.currentEvaluation);
   }
+}
+
+function openEvalFromBadge(studentId) {
+  google.script.run
+    .withSuccessHandler(function(evaluation) {
+      if (evaluation) {
+        appState.currentStudentId = studentId;
+        showEvalChecklistView(studentId, evaluation);
+      } else {
+        showToast('No active evaluation found');
+      }
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error loading evaluation');
+    })
+    .getEvaluation(studentId);
 }
 
 function handleCreateEvalChecklist(type) {
