@@ -2048,7 +2048,7 @@ function renderStudentProfileDashboard(student) {
   }
   html += '<div class="profile-contacts-card" id="profile-contacts-card">';
   html += '<div class="profile-contacts-header">';
-  html += '<span class="profile-stat-label" style="margin-bottom:0;">Contacts</span>';
+  html += '<span class="profile-section-title">Contacts</span>';
   html += '<button class="btn-icon btn-sm" onclick="addProfileContact(\'' + esc(student.id) + '\')" title="Add contact">' +
     '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>' +
   '</button>';
@@ -2089,7 +2089,7 @@ function renderStudentProfileDashboard(student) {
   }
 
   html += '</div>';
-  html += '<button type="button" class="btn btn-sm btn-secondary" onclick="addGoal()" style="margin-top:8px;">+ Add Goal</button>';
+  html += '<button type="button" class="btn btn-sm btn-secondary profile-add-goal-btn" onclick="addGoal()">+ Add Goal</button>';
   html += '</div>';
 
   // ─── Section 3: Check-In History placeholder ───
@@ -2128,7 +2128,7 @@ function renderGoalItem(goal) {
       '</div>';
     });
   }
-  html += '<button type="button" class="btn-ghost btn-sm" onclick="addObjective(\'' + esc(goal.id) + '\')" style="margin-top:4px;">+ Add Objective</button>';
+  html += '<button type="button" class="btn-ghost btn-sm profile-add-objective-btn" onclick="addObjective(\'' + esc(goal.id) + '\')">+ Add Objective</button>';
   html += '</div>';
 
   html += '</div>';
@@ -2749,14 +2749,14 @@ function renderCheckInHistory(checkIns, student) {
   var section = document.getElementById('checkin-history-section');
   if (!section) return;
 
-  var html = '<div class="form-card" style="margin-top:20px;">' +
-    '<div class="form-section-title" style="display:flex;justify-content:space-between;align-items:center;">' +
-      '<span>Check-In History (' + checkIns.length + ')</span>' +
+  var html = '<div class="profile-section-card">' +
+    '<div class="profile-section-header">' +
+      '<span class="profile-section-title">Check-In History (' + checkIns.length + ')</span>' +
       '<button class="btn btn-sm btn-primary" onclick="startCheckIn(\'' + student.id + '\')">New Check-In</button>' +
     '</div>';
 
   if (checkIns.length === 0) {
-    html += '<p class="hint" style="margin-top:12px;">No check-ins recorded yet.</p>';
+    html += '<div class="profile-empty-state"><p>No check-ins recorded yet.</p></div>';
   } else {
     checkIns.forEach(function(ci) {
       var ratings = [
@@ -2789,8 +2789,8 @@ function renderCheckInHistory(checkIns, student) {
         html += '<div class="history-goal">Goal: ' + esc(ci.microGoal) + '</div>';
       }
 
-      html += '<div style="margin-top:8px;text-align:right;">' +
-        '<button class="action-btn danger" onclick="event.stopPropagation(); confirmDeleteCheckIn(\'' + ci.id + '\', \'' + student.id + '\')" title="Delete check-in">' +
+      html += '<div class="history-card-actions">' +
+        '<button class="btn-icon btn-sm" onclick="event.stopPropagation(); confirmDeleteCheckIn(\'' + ci.id + '\', \'' + student.id + '\')" title="Delete check-in">' +
           '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>' +
         '</button>' +
       '</div>';
