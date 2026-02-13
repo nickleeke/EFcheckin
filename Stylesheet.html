@@ -254,28 +254,13 @@ body {
 .top-app-bar-content {
   display: flex;
   align-items: center;
-  justify-content: center;
   height: 100%;
   padding: 0 16px;
 }
-.nav-brand {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-  cursor: pointer;
-  border-radius: var(--md-shape-sm);
-  transition: opacity var(--md-duration-short4) var(--md-easing-standard);
-}
-.nav-brand:hover {
-  opacity: 0.85;
-}
-.nav-brand:focus-visible {
-  outline: 2px solid var(--md-on-primary);
-  outline-offset: 4px;
-}
 .nav-logo {
-  height: 40px;
-  width: auto;
+  height: auto;
+  width: 160px;
+  max-width: 100%;
   object-fit: contain;
   flex-shrink: 0;
 }
@@ -303,7 +288,21 @@ body {
   z-index: 100;
 }
 .nav-drawer-header {
-  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px 16px;
+  margin: 8px 12px 4px;
+  cursor: pointer;
+  border-radius: var(--md-shape-sm);
+  transition: opacity var(--md-duration-short4) var(--md-easing-standard);
+}
+.nav-drawer-header:hover {
+  opacity: 0.85;
+}
+.nav-drawer-header:focus-visible {
+  outline: 2px solid var(--md-primary);
+  outline-offset: 2px;
 }
 .nav-drawer-items {
   padding: 0 12px;
@@ -438,12 +437,6 @@ body {
 .nav-drawer-toggle:hover {
   background: rgba(255, 255, 255, 0.12);
 }
-.top-app-bar-spacer {
-  width: 40px;
-  flex-shrink: 0;
-  display: none; /* hidden on desktop */
-}
-
 /* ─── Main Layout ─── */
 main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 
@@ -2342,10 +2335,10 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 
 /* ─── MD3 Navigation Drawer — Responsive ─── */
 
-/* Desktop: standard drawer always visible */
+/* Desktop: standard drawer always visible, top app bar hidden */
 @media (min-width: 841px) {
+  .top-app-bar { display: none !important; }
   .nav-drawer-toggle { display: none !important; }
-  .top-app-bar-spacer { display: none !important; }
   .nav-drawer-scrim { display: none !important; }
 }
 
@@ -2406,12 +2399,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   .nav-drawer-toggle {
     display: inline-flex;
   }
-  .top-app-bar-spacer {
-    display: block;
-  }
-  .top-app-bar-content {
-    justify-content: space-between;
-  }
 }
 
 /* ─── Responsive ─── */
@@ -2422,7 +2409,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   .top-app-bar-content {
     padding: 0 12px;
   }
-  .nav-logo { height: 32px; }
+  .nav-logo { width: 120px; }
   main { padding: 16px; }
   .form-row { flex-direction: column; gap: 0; }
   .dashboard-table { font-size: 13px; }
