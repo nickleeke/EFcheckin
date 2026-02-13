@@ -152,25 +152,25 @@ document.addEventListener('DOMContentLoaded', function() {
 /** Enter the main app (for returning users or after onboarding). */
 function enterApp() {
   var navbar = document.getElementById('navbar');
-  var tabBar = document.getElementById('tab-bar');
+  var navDrawer = document.getElementById('nav-drawer');
   if (navbar) navbar.style.display = '';
-  if (tabBar) tabBar.style.display = '';
+  if (navDrawer) navDrawer.style.display = '';
   // Load global case managers list
   google.script.run
     .withSuccessHandler(function(cms) {
       appState.caseManagers = cms || [];
-      // Show My Caseload tab if current user is a case manager
+      // Show My Caseload drawer item if current user is a case manager
       var isCM = cms.some(function(cm) {
         return cm.email === (appState.currentUserEmail || '').toLowerCase();
       });
       if (isCM) {
-        var myCaseloadTab = document.getElementById('tab-mycaseload');
-        if (myCaseloadTab) myCaseloadTab.style.display = '';
+        var myCaseloadItem = document.getElementById('drawer-mycaseload');
+        if (myCaseloadItem) myCaseloadItem.style.display = '';
       }
-      // Show Admin tab if superuser
+      // Show Admin drawer item if superuser
       if (appState.isSuperuser) {
-        var adminTab = document.getElementById('tab-admin');
-        if (adminTab) adminTab.style.display = '';
+        var adminItem = document.getElementById('drawer-admin');
+        if (adminItem) adminItem.style.display = '';
       }
     })
     .withFailureHandler(function() {})
@@ -195,9 +195,35 @@ function enterApp() {
     .initializeSheets();
 }
 
-// Close side panel on Escape key
+// ─── Navigation Drawer Toggle ───
+var _navDrawerOpen = false;
+
+function toggleNavDrawer() {
+  _navDrawerOpen ? closeNavDrawer() : openNavDrawer();
+}
+function openNavDrawer() {
+  closeSidePanel();
+  var drawer = document.getElementById('nav-drawer');
+  var scrim = document.getElementById('nav-drawer-scrim');
+  if (drawer) drawer.classList.add('open');
+  if (scrim) scrim.classList.add('open');
+  _navDrawerOpen = true;
+}
+function closeNavDrawer() {
+  var drawer = document.getElementById('nav-drawer');
+  var scrim = document.getElementById('nav-drawer-scrim');
+  if (drawer) drawer.classList.remove('open');
+  if (scrim) scrim.classList.remove('open');
+  _navDrawerOpen = false;
+}
+function closeNavDrawerIfMobile_() {
+  if (window.innerWidth < 840) closeNavDrawer();
+}
+
+// Close panels on Escape key
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') {
+    closeNavDrawer();
     closeSidePanel();
     // Also close any confirmation dialogs
     var overlay = document.querySelector('.confirm-overlay');
@@ -284,19 +310,21 @@ function loadDashboard() {
 function switchDashboardTab(tabName) {
   // Ensure dashboard view is visible (handles clicks from child pages)
   showView('dashboard-view');
-  // Deactivate all tabs and panels
-  document.querySelectorAll('.nav-tab').forEach(function(t) { t.classList.remove('active'); });
+  // Deactivate all drawer items and panels
+  document.querySelectorAll('.nav-drawer-item').forEach(function(t) { t.classList.remove('active'); });
   document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
   // Activate selected
-  var tab = document.getElementById('tab-' + tabName);
+  var item = document.getElementById('drawer-' + tabName);
   var panel = document.getElementById('tab-panel-' + tabName);
-  if (tab) tab.classList.add('active');
+  if (item) item.classList.add('active');
   if (panel) panel.classList.add('active');
   // Show/hide refresh button and add student button (not relevant for admin)
   var refreshBtn = document.getElementById('dashboard-refresh-btn');
   if (refreshBtn) refreshBtn.style.display = (tabName === 'admin') ? 'none' : '';
   var addStudentBtn = document.getElementById('add-student-btn');
   if (addStudentBtn) addStudentBtn.style.display = (tabName === 'admin') ? 'none' : '';
+  // Close mobile drawer
+  closeNavDrawerIfMobile_();
   // Render tab content
   if (tabName === 'caseload') {
     loadDashboard();
@@ -3237,9 +3265,9 @@ function saveFeedbackSetup() {
 
 function showInviteModal(invite, isNewUser) {
   var navbar = document.getElementById('navbar');
-  var tabBar = document.getElementById('tab-bar');
+  var navDrawer = document.getElementById('nav-drawer');
   if (navbar) navbar.style.display = '';
-  if (tabBar) tabBar.style.display = '';
+  if (navDrawer) navDrawer.style.display = '';
   showView('auth-loading'); // keep loading state visible behind the modal
   if (!isNewUser) showView('dashboard-view');
 
@@ -3309,9 +3337,10 @@ function declineInvite(isNewUser) {
 // ─── Co-Teacher Management View ───
 
 function showCoTeachers() {
-  document.querySelectorAll('.nav-tab').forEach(function(t) { t.classList.remove('active'); });
-  var teamTab = document.getElementById('tab-team');
-  if (teamTab) teamTab.classList.add('active');
+  document.querySelectorAll('.nav-drawer-item').forEach(function(t) { t.classList.remove('active'); });
+  var teamItem = document.getElementById('drawer-team');
+  if (teamItem) teamItem.classList.add('active');
+  closeNavDrawerIfMobile_();
   showView('coteacher-view');
   document.getElementById('coteacher-content-container').innerHTML =
     '<div class="skeleton-fade-in"><div class="form-card">' +
@@ -3497,8 +3526,8 @@ function refreshDashboard() {
         appState.dashboardData = data || [];
         renderDashboard(data);
         // Also refresh My Caseload if that tab is active
-        var mcTab = document.getElementById('tab-mycaseload');
-        if (mcTab && mcTab.classList.contains('active')) {
+        var mcItem = document.getElementById('drawer-mycaseload');
+        if (mcItem && mcItem.classList.contains('active')) {
           renderMyCaseload();
         }
         showToast('Dashboard refreshed');
@@ -5148,7 +5177,7 @@ function createRipple(target, clientX, clientY) {
   ripple.addEventListener('animationend', function() { ripple.remove(); });
 }
 document.addEventListener('click', function(e) {
-  var btn = e.target.closest('.btn, .btn-icon, .btn-ghost, .action-btn, .rating-btn, .nav-tab');
+  var btn = e.target.closest('.btn, .btn-icon, .btn-ghost, .action-btn, .rating-btn, .nav-drawer-item');
   if (btn) createRipple(btn, e.clientX, e.clientY);
 });
 </script>

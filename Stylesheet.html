@@ -256,8 +256,6 @@ body {
   align-items: center;
   justify-content: center;
   height: 100%;
-  max-width: 1200px;
-  margin: 0 auto;
   padding: 0 16px;
 }
 .nav-brand {
@@ -272,84 +270,132 @@ body {
   flex-shrink: 0;
 }
 
-/* ─── Tab Bar (M3 Primary Tabs — Icon + Label, on surface) ─── */
-.tab-bar {
-  background: var(--md-surface);
-  border-bottom: 1px solid var(--md-outline-variant);
-  position: sticky;
-  top: 64px;
-  z-index: 99;
-}
-.tab-bar-content {
+/* ─── App Layout (drawer + content side by side) ─── */
+.app-layout {
   display: flex;
-  align-items: stretch;
-  justify-content: center;
-  height: 64px;
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 16px;
-  gap: 0;
+  min-height: 100vh;
+}
+.app-content {
+  flex: 1;
+  min-width: 0;
 }
 
-/* ─── Individual Tab (M3 Primary Tab) ─── */
-.nav-tab {
-  height: 100%;
-  min-width: 90px;
-  padding: 0 24px;
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-family: 'Roboto', sans-serif;
-  color: var(--md-on-surface-variant);
-  transition: color var(--md-duration-short4) var(--md-easing-standard),
-              background var(--md-duration-short4) var(--md-easing-standard);
+/* ─── MD3 Navigation Drawer ─── */
+.nav-drawer {
+  width: 280px;
+  flex-shrink: 0;
+  background: var(--md-surface-container-low);
+  border-right: 1px solid var(--md-outline-variant);
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  overflow-y: auto;
+  z-index: 100;
+}
+.nav-drawer-header {
+  padding: 16px 16px 8px 16px;
+  display: flex;
+  align-items: center;
+  min-height: 64px;
+}
+.nav-drawer-logo {
+  height: 36px;
+  width: auto;
+  object-fit: contain;
+}
+.nav-drawer-items {
+  padding: 0 12px;
   display: flex;
   flex-direction: column;
+  gap: 2px;
+}
+.nav-drawer-item {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 4px;
-  position: relative;
-  white-space: nowrap;
-}
-.nav-tab-icon {
-  width: 24px;
-  height: 24px;
-  fill: currentColor;
-  flex-shrink: 0;
-}
-.nav-tab-label {
-  /* M3 Title Small */
+  gap: 12px;
+  width: 100%;
+  height: 56px;
+  padding: 0 16px;
+  background: none;
+  border: none;
+  border-radius: var(--md-shape-full);
+  cursor: pointer;
+  font-family: 'Roboto', sans-serif;
+  /* MD3 Label Large */
   font-size: 14px;
   font-weight: 500;
   letter-spacing: 0.1px;
   line-height: 20px;
+  color: var(--md-on-surface-variant);
+  position: relative;
+  transition: color var(--md-duration-short4) var(--md-easing-standard);
 }
-
-/* Tab active indicator (MD3 pill shape) */
-.tab-indicator {
+/* MD3 Active Indicator (pill behind item) */
+.nav-drawer-active-indicator {
   position: absolute;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%) scaleX(0);
-  width: calc(100% - 16px);
-  height: 3px;
-  border-radius: 3px 3px 0 0;
-  background: var(--md-primary);
-  transition: transform var(--md-duration-short4) var(--md-easing-standard);
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--md-shape-full);
+  background: var(--md-secondary-container);
+  opacity: 0;
+  transition: opacity var(--md-duration-short4) var(--md-easing-standard);
+  z-index: 0;
+}
+.nav-drawer-item.active .nav-drawer-active-indicator {
+  opacity: 1;
+}
+.nav-drawer-item.active {
+  color: var(--md-on-secondary-container);
+  font-weight: 700;
+}
+.nav-drawer-item:hover:not(.active) {
+  background: rgba(0, 0, 0, 0.08);
+}
+.nav-drawer-icon {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
+  flex-shrink: 0;
+  z-index: 1;
+}
+.nav-drawer-label {
+  z-index: 1;
+}
+.nav-drawer-divider {
+  height: 1px;
+  background: var(--md-outline-variant);
+  margin: 8px 16px;
 }
 
-/* Hover state layer (MD3: primary color at 8% opacity) */
-.nav-tab:hover {
-  background: rgba(196, 30, 58, 0.08);
-  color: var(--md-on-surface);
+/* ─── Nav Drawer Scrim (mobile overlay) ─── */
+.nav-drawer-scrim {
+  display: none;
 }
 
-/* Active tab */
-.nav-tab.active {
-  color: var(--md-primary);
+/* ─── Hamburger Toggle Button ─── */
+.nav-drawer-toggle {
+  width: 40px;
+  height: 40px;
+  display: none; /* hidden on desktop */
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--md-on-primary);
+  cursor: pointer;
+  border-radius: var(--md-shape-full);
+  flex-shrink: 0;
+  transition: background var(--md-duration-short4) var(--md-easing-standard);
 }
-.nav-tab.active .tab-indicator {
-  transform: translateX(-50%) scaleX(1);
+.nav-drawer-toggle:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+.top-app-bar-spacer {
+  width: 40px;
+  flex-shrink: 0;
+  display: none; /* hidden on desktop */
 }
 
 /* ─── Main Layout ─── */
@@ -1782,10 +1828,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   pointer-events: auto;
 }
 
-/* ─── Tab Bar positioning helper ─── */
-.tab-bar-content {
-  position: relative;
-}
 
 /* ─── Skeleton → Content Cross-Fade ─── */
 @keyframes contentFadeIn {
@@ -1806,7 +1848,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 }
 
 /* ─── Button Ripple Effect ─── */
-.btn, .btn-icon, .btn-ghost, .action-btn, .rating-btn, .nav-tab {
+.btn, .btn-icon, .btn-ghost, .action-btn, .rating-btn, .nav-drawer-item {
   position: relative;
   overflow: hidden;
 }
@@ -2252,6 +2294,61 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 }
 
 
+/* ─── MD3 Navigation Drawer — Responsive ─── */
+
+/* Desktop: standard drawer always visible */
+@media (min-width: 841px) {
+  .nav-drawer-toggle { display: none !important; }
+  .top-app-bar-spacer { display: none !important; }
+  .nav-drawer-scrim { display: none !important; }
+}
+
+/* Mobile: modal drawer with scrim */
+@media (max-width: 840px) {
+  .nav-drawer {
+    position: fixed;
+    top: 0;
+    left: -280px;
+    height: 100%;
+    z-index: 201;
+    border-right: none;
+    border-radius: 0 var(--md-shape-lg) var(--md-shape-lg) 0;
+    box-shadow: var(--md-elevation-3);
+    transition: left var(--md-duration-medium3) var(--md-easing-emphasized-accelerate);
+  }
+  .nav-drawer.open {
+    left: 0;
+    transition: left var(--md-duration-medium3) var(--md-easing-emphasized-decelerate);
+  }
+  .nav-drawer-scrim {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.32);
+    z-index: 200;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--md-duration-medium3) var(--md-easing-emphasized-accelerate);
+  }
+  .nav-drawer-scrim.open {
+    opacity: 1;
+    pointer-events: auto;
+    transition: opacity var(--md-duration-medium3) var(--md-easing-emphasized-decelerate);
+  }
+  .nav-drawer-toggle {
+    display: inline-flex;
+  }
+  .top-app-bar-spacer {
+    display: block;
+  }
+  .top-app-bar-content {
+    justify-content: space-between;
+  }
+}
+
 /* ─── Responsive ─── */
 @media (max-width: 768px) {
   .top-app-bar {
@@ -2261,22 +2358,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
     padding: 0 12px;
   }
   .nav-logo { height: 32px; }
-  .tab-bar {
-    top: 56px;
-  }
-  .tab-bar-content {
-    height: 56px;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    justify-content: flex-start;
-    padding: 0 8px;
-  }
-  .nav-tab {
-    padding: 0 16px;
-    min-width: 72px;
-  }
-  .nav-tab-icon { width: 20px; height: 20px; }
-  .nav-tab-label { font-size: 12px; }
   main { padding: 16px; }
   .form-row { flex-direction: column; gap: 0; }
   .dashboard-table { font-size: 13px; }
