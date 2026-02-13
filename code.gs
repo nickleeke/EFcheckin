@@ -661,7 +661,104 @@ function invalidateCache_() {
     var props = PropertiesService.getUserProperties();
     props.deleteProperty(CACHE_PREFIX + 'students');
     props.deleteProperty(CACHE_PREFIX + 'dashboard');
+    props.deleteProperty(CACHE_PREFIX + 'eval_summary');
   } catch(e) {}
+}
+
+// ───── Eval Task Summary (cross-student aggregation) ─────
+
+function getEvalTaskSummary() {
+  var cached = getCache_('eval_summary');
+  if (cached) return cached;
+
+  initializeSheetsIfNeeded_();
+  var ss = getSS_();
+  var evalSheet = ss.getSheetByName(SHEET_EVALUATIONS);
+  if (!evalSheet || evalSheet.getLastRow() <= 1) {
+    return { dueThisWeekCount: 0, overdueCount: 0, timeline: [] };
+  }
+
+  // Build student name lookup
+  var students = getStudents();
+  var studentMap = {};
+  students.forEach(function(s) {
+    studentMap[s.id] = { firstName: s.firstName, lastName: s.lastName };
+  });
+
+  var evalData = evalSheet.getDataRange().getValues();
+  var evalHeaders = evalData[0];
+  var evalColIdx = buildColIdx_(evalHeaders);
+
+  var now = new Date();
+  var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  var todayStr = formatDateValue_(today);
+
+  // Build 7-day range
+  var dayAbbrs = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  var monthAbbrs = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  var timelineDays = [];
+  for (var d = 0; d < 7; d++) {
+    var dayDate = new Date(today.getTime() + d * 86400000);
+    timelineDays.push({
+      date: formatDateValue_(dayDate),
+      dayOfWeek: dayDate.getDay(),
+      dayAbbr: dayAbbrs[dayDate.getDay()],
+      dayNum: dayDate.getDate(),
+      monthShort: monthAbbrs[dayDate.getMonth()],
+      tasks: []
+    });
+  }
+  var endDateStr = timelineDays[6].date;
+
+  var overdueCount = 0;
+  var dueThisWeekCount = 0;
+
+  for (var i = 1; i < evalData.length; i++) {
+    var studentId = evalData[i][evalColIdx['studentId'] - 1];
+    var itemsRaw = evalData[i][evalColIdx['itemsJson'] - 1];
+    var evalType = evalData[i][evalColIdx['type'] - 1];
+    var evalId = evalData[i][evalColIdx['id'] - 1];
+    var items;
+    try { items = JSON.parse(itemsRaw || '[]'); } catch(e) { items = []; }
+
+    var studentInfo = studentMap[studentId] || { firstName: 'Unknown', lastName: '' };
+
+    items.forEach(function(item) {
+      if (item.checked || !item.dueDate) return;
+
+      if (item.dueDate < todayStr) {
+        overdueCount++;
+        return;
+      }
+
+      if (item.dueDate >= todayStr && item.dueDate <= endDateStr) {
+        dueThisWeekCount++;
+        for (var t = 0; t < timelineDays.length; t++) {
+          if (timelineDays[t].date === item.dueDate) {
+            timelineDays[t].tasks.push({
+              itemId: item.id,
+              text: item.text,
+              studentId: studentId,
+              evalId: evalId,
+              studentName: studentInfo.firstName + ' ' + studentInfo.lastName,
+              evalType: evalType
+            });
+            break;
+          }
+        }
+      }
+    });
+  }
+
+  var result = {
+    dueThisWeekCount: dueThisWeekCount,
+    overdueCount: overdueCount,
+    timeline: timelineDays
+  };
+
+  setCache_('eval_summary', result);
+  return result;
 }
 
 // ───── Teacher Feedback Links (per-user) ─────

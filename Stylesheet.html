@@ -2277,6 +2277,14 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   .pst-col-missing { width: 64px; }
   .contact-fields-grid { grid-template-columns: 1fr; }
   .contact-form-dialog { min-width: auto; width: calc(100vw - 32px); }
+  .eval-timeline-days { gap: 4px; }
+  .eval-timeline-day { padding: 6px 2px; min-height: 56px; }
+  .eval-timeline-day-abbr { font-size: 10px; }
+  .eval-timeline-day-num { font-size: 14px; }
+}
+
+@media (max-width: 480px) {
+  .eval-metric-cards { grid-template-columns: 1fr; }
 }
 
 /* ─── Onboarding Wizard ─── */
@@ -2765,6 +2773,265 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   opacity: 0;
   padding-top: 0;
   padding-bottom: 0;
+}
+
+/* ─── Eval Summary Cards + Next 7 Days Timeline ─── */
+
+.eval-metric-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.eval-metric-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--md-surface);
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-md);
+  padding: 16px 20px;
+  transition: box-shadow var(--md-duration-short3) var(--md-easing-standard);
+}
+
+.eval-metric-card:hover {
+  box-shadow: var(--md-elevation-1);
+}
+
+.eval-metric-card-alert {
+  border-color: var(--md-error);
+  background: var(--md-error-container);
+}
+
+.eval-metric-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--md-shape-sm);
+  background: var(--md-surface-container);
+  color: var(--md-on-surface-variant);
+  flex-shrink: 0;
+}
+
+.eval-metric-icon-alert {
+  background: var(--md-error);
+  color: var(--md-on-error);
+}
+
+.eval-metric-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.eval-metric-label {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  color: var(--md-on-surface-variant);
+}
+
+.eval-metric-value {
+  font-size: 24px;
+  font-weight: 500;
+  color: var(--md-on-surface);
+}
+
+.eval-metric-value-alert {
+  color: var(--md-on-error-container);
+}
+
+/* ─── Eval Timeline Strip ─── */
+
+.eval-timeline-strip {
+  background: var(--md-surface);
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-md);
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+
+.eval-timeline-header {
+  margin-bottom: 12px;
+}
+
+.eval-timeline-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--md-on-surface);
+}
+
+.eval-timeline-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+}
+
+.eval-timeline-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 4px;
+  border: 1px solid transparent;
+  border-radius: var(--md-shape-md);
+  background: var(--md-surface-container-low);
+  cursor: pointer;
+  transition: background var(--md-duration-short3) var(--md-easing-standard),
+              border-color var(--md-duration-short3) var(--md-easing-standard),
+              box-shadow var(--md-duration-short3) var(--md-easing-standard);
+  min-height: 64px;
+  font-family: inherit;
+  color: inherit;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.eval-timeline-day:hover {
+  background: var(--md-surface-container);
+  box-shadow: var(--md-elevation-1);
+}
+
+.eval-timeline-today {
+  border-color: var(--md-primary);
+  background: var(--md-primary-container);
+}
+
+.eval-timeline-today:hover {
+  background: var(--md-primary-container);
+  box-shadow: var(--md-elevation-1);
+}
+
+.eval-timeline-weekend {
+  opacity: 0.6;
+}
+
+.eval-timeline-day-expanded {
+  border-color: var(--md-primary);
+  background: var(--md-surface-container);
+  box-shadow: var(--md-elevation-1);
+}
+
+.eval-timeline-day-abbr {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  color: var(--md-on-surface-variant);
+  text-transform: uppercase;
+}
+
+.eval-timeline-today .eval-timeline-day-abbr {
+  color: var(--md-primary);
+}
+
+.eval-timeline-day-num {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--md-on-surface);
+}
+
+.eval-timeline-today .eval-timeline-day-num {
+  color: var(--md-primary);
+  font-weight: 700;
+}
+
+.eval-timeline-dots {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  margin-top: 2px;
+}
+
+.eval-timeline-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--md-primary);
+}
+
+.eval-timeline-dot-more {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--md-primary);
+  line-height: 1;
+}
+
+/* ─── Timeline Expanded Detail ─── */
+
+.eval-timeline-detail {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--md-outline-variant);
+  animation: fadeIn var(--md-duration-medium1) var(--md-easing-emphasized-decelerate);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.eval-timeline-detail-header {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--md-on-surface);
+  margin-bottom: 8px;
+}
+
+.eval-timeline-detail-count {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--md-on-surface-variant);
+  margin-left: 8px;
+}
+
+.eval-timeline-detail-empty {
+  color: var(--md-on-surface-variant);
+  font-size: 13px;
+  font-style: italic;
+}
+
+.eval-timeline-task {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--md-shape-sm);
+  cursor: pointer;
+  transition: background var(--md-duration-short3) var(--md-easing-standard);
+}
+
+.eval-timeline-task:hover {
+  background: var(--md-surface-container);
+}
+
+.eval-timeline-task-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--md-primary);
+  margin-top: 6px;
+  flex-shrink: 0;
+}
+
+.eval-timeline-task-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.eval-timeline-task-text {
+  font-size: 14px;
+  color: var(--md-on-surface);
+}
+
+.eval-timeline-task-student {
+  font-size: 12px;
+  color: var(--md-on-surface-variant);
 }
 
 /* ─── Eval Checklist: Profile Card (inner, clickable) ─── */
