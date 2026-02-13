@@ -18,7 +18,9 @@ var appState = {
   caseManagers: [],
   isSuperuser: false,
   evalChecklistStudentId: null,
-  currentEvaluation: null
+  currentEvaluation: null,
+  drivePickerLoaded: false,
+  drivePickerConfig: null
 };
 var _persistTimers = {};
 var _persistInFlight = 0;
@@ -1701,7 +1703,24 @@ function renderStudentProfileDashboard(student) {
   var container = document.getElementById('student-form-container');
   var html = '';
 
-  // ─── Section 0+1: Merged Academics Overview ───
+  // ─── Section 0: Eval Checklist Card (collapsible, above academics) ───
+  html += '<div class="profile-eval-section" id="profile-eval-section" style="display:none">';
+  html += '<div class="profile-eval-section-header" onclick="toggleEvalSectionCollapse()">';
+  html += '<div class="profile-eval-section-left">';
+  html += '<span class="profile-eval-section-title" id="profile-eval-section-title">Eval Checklist</span>';
+  html += '<span class="profile-eval-section-progress" id="profile-eval-section-progress"></span>';
+  html += '<span class="profile-eval-overdue-badge" id="profile-eval-overdue-badge" style="display:none"></span>';
+  html += '</div>';
+  html += '<button class="btn-icon btn-sm eval-collapse-btn" id="eval-collapse-btn" onclick="event.stopPropagation(); toggleEvalSectionCollapse()" aria-label="Toggle eval section">' +
+    '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/></svg>' +
+  '</button>';
+  html += '</div>';
+  html += '<div class="profile-eval-section-body" id="profile-eval-section-body">';
+  html += '<div class="profile-eval-card" id="profile-eval-card" onclick="handleEvalCardClick(\'' + esc(student.id) + '\')"></div>';
+  html += '</div>';
+  html += '</div>';
+
+  // ─── Section 1: Merged Academics Overview ───
   var mergedRows = buildMergedScheduleRows_(student);
   var totalMissing = student.totalMissing || 0;
 
@@ -1815,9 +1834,6 @@ function renderStudentProfileDashboard(student) {
     html += '</tbody></table>';
   }
   html += '</div>'; // end .profile-academics-left
-
-  // ── Middle column: eval card (populated async, hidden by default) ──
-  html += '<div class="profile-eval-card" id="profile-eval-card" style="display:none" onclick="handleEvalCardClick(\'' + student.id + '\')"></div>';
 
   // ── Right column: stat cards ──
   html += '<div class="profile-academics-right">';
@@ -3959,6 +3975,7 @@ function adminAssignCaseManager(studentId, caseManagerEmail) {
 function loadEvalCardState(studentId) {
   google.script.run
     .withSuccessHandler(function(evaluation) {
+      var sectionEl = document.getElementById('profile-eval-section');
       var cardEl = document.getElementById('profile-eval-card');
       var menuCreateEval = document.getElementById('menu-create-eval');
       var menuCreateReeval = document.getElementById('menu-create-reeval');
@@ -3967,35 +3984,65 @@ function loadEvalCardState(studentId) {
       if (evaluation) {
         appState.currentEvaluation = evaluation;
 
-        // Show eval card in profile
-        if (cardEl) {
+        // Show eval section in profile
+        if (sectionEl) {
+          sectionEl.style.display = '';
+
           var items = evaluation.items || [];
           var remaining = items.filter(function(it) { return !it.checked; });
           var done = items.length - remaining.length;
           var typeLabel = evaluation.type === 'eval' ? 'Eval Checklist' : 'Re-eval Checklist';
 
-          var cardHtml = '<div class="eval-card-header">' +
-            '<span class="eval-card-type">' + esc(typeLabel) + '</span>' +
-            '<span class="eval-card-progress">' + done + '/' + items.length + '</span>' +
-          '</div>';
-          cardHtml += '<ul class="eval-card-tasks">';
-          var show = remaining.slice(0, 6);
-          show.forEach(function(item) {
-            cardHtml += '<li class="eval-card-task">' + esc(item.text) + '</li>';
-          });
-          if (remaining.length > 6) {
-            cardHtml += '<li class="eval-card-task" style="color:var(--md-on-surface-variant);font-style:italic;">+' + (remaining.length - 6) + ' more</li>';
-          }
-          if (remaining.length === 0) {
-            cardHtml += '<li class="eval-card-task" style="color:var(--md-primary);font-style:italic;">All tasks complete!</li>';
-          }
-          cardHtml += '</ul>';
-          cardHtml += '<div class="eval-card-action">View all &rarr;</div>';
+          // Compute overdue count
+          var now = new Date();
+          var overdueCount = items.filter(function(it) {
+            if (it.checked || !it.dueDate) return false;
+            return now > new Date(it.dueDate + 'T23:59:59');
+          }).length;
 
-          cardEl.innerHTML = cardHtml;
-          cardEl.style.display = '';
-          var layout = cardEl.closest('.profile-academics-layout');
-          if (layout) layout.classList.add('has-eval-card');
+          // Update section header
+          var titleEl = document.getElementById('profile-eval-section-title');
+          if (titleEl) titleEl.textContent = typeLabel;
+
+          var progressEl = document.getElementById('profile-eval-section-progress');
+          if (progressEl) progressEl.textContent = done + '/' + items.length;
+
+          var overdueEl = document.getElementById('profile-eval-overdue-badge');
+          if (overdueEl) {
+            if (overdueCount > 0) {
+              overdueEl.textContent = overdueCount + ' overdue';
+              overdueEl.style.display = '';
+            } else {
+              overdueEl.style.display = 'none';
+            }
+          }
+
+          // Populate inner card with task list
+          if (cardEl) {
+            var cardHtml = '<div class="eval-card-header">' +
+              '<span class="eval-card-type">' + esc(typeLabel) + '</span>' +
+              '<span class="eval-card-progress">' + done + '/' + items.length + '</span>' +
+              (overdueCount > 0 ? '<span class="eval-card-overdue-badge">' + overdueCount + ' overdue</span>' : '') +
+            '</div>';
+            cardHtml += '<ul class="eval-card-tasks">';
+            var show = remaining.slice(0, 6);
+            show.forEach(function(item) {
+              var taskClass = '';
+              if (item.dueDate && !item.checked && now > new Date(item.dueDate + 'T23:59:59')) {
+                taskClass = ' style="color:var(--md-error);"';
+              }
+              cardHtml += '<li class="eval-card-task"' + taskClass + '>' + esc(item.text) + '</li>';
+            });
+            if (remaining.length > 6) {
+              cardHtml += '<li class="eval-card-task" style="color:var(--md-on-surface-variant);font-style:italic;">+' + (remaining.length - 6) + ' more</li>';
+            }
+            if (remaining.length === 0) {
+              cardHtml += '<li class="eval-card-task" style="color:var(--md-primary);font-style:italic;">All tasks complete!</li>';
+            }
+            cardHtml += '</ul>';
+            cardHtml += '<div class="eval-card-action">View all &rarr;</div>';
+            cardEl.innerHTML = cardHtml;
+          }
         }
 
         // Update menu items
@@ -4005,12 +4052,8 @@ function loadEvalCardState(studentId) {
       } else {
         appState.currentEvaluation = null;
 
-        // Hide eval card
-        if (cardEl) {
-          cardEl.style.display = 'none';
-          var layout = cardEl.closest('.profile-academics-layout');
-          if (layout) layout.classList.remove('has-eval-card');
-        }
+        // Hide eval section
+        if (sectionEl) sectionEl.style.display = 'none';
 
         // Show create menu items
         if (menuCreateEval) menuCreateEval.style.display = '';
@@ -4059,7 +4102,8 @@ function doCreateEvalChecklist(studentId, type) {
           id: result.id,
           studentId: result.studentId,
           type: result.type,
-          items: result.items
+          items: result.items,
+          files: result.files || []
         };
         appState.currentEvaluation = evaluation;
         showEvalChecklistView(studentId, evaluation);
@@ -4106,14 +4150,34 @@ function renderEvalChecklist(evaluation) {
   var total = items.length;
   var pct = total > 0 ? Math.round(done / total * 100) : 0;
   var typeLabel = evaluation.type === 'eval' ? 'Eval Checklist' : 'Re-eval Checklist';
+  var now = new Date();
+
+  // Compute overdue count
+  var overdueCount = items.filter(function(it) {
+    if (it.checked || !it.dueDate) return false;
+    return now > new Date(it.dueDate + 'T23:59:59');
+  }).length;
 
   var html = '';
+
+  // SpEdForms button (right-aligned, above progress card)
+  html += '<div class="eval-spedforms-row">' +
+    '<a href="https://15.spedforms.org/students2020.php?login=1" target="_blank" class="btn btn-secondary">Open SpEdForms</a>' +
+  '</div>';
+
+  // Two-column layout: checklist (3/4) + files (1/4)
+  html += '<div class="eval-checklist-layout">';
+
+  // ── Left column: main checklist ──
+  html += '<div class="eval-checklist-main">';
 
   // Summary card
   html += '<div class="eval-summary-card">';
   html += '<div class="eval-summary-left">' +
     '<div class="eval-summary-type">' + esc(typeLabel) + '</div>' +
-    '<div class="eval-summary-progress" id="eval-summary-progress">' + done + ' of ' + total + ' tasks completed</div>' +
+    '<div class="eval-summary-progress" id="eval-summary-progress">' + done + ' of ' + total + ' tasks completed' +
+      (overdueCount > 0 ? ' <span class="eval-overdue-count" id="eval-overdue-count">' + overdueCount + ' overdue</span>' : '<span class="eval-overdue-count" id="eval-overdue-count" style="display:none"></span>') +
+    '</div>' +
     '<div class="eval-progress-bar"><div class="eval-progress-fill" id="eval-progress-fill" style="width:' + pct + '%"></div></div>' +
   '</div>';
   html += '<div class="eval-summary-right">' +
@@ -4131,23 +4195,57 @@ function renderEvalChecklist(evaluation) {
       var d = new Date(item.completedAt);
       completedDate = (d.getMonth() + 1) + '/' + d.getDate() + '/' + d.getFullYear();
     }
-    html += '<div class="eval-item' + checkedClass + '" data-item-id="' + esc(item.id) + '">' +
+
+    // Overdue detection
+    var isOverdue = false;
+    if (item.dueDate && !item.checked) {
+      isOverdue = now > new Date(item.dueDate + 'T23:59:59');
+    }
+
+    html += '<div class="eval-item' + checkedClass + (isOverdue ? ' eval-item-overdue' : '') + '" data-item-id="' + esc(item.id) + '">' +
       '<label class="eval-item-label">' +
         '<input type="checkbox" class="eval-item-checkbox"' + (item.checked ? ' checked' : '') +
           ' onchange="toggleEvalItem(\'' + esc(evaluation.id) + '\', \'' + esc(item.id) + '\', this.checked)">' +
-        '<span class="eval-item-text">' + esc(item.text) + '</span>' +
+        '<span class="eval-item-text" onclick="event.preventDefault(); event.stopPropagation(); startEditEvalItemText(\'' + esc(evaluation.id) + '\', \'' + esc(item.id) + '\', this)">' + esc(item.text) + '</span>' +
       '</label>' +
-      '<span class="eval-item-date">' + (completedDate ? esc(completedDate) : '') + '</span>' +
+      '<div class="eval-item-meta">' +
+        (isOverdue ? '<span class="eval-overdue-badge">Overdue</span>' : '') +
+        '<input type="date" class="eval-item-due-date" value="' + esc(item.dueDate || '') + '" ' +
+          'onchange="updateEvalItemDueDate(\'' + esc(evaluation.id) + '\', \'' + esc(item.id) + '\', this.value)" ' +
+          'onclick="event.stopPropagation()" title="Due date">' +
+        '<span class="eval-item-date">' + (completedDate ? esc(completedDate) : '') + '</span>' +
+        '<button class="btn-icon btn-sm eval-item-delete" onclick="deleteEvalItemHandler(\'' + esc(evaluation.id) + '\', \'' + esc(item.id) + '\')" title="Delete task">' +
+          '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>' +
+        '</button>' +
+      '</div>' +
     '</div>';
   });
   html += '</div>';
 
-  // Delete button
+  // Add Task row + Delete button
+  html += '<div class="eval-add-task-row">' +
+    '<button class="btn btn-secondary btn-sm" onclick="showAddEvalTaskForm(\'' + esc(evaluation.id) + '\')">+ Add Task</button>' +
+  '</div>';
+  html += '<div class="eval-add-task-form" id="eval-add-task-form" style="display:none;">' +
+    '<input type="text" class="eval-add-task-input" id="eval-add-task-input" placeholder="Task description..." onkeydown="if(event.key===\'Enter\'){event.preventDefault();confirmAddEvalTask(\'' + esc(evaluation.id) + '\');}">' +
+    '<input type="date" class="eval-add-task-due" id="eval-add-task-due" title="Due date (optional)">' +
+    '<button class="btn btn-primary btn-sm" onclick="confirmAddEvalTask(\'' + esc(evaluation.id) + '\')">Add</button>' +
+    '<button class="btn btn-ghost btn-sm" onclick="hideAddEvalTaskForm()">Cancel</button>' +
+  '</div>';
+
   html += '<div class="eval-actions">' +
     '<button class="btn btn-danger btn-sm" onclick="confirmDeleteEvaluation(\'' + esc(evaluation.id) + '\')">Delete Checklist</button>' +
   '</div>';
 
+  html += '</div>'; // end .eval-checklist-main
+
+  // ── Right column: files sidebar ──
+  html += '<div class="eval-checklist-sidebar" id="eval-files-card"></div>';
+
+  html += '</div>'; // end .eval-checklist-layout
+
   container.innerHTML = html;
+  renderEvalFilesCard(evaluation);
   animateContentIn(container);
 }
 
@@ -4157,6 +4255,9 @@ function toggleEvalItem(evalId, itemId, checked) {
   if (itemEl) {
     if (checked) {
       itemEl.classList.add('eval-item-checked');
+      itemEl.classList.remove('eval-item-overdue');
+      var overdueEl = itemEl.querySelector('.eval-overdue-badge');
+      if (overdueEl) overdueEl.remove();
       var dateSpan = itemEl.querySelector('.eval-item-date');
       if (dateSpan) {
         var now = new Date();
@@ -4191,7 +4292,7 @@ function toggleEvalItem(evalId, itemId, checked) {
     .withFailureHandler(function(err) {
       showToast('Save error: ' + (err && err.message ? err.message : String(err)));
     })
-    .updateEvaluationItem(evalId, itemId, checked);
+    .updateEvaluationItem(evalId, itemId, { checked: checked });
 }
 
 function updateEvalProgress() {
@@ -4201,13 +4302,40 @@ function updateEvalProgress() {
   var pct = total > 0 ? Math.round(done / total * 100) : 0;
 
   var progressEl = document.getElementById('eval-summary-progress');
-  if (progressEl) progressEl.textContent = done + ' of ' + total + ' tasks completed';
+  if (progressEl) {
+    var text = done + ' of ' + total + ' tasks completed';
+    // Keep the overdue span
+    var overdueEl = document.getElementById('eval-overdue-count');
+    if (overdueEl) {
+      progressEl.textContent = text + ' ';
+      progressEl.appendChild(overdueEl);
+    } else {
+      progressEl.textContent = text;
+    }
+  }
 
   var fillEl = document.getElementById('eval-progress-fill');
   if (fillEl) fillEl.style.width = pct + '%';
 
   var percentEl = document.getElementById('eval-summary-percent');
   if (percentEl) percentEl.textContent = pct + '%';
+
+  // Update overdue count
+  var now = new Date();
+  var overdueCount = items.filter(function(it) {
+    if (it.checked || !it.dueDate) return false;
+    return now > new Date(it.dueDate + 'T23:59:59');
+  }).length;
+
+  var overdueCountEl = document.getElementById('eval-overdue-count');
+  if (overdueCountEl) {
+    if (overdueCount > 0) {
+      overdueCountEl.textContent = overdueCount + ' overdue';
+      overdueCountEl.style.display = '';
+    } else {
+      overdueCountEl.style.display = 'none';
+    }
+  }
 }
 
 function confirmDeleteEvaluation(evalId) {
@@ -4239,6 +4367,413 @@ function doDeleteEvaluation(evalId) {
 
 function goBackFromEvalChecklist() {
   showStudentProfile(appState.evalChecklistStudentId);
+}
+
+// ─── Collapsible Eval Section (profile) ───
+
+function toggleEvalSectionCollapse() {
+  var body = document.getElementById('profile-eval-section-body');
+  var btn = document.getElementById('eval-collapse-btn');
+  if (!body) return;
+  var isCollapsed = body.classList.toggle('collapsed');
+  if (btn) btn.classList.toggle('rotated', isCollapsed);
+}
+
+// ─── Editable Eval Tasks ───
+
+function startEditEvalItemText(evalId, itemId, spanEl) {
+  if (spanEl.parentNode.querySelector('.eval-item-edit-input')) return; // already editing
+  var currentText = spanEl.textContent;
+  var input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'eval-item-edit-input';
+  input.value = currentText;
+
+  function save() {
+    var newText = input.value.trim();
+    if (newText && newText !== currentText) {
+      spanEl.textContent = newText;
+      // Update local state
+      if (appState.currentEvaluation) {
+        appState.currentEvaluation.items.forEach(function(it) {
+          if (it.id === itemId) it.text = newText;
+        });
+      }
+      // Save to backend
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (!result.success) showToast('Error saving: ' + (result.error || ''));
+        })
+        .withFailureHandler(function(err) {
+          showToast('Save error: ' + (err && err.message ? err.message : String(err)));
+        })
+        .updateEvaluationItem(evalId, itemId, { text: newText });
+    } else {
+      spanEl.textContent = currentText;
+    }
+    spanEl.style.display = '';
+    if (input.parentNode) input.remove();
+  }
+
+  input.addEventListener('blur', save);
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+    if (e.key === 'Escape') { input.value = currentText; input.blur(); }
+  });
+
+  spanEl.style.display = 'none';
+  spanEl.parentNode.insertBefore(input, spanEl.nextSibling);
+  input.focus();
+  input.select();
+}
+
+function updateEvalItemDueDate(evalId, itemId, dateValue) {
+  // Update local state
+  if (appState.currentEvaluation) {
+    appState.currentEvaluation.items.forEach(function(it) {
+      if (it.id === itemId) it.dueDate = dateValue || null;
+    });
+  }
+  // Re-render to update overdue badges
+  renderEvalChecklist(appState.currentEvaluation);
+
+  // Save to backend
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (!result.success) showToast('Error saving due date');
+    })
+    .withFailureHandler(function(err) { showToast('Save error'); })
+    .updateEvaluationItem(evalId, itemId, { dueDate: dateValue || null });
+}
+
+function deleteEvalItemHandler(evalId, itemId) {
+  showConfirmDialog({
+    title: 'Delete Task?',
+    body: 'This task will be permanently removed from the checklist.',
+    confirmLabel: 'Delete',
+    onConfirm: "doDeleteEvalItem('" + evalId + "', '" + itemId + "')"
+  });
+}
+
+function doDeleteEvalItem(evalId, itemId) {
+  // Optimistic UI
+  if (appState.currentEvaluation) {
+    appState.currentEvaluation.items = appState.currentEvaluation.items.filter(function(it) { return it.id !== itemId; });
+    renderEvalChecklist(appState.currentEvaluation);
+  }
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (result.success) {
+        appState.currentEvaluation.items = result.items;
+        updateEvalProgress();
+      } else {
+        showToast('Error: ' + (result.error || 'Unknown'));
+      }
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error: ' + (err && err.message ? err.message : String(err)));
+    })
+    .deleteEvaluationItem(evalId, itemId);
+}
+
+// ─── Add Task Form ───
+
+function showAddEvalTaskForm(evalId) {
+  var form = document.getElementById('eval-add-task-form');
+  if (form) form.style.display = '';
+  var input = document.getElementById('eval-add-task-input');
+  if (input) { input.value = ''; input.focus(); }
+  var due = document.getElementById('eval-add-task-due');
+  if (due) due.value = '';
+}
+
+function hideAddEvalTaskForm() {
+  var form = document.getElementById('eval-add-task-form');
+  if (form) form.style.display = 'none';
+}
+
+function confirmAddEvalTask(evalId) {
+  var textInput = document.getElementById('eval-add-task-input');
+  var dueInput = document.getElementById('eval-add-task-due');
+  var text = (textInput ? textInput.value : '').trim();
+  if (!text) { showToast('Please enter a task description'); return; }
+
+  var dueDate = dueInput ? dueInput.value : '';
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (result.success) {
+        appState.currentEvaluation.items = result.items;
+        renderEvalChecklist(appState.currentEvaluation);
+        showToast('Task added');
+      } else {
+        showToast('Error: ' + (result.error || 'Unknown'));
+      }
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error: ' + (err && err.message ? err.message : String(err)));
+    })
+    .addEvaluationItem(evalId, { text: text, dueDate: dueDate || null });
+}
+
+// ─── Google Drive File Picker ───
+
+function getFileTypeIcon(mimeType) {
+  var iconColor = 'var(--md-on-surface-variant)';
+  var iconPath = 'M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11z';
+
+  if (!mimeType) {
+    // generic file icon
+  } else if (mimeType.indexOf('document') !== -1 || mimeType.indexOf('msword') !== -1) {
+    iconColor = '#4285F4'; // Google Docs blue
+    iconPath = 'M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z';
+  } else if (mimeType.indexOf('spreadsheet') !== -1 || mimeType.indexOf('excel') !== -1) {
+    iconColor = '#0F9D58'; // Google Sheets green
+    iconPath = 'M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13zM7 13h3v2H7v-2zm0 4h3v2H7v-2zm10 2h-3v-2h3v2zm0-4h-3v-2h3v2z';
+  } else if (mimeType.indexOf('presentation') !== -1 || mimeType.indexOf('powerpoint') !== -1) {
+    iconColor = '#F4B400'; // Google Slides yellow
+    iconPath = 'M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13zM8 15h8v2H8v-2zm0-4h8v2H8v-2z';
+  } else if (mimeType.indexOf('pdf') !== -1) {
+    iconColor = '#DB4437'; // PDF red
+    iconPath = 'M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13zM11 19h-1v-2h1c.55 0 1-.45 1-1s-.45-1-1-1h-1v-2h1c1.66 0 3 1.34 3 3s-1.34 3-3 3z';
+  } else if (mimeType.indexOf('image') !== -1) {
+    iconColor = '#AB47BC'; // Image purple
+    iconPath = 'M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z';
+  } else if (mimeType.indexOf('folder') !== -1) {
+    iconColor = '#5F6368'; // Folder gray
+    iconPath = 'M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z';
+  }
+
+  return '<svg width="20" height="20" viewBox="0 0 24 24" fill="' + iconColor + '"><path d="' + iconPath + '"/></svg>';
+}
+
+function renderEvalFilesCard(evaluation) {
+  var container = document.getElementById('eval-files-card');
+  if (!container) return;
+
+  var files = evaluation.files || [];
+  var html = '<div class="eval-files-header">' +
+    '<span class="eval-files-title">Files</span>' +
+    '<button class="btn-icon btn-sm" onclick="openDrivePicker(\'' + esc(evaluation.id) + '\')" title="Add file from Drive">' +
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>' +
+    '</button>' +
+  '</div>';
+
+  if (files.length === 0) {
+    html += '<div class="eval-files-empty">No files attached</div>';
+  } else {
+    html += '<div class="eval-files-list">';
+    files.forEach(function(file) {
+      html += '<div class="eval-file-item">' +
+        '<a href="' + esc(file.url) + '" target="_blank" class="eval-file-link" title="Open ' + esc(file.name) + '">' +
+          '<span class="eval-file-icon">' + getFileTypeIcon(file.mimeType) + '</span>' +
+          '<span class="eval-file-name">' + esc(file.name) + '</span>' +
+        '</a>' +
+        '<button class="btn-icon btn-sm eval-file-remove" onclick="removeEvalFileHandler(\'' + esc(evaluation.id) + '\', \'' + esc(file.id) + '\')" title="Remove file">' +
+          '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>' +
+        '</button>' +
+      '</div>';
+    });
+    html += '</div>';
+  }
+
+  // Add file by URL fallback section
+  html += '<div style="margin-top:12px; border-top:1px solid var(--md-outline-variant); padding-top:12px;">' +
+    '<button class="btn btn-ghost btn-sm" onclick="toggleEvalFileUrlForm(\'' + esc(evaluation.id) + '\')" style="width:100%;justify-content:center;">' +
+      '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg>' +
+      ' Add by URL' +
+    '</button>' +
+    '<div class="eval-file-url-form" id="eval-file-url-form" style="display:none;">' +
+      '<input type="text" class="eval-file-url-input" id="eval-file-url-input" placeholder="Paste Google Drive URL..." onkeydown="if(event.key===\'Enter\'){event.preventDefault();confirmAddEvalFileByUrl(\'' + esc(evaluation.id) + '\');}">' +
+      '<input type="text" class="eval-file-name-input" id="eval-file-name-input" placeholder="File name...">' +
+      '<button class="btn btn-primary btn-sm" onclick="confirmAddEvalFileByUrl(\'' + esc(evaluation.id) + '\')">Add</button>' +
+    '</div>' +
+  '</div>';
+
+  container.innerHTML = html;
+}
+
+function toggleEvalFileUrlForm(evalId) {
+  var form = document.getElementById('eval-file-url-form');
+  if (!form) return;
+  var isHidden = form.style.display === 'none';
+  form.style.display = isHidden ? '' : 'none';
+  if (isHidden) {
+    var urlInput = document.getElementById('eval-file-url-input');
+    if (urlInput) { urlInput.value = ''; urlInput.focus(); }
+    var nameInput = document.getElementById('eval-file-name-input');
+    if (nameInput) nameInput.value = '';
+  }
+}
+
+function confirmAddEvalFileByUrl(evalId) {
+  var urlInput = document.getElementById('eval-file-url-input');
+  var nameInput = document.getElementById('eval-file-name-input');
+  var url = (urlInput ? urlInput.value : '').trim();
+  var name = (nameInput ? nameInput.value : '').trim();
+
+  if (!url) { showToast('Please enter a file URL'); return; }
+  if (!name) {
+    // Try to extract name from URL
+    try {
+      var parts = url.split('/');
+      name = decodeURIComponent(parts[parts.length - 1] || parts[parts.length - 2] || 'Linked File');
+    } catch(e) { name = 'Linked File'; }
+  }
+
+  // Try to extract Drive file ID from URL
+  var driveFileId = '';
+  var match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (match) driveFileId = match[1];
+
+  // Guess MIME type from URL
+  var mimeType = '';
+  if (url.indexOf('document') !== -1) mimeType = 'application/vnd.google-apps.document';
+  else if (url.indexOf('spreadsheets') !== -1) mimeType = 'application/vnd.google-apps.spreadsheet';
+  else if (url.indexOf('presentation') !== -1) mimeType = 'application/vnd.google-apps.presentation';
+  else if (url.indexOf('.pdf') !== -1) mimeType = 'application/pdf';
+
+  var fileData = {
+    driveFileId: driveFileId,
+    name: name,
+    mimeType: mimeType,
+    url: url
+  };
+
+  addEvalFileHandler(evalId, fileData);
+
+  // Hide form
+  var form = document.getElementById('eval-file-url-form');
+  if (form) form.style.display = 'none';
+}
+
+function loadDrivePickerApi(callback) {
+  if (appState.drivePickerLoaded) { callback(); return; }
+
+  var script = document.createElement('script');
+  script.src = 'https://apis.google.com/js/api.js';
+  script.onload = function() {
+    gapi.load('picker', function() {
+      appState.drivePickerLoaded = true;
+      callback();
+    });
+  };
+  script.onerror = function() {
+    showToast('Could not load Drive picker. Use "Add by URL" instead.');
+  };
+  document.head.appendChild(script);
+}
+
+function openDrivePicker(evalId) {
+  // Always fetch a fresh token (tokens expire after ~1 hour)
+  google.script.run
+    .withSuccessHandler(function(config) {
+      appState.drivePickerConfig = config;
+      loadDrivePickerApi(function() { showPicker_(evalId, config); });
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error loading file picker: ' + (err && err.message ? err.message : String(err)));
+    })
+    .getDrivePickerConfig();
+}
+
+function showPicker_(evalId, config) {
+  try {
+    var docsView = new google.picker.DocsView()
+      .setIncludeFolders(true);
+
+    var picker = new google.picker.PickerBuilder()
+      .addView(docsView)
+      .addView(google.picker.ViewId.RECENTLY_PICKED)
+      .setOAuthToken(config.token)
+      .setCallback(function(data) {
+        if (data.action === google.picker.Action.PICKED) {
+          var doc = data.docs[0];
+          var fileData = {
+            driveFileId: doc.id,
+            name: doc.name,
+            mimeType: doc.mimeType,
+            url: doc.url
+          };
+          addEvalFileHandler(evalId, fileData);
+        }
+      })
+      .build();
+    picker.setVisible(true);
+  } catch(e) {
+    showToast('Drive picker failed to open. Use "Add by URL" instead.');
+  }
+}
+
+function addEvalFileHandler(evalId, fileData) {
+  // Optimistic UI: add to local state and re-render files card
+  var tempFile = {
+    id: 'temp-' + Date.now(),
+    driveFileId: fileData.driveFileId || '',
+    name: fileData.name,
+    mimeType: fileData.mimeType || '',
+    url: fileData.url,
+    addedAt: new Date().toISOString()
+  };
+
+  if (appState.currentEvaluation) {
+    if (!appState.currentEvaluation.files) appState.currentEvaluation.files = [];
+    appState.currentEvaluation.files.push(tempFile);
+    renderEvalFilesCard(appState.currentEvaluation);
+  }
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (result.success) {
+        appState.currentEvaluation.files = result.files;
+        renderEvalFilesCard(appState.currentEvaluation);
+        showToast('File added');
+      } else {
+        showToast('Error adding file: ' + (result.error || 'Unknown'));
+        // Rollback optimistic UI
+        if (appState.currentEvaluation) {
+          appState.currentEvaluation.files = (appState.currentEvaluation.files || []).filter(function(f) {
+            return f.id !== tempFile.id;
+          });
+          renderEvalFilesCard(appState.currentEvaluation);
+        }
+      }
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error: ' + (err && err.message ? err.message : String(err)));
+    })
+    .addEvalFile(evalId, fileData);
+}
+
+function removeEvalFileHandler(evalId, fileId) {
+  showConfirmDialog({
+    title: 'Remove File?',
+    body: 'This file reference will be removed from the checklist.',
+    confirmLabel: 'Remove',
+    onConfirm: "doRemoveEvalFile('" + evalId + "', '" + fileId + "')"
+  });
+}
+
+function doRemoveEvalFile(evalId, fileId) {
+  // Optimistic removal
+  if (appState.currentEvaluation) {
+    appState.currentEvaluation.files = (appState.currentEvaluation.files || []).filter(function(f) { return f.id !== fileId; });
+    renderEvalFilesCard(appState.currentEvaluation);
+  }
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (result.success) {
+        showToast('File removed');
+      } else {
+        showToast('Error removing file');
+      }
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error: ' + (err && err.message ? err.message : String(err)));
+    })
+    .removeEvalFile(evalId, fileId);
 }
 
 // ─── Button Ripple Effect (delegated) ───
