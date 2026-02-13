@@ -343,8 +343,9 @@ function renderDashboard(data) {
 
     // GPA
     if (s.gpa != null) {
-      var gpaClass = s.gpa >= 3.5 ? 'chip-green' : s.gpa >= 2.5 ? 'chip-yellow' : 'chip-red';
-      html += '<td><span class="chip ' + gpaClass + '">' + s.gpa.toFixed(2) + '</span></td>';
+      var gpaClass = s.gpa >= 3.5 ? 'chip-gold' : s.gpa >= 2.5 ? 'chip-green' : 'chip-red';
+      var trophy = s.gpa >= 3.7 ? ' &#x1F3C6;' : '';
+      html += '<td><span class="chip ' + gpaClass + '">' + s.gpa.toFixed(2) + trophy + '</span></td>';
     } else {
       html += '<td><span class="chip chip-gray">--</span></td>';
     }
@@ -1463,15 +1464,20 @@ function profileChangeGrade(studentId, classIdx, newGrade) {
     : null;
 
   // Update the GPA stat card without full re-render
+  var gpaCard = document.getElementById('profile-gpa-card');
   var gpaNumber = document.getElementById('profile-gpa-number');
   var gpaTrophy = document.getElementById('profile-gpa-trophy');
+  if (gpaCard) {
+    gpaCard.classList.remove('gpa-honor-roll', 'gpa-good-standing', 'gpa-at-risk');
+    if (student.gpa != null) {
+      gpaCard.classList.add(student.gpa >= 3.5 ? 'gpa-honor-roll' : student.gpa >= 2.5 ? 'gpa-good-standing' : 'gpa-at-risk');
+    }
+  }
   if (gpaNumber) {
     if (student.gpa != null) {
       gpaNumber.textContent = student.gpa.toFixed(2);
-      gpaNumber.className = 'profile-stat-number ' + (student.gpa >= 3.0 ? 'gpa-gold' : 'gpa-default');
     } else {
       gpaNumber.textContent = '--';
-      gpaNumber.className = 'profile-stat-number gpa-default';
     }
   }
   if (gpaTrophy) {
@@ -1817,15 +1823,18 @@ function renderStudentProfileDashboard(student) {
   html += '<div class="profile-academics-right">';
 
   // GPA Card
-  html += '<div class="profile-stat-card" id="profile-gpa-card">';
+  var gpaCardClass = 'profile-stat-card';
+  if (student.gpa != null) {
+    gpaCardClass += student.gpa >= 3.5 ? ' gpa-honor-roll' : student.gpa >= 2.5 ? ' gpa-good-standing' : ' gpa-at-risk';
+  }
+  html += '<div class="' + gpaCardClass + '" id="profile-gpa-card">';
   html += '<div class="profile-stat-label">Current GPA</div>';
   html += '<div class="profile-stat-value">';
   if (student.gpa != null) {
-    var gpaColorClass = student.gpa >= 3.0 ? 'gpa-gold' : 'gpa-default';
-    html += '<span class="profile-stat-number ' + gpaColorClass + '" id="profile-gpa-number">' + student.gpa.toFixed(2) + '</span>';
+    html += '<span class="profile-stat-number" id="profile-gpa-number">' + student.gpa.toFixed(2) + '</span>';
     html += '<span class="profile-trophy' + (student.gpa >= 3.7 ? ' visible' : '') + '" id="profile-gpa-trophy">&#x1F3C6;</span>';
   } else {
-    html += '<span class="profile-stat-number gpa-default" id="profile-gpa-number">--</span>';
+    html += '<span class="profile-stat-number" id="profile-gpa-number">--</span>';
     html += '<span class="profile-trophy" id="profile-gpa-trophy">&#x1F3C6;</span>';
   }
   html += '</div></div>';
@@ -3734,8 +3743,9 @@ function renderMyCaseload() {
     html += '<td>' + esc(s.grade || '-') + '</td>';
 
     if (s.gpa != null) {
-      var gpaClass = s.gpa >= 3.5 ? 'chip-green' : s.gpa >= 2.5 ? 'chip-yellow' : 'chip-red';
-      html += '<td><span class="chip ' + gpaClass + '">' + s.gpa.toFixed(2) + '</span></td>';
+      var gpaClass = s.gpa >= 3.5 ? 'chip-gold' : s.gpa >= 2.5 ? 'chip-green' : 'chip-red';
+      var trophy = s.gpa >= 3.7 ? ' &#x1F3C6;' : '';
+      html += '<td><span class="chip ' + gpaClass + '">' + s.gpa.toFixed(2) + trophy + '</span></td>';
     } else {
       html += '<td><span class="chip chip-gray">--</span></td>';
     }

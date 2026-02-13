@@ -130,13 +130,50 @@ Cardinal Red `#C41E3A` (Richfield school brand)
 - **Outlined Text Fields:** With focus ring transition to primary color
 - **Buttons:** Filled (primary), Tonal (secondary), Text/Ghost, Icon, Danger variants — with ripple effect
 - **Chips:** Assist-style status badges (green/yellow/red/gray)
-- **Cards:** Outlined with expandable detail sections
+- **Cards:** Outlined with expandable detail sections; profile stat cards support tier-colored backgrounds (see GPA Color Tiers below)
 - **Side Sheet:** Right-side panel with overlay scrim
 - **Dialog:** Centered confirmation with overlay, scale+fade animation, `closeConfirmDialog()` with timeout fallback
 - **Snackbar/Toast:** Bottom notification with auto-dismiss, slide+fade animation, debounced via `_toastTimer`
 - **Segmented Buttons:** Rating button groups (1-5)
 - **Skeleton Loading:** Shimmer animation placeholders per-view, cross-fade to content via `animateContentIn()`
 - **Dropdown Menu:** Positioned below trigger with shadow, CSS opacity/transform animation via `.dropdown-open`
+
+### GPA Color Tiers
+
+GPA values are color-coded consistently across three surfaces using MD3 container-style color pairs (background + on-container text). The **Honor Roll** tier uses gold derived from the tertiary palette (`--md-tertiary: #755A2F`).
+
+| Tier | Threshold | Background | Text | Indicator |
+|---|---|---|---|---|
+| **Honor Roll** | GPA >= 3.5 | `#FFDEAB` (gold) | `#2A1800` | Trophy emoji at GPA >= 3.7 |
+| **Good Standing** | GPA >= 2.5 | `#D6F5D6` (green) | `#1B5E20` | — |
+| **At Risk** | GPA < 2.5 | `--md-error-container` | `--md-on-error-container` | — |
+| **No Data** | null | `--md-surface-container` | `--md-on-surface-variant` | Displays "--" |
+
+**Where applied:**
+
+| Surface | CSS Classes | Notes |
+|---|---|---|
+| **Dashboard table** | `.chip-gold`, `.chip-green`, `.chip-red` | GPA chip; trophy `&#x1F3C6;` appended inline at >= 3.7 |
+| **Side panel** | `.sp-gpa.high`, `.sp-gpa.mid`, `.sp-gpa.low`, `.sp-gpa.none` | Large display (Display Small typography) |
+| **Profile stat card** | `.gpa-honor-roll`, `.gpa-good-standing`, `.gpa-at-risk` | Card-level background + border; trophy via `.profile-trophy.visible` at >= 3.7 |
+
+**When adding new color-coded indicators**, follow this pattern:
+1. Use MD3 container/on-container color pairs — never raw colors for text without a matching container background
+2. Derive tier colors from the existing palette (tertiary-gold for positive, green for satisfactory, error tokens for concern)
+3. Keep thresholds consistent across all surfaces (3.5 for honor roll, 2.5 for good standing)
+4. Update dynamically: card classes are swapped via `classList.remove()/add()` when data changes without a full re-render
+
+### General Status Chip Colors
+
+Status chips (`.chip`) use a consistent traffic-light scheme across the app for EF ratings, GPA, and missing assignments:
+
+| Class | Background | Text | Usage |
+|---|---|---|---|
+| `.chip-gold` | `#FFDEAB` | `#2A1800` | Honor Roll: GPA >= 3.5 |
+| `.chip-green` | `#D6F5D6` | `#1B5E20` | Good: GPA >= 2.5, EF rating >= 4, missing = 0 |
+| `.chip-yellow` | `#FFF3CD` | `#7A5900` | Caution: EF rating 3–3.9, missing 1–3 |
+| `.chip-red` | `--md-error-container` | `--md-on-error-container` | Concern: GPA < 2.5, EF rating < 3, missing >= 4 |
+| `.chip-gray` | `--md-surface-container-high` | `--md-on-surface-variant` | No data available |
 
 ### Responsive Breakpoints
 
