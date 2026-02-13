@@ -198,6 +198,17 @@ function enterApp() {
 // ─── Navigation Drawer Toggle ───
 var _navDrawerOpen = false;
 
+// Mobile: toggle submenu on parent click (hover doesn't work on touch)
+(function() {
+  document.addEventListener('click', function(e) {
+    var parent = e.target.closest('.nav-drawer-parent');
+    if (!parent) return;
+    if (window.innerWidth > 840) return; // desktop uses hover
+    var group = parent.closest('.nav-drawer-group');
+    if (group) group.classList.toggle('submenu-open');
+  });
+})();
+
 function toggleNavDrawer() {
   _navDrawerOpen ? closeNavDrawer() : openNavDrawer();
 }
@@ -310,8 +321,9 @@ function loadDashboard() {
 function switchDashboardTab(tabName) {
   // Ensure dashboard view is visible (handles clicks from child pages)
   showView('dashboard-view');
-  // Deactivate all drawer items and panels
-  document.querySelectorAll('.nav-drawer-item').forEach(function(t) { t.classList.remove('active'); });
+  // Deactivate all drawer child items and panels
+  document.querySelectorAll('.nav-drawer-child').forEach(function(t) { t.classList.remove('active'); });
+  document.querySelectorAll('.nav-drawer-items > .nav-drawer-item').forEach(function(t) { t.classList.remove('active'); });
   document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
   // Activate selected
   var item = document.getElementById('drawer-' + tabName);
@@ -323,7 +335,9 @@ function switchDashboardTab(tabName) {
   if (refreshBtn) refreshBtn.style.display = (tabName === 'admin') ? 'none' : '';
   var addStudentBtn = document.getElementById('add-student-btn');
   if (addStudentBtn) addStudentBtn.style.display = (tabName === 'admin') ? 'none' : '';
-  // Close mobile drawer
+  // Close mobile submenu and drawer
+  var openGroup = document.querySelector('.nav-drawer-group.submenu-open');
+  if (openGroup) openGroup.classList.remove('submenu-open');
   closeNavDrawerIfMobile_();
   // Render tab content
   if (tabName === 'caseload') {
