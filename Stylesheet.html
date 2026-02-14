@@ -2703,7 +2703,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   .eval-items-header { display: none; }
   .eval-item { grid-template-columns: 1fr; gap: 8px; }
   .eval-item-mobile-label { display: block; }
-  .eval-item-actions { justify-content: flex-start; }
   .eval-item-due,
   .eval-item-completed { flex-direction: column; align-items: flex-start; }
   .profile-stat-card { flex: 1; }
@@ -3815,6 +3814,9 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   box-shadow: inset 3px 0 0 0 var(--md-primary);
 }
 .eval-item-task {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
 }
 .eval-item-label {
@@ -3828,22 +3830,26 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   display: flex;
   align-items: center;
   gap: 6px;
+  overflow: hidden;
 }
 .eval-due-text {
   font-size: 12px;
   color: var(--md-on-surface-variant);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .eval-item-completed {
   font-size: 12px;
   color: var(--md-on-surface-variant);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .eval-item-actions {
   display: flex;
   align-items: center;
   gap: 2px;
-  justify-content: flex-end;
 }
 .eval-item-delete-btn {
   color: var(--md-error);
@@ -3889,6 +3895,9 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   font-size: 14px;
   color: var(--md-on-surface);
   line-height: 20px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .eval-item-checked .eval-item-text {
   text-decoration: line-through;
@@ -4192,30 +4201,21 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   cursor: pointer;
 }
 
-/* ─── Overdue Badges ─── */
-.eval-overdue-badge {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--md-on-error-container);
-  background: var(--md-error-container);
-  padding: 2px 8px;
-  border-radius: var(--md-shape-full);
-  white-space: nowrap;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.eval-overdue-badge::before {
-  content: '';
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  background: currentColor;
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z'/%3E%3C/svg%3E") no-repeat center;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z'/%3E%3C/svg%3E") no-repeat center;
-  -webkit-mask-size: contain;
-  mask-size: contain;
+/* ─── Overdue Indicators ─── */
+.eval-overdue-icon {
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  color: var(--md-error);
+  pointer-events: none;
+  cursor: default;
+  position: relative;
+}
+.eval-overdue-icon[title] {
+  pointer-events: auto;
+}
+.eval-due-text-overdue {
+  color: var(--md-error);
 }
 .eval-item-overdue {
   background: rgba(186, 26, 26, 0.04);
