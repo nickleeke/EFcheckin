@@ -259,10 +259,16 @@ body {
 }
 .nav-logo {
   height: auto;
-  width: 160px;
   max-width: 100%;
   object-fit: contain;
   flex-shrink: 0;
+}
+.nav-logo-expanded {
+  width: 160px;
+}
+.nav-logo-collapsed {
+  width: 36px;
+  display: none;
 }
 
 /* ─── App Layout (drawer + content side by side) ─── */
@@ -286,6 +292,9 @@ body {
   top: 0;
   overflow-y: auto;
   z-index: 100;
+  display: flex;
+  flex-direction: column;
+  transition: width var(--md-duration-medium4) var(--md-easing-emphasized-decelerate);
 }
 .nav-drawer-header {
   display: flex;
@@ -309,6 +318,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  flex: 1;
 }
 .nav-drawer-item {
   display: flex;
@@ -367,6 +377,10 @@ body {
 }
 .nav-drawer-label {
   z-index: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  opacity: 1;
+  transition: opacity var(--md-duration-short4) var(--md-easing-standard);
 }
 /* ─── Nav Drawer Expandable Group ─── */
 .nav-drawer-group {
@@ -436,6 +450,191 @@ body {
 }
 .nav-drawer-toggle:hover {
   background: rgba(255, 255, 255, 0.12);
+}
+
+/* ─── Nav Drawer Collapse Toggle (desktop) ─── */
+.nav-collapse-btn {
+  display: none; /* shown only on desktop via media query */
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  margin: auto 12px 16px;
+  background: none;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-full);
+  cursor: pointer;
+  color: var(--md-on-surface-variant);
+  flex-shrink: 0;
+  transition: background var(--md-duration-short4) var(--md-easing-standard),
+              transform var(--md-duration-medium2) var(--md-easing-emphasized-decelerate);
+}
+.nav-collapse-btn:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+.nav-collapse-btn:focus-visible {
+  outline: 2px solid var(--md-primary);
+  outline-offset: 2px;
+}
+.nav-collapse-icon {
+  width: 20px;
+  height: 20px;
+  transition: transform var(--md-duration-medium2) var(--md-easing-emphasized-decelerate);
+}
+
+/* ─── Nav Drawer Collapsed State (desktop only) ─── */
+.nav-drawer.collapsed {
+  width: 80px;
+}
+.nav-drawer.collapsed .nav-drawer-header {
+  padding: 20px 8px 12px;
+  margin: 8px 4px 4px;
+}
+.nav-drawer.collapsed .nav-logo-expanded {
+  display: none;
+}
+.nav-drawer.collapsed .nav-logo-collapsed {
+  display: block;
+}
+.nav-drawer.collapsed .nav-drawer-items {
+  padding: 0 8px;
+}
+.nav-drawer.collapsed .nav-drawer-item {
+  justify-content: center;
+  padding: 0;
+  height: 48px;
+  border-radius: var(--md-shape-lg);
+}
+.nav-drawer.collapsed .nav-drawer-label {
+  opacity: 0;
+  width: 0;
+  overflow: hidden;
+  position: absolute;
+  pointer-events: none;
+}
+.nav-drawer.collapsed .nav-drawer-icon {
+  margin: 0;
+}
+.nav-drawer.collapsed .nav-drawer-expand-icon {
+  display: none;
+}
+.nav-drawer.collapsed .nav-drawer-active-indicator {
+  border-radius: var(--md-shape-lg);
+}
+/* Collapsed submenu: hide children, show on hover as flyout */
+.nav-drawer.collapsed .nav-drawer-submenu {
+  max-height: 0;
+  overflow: hidden;
+}
+.nav-drawer.collapsed .nav-drawer-group:hover .nav-drawer-submenu {
+  max-height: 0;
+}
+.nav-drawer.collapsed .nav-drawer-child {
+  padding-left: 0;
+  justify-content: center;
+  height: 44px;
+}
+.nav-drawer.collapsed .nav-drawer-child .nav-drawer-active-indicator {
+  left: 0;
+  width: 100%;
+}
+/* Show child icons that are hidden in expanded mode */
+.nav-drawer-icon-child {
+  display: none;
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+  flex-shrink: 0;
+  z-index: 1;
+}
+.nav-drawer.collapsed .nav-drawer-icon-child {
+  display: block;
+}
+.nav-drawer.collapsed .nav-drawer-divider {
+  margin: 8px 8px;
+}
+/* Rotate the collapse toggle chevron when collapsed */
+.nav-drawer.collapsed .nav-collapse-icon {
+  transform: rotate(180deg);
+}
+.nav-drawer.collapsed .nav-collapse-btn {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ─── Nav Drawer Tooltip (collapsed state) ─── */
+.nav-drawer-tooltip {
+  position: fixed;
+  left: 0;
+  top: 0;
+  padding: 6px 12px;
+  background: var(--md-inverse-surface, #313033);
+  color: var(--md-inverse-on-surface, #F4EFF4);
+  font-family: 'Roboto', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.4px;
+  line-height: 16px;
+  border-radius: var(--md-shape-xs);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity var(--md-duration-short4) var(--md-easing-standard),
+              transform var(--md-duration-short4) var(--md-easing-standard);
+  z-index: 1000;
+}
+.nav-drawer-tooltip.visible {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* ─── Nav Drawer Collapsed Flyout Submenu ─── */
+.nav-drawer-flyout {
+  position: fixed;
+  left: 0;
+  top: 0;
+  background: var(--md-surface-container);
+  border-radius: var(--md-shape-md);
+  box-shadow: var(--md-elevation-2);
+  padding: 4px 0;
+  min-width: 160px;
+  z-index: 1000;
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity var(--md-duration-short4) var(--md-easing-standard),
+              transform var(--md-duration-short4) var(--md-easing-standard);
+  pointer-events: none;
+}
+.nav-drawer-flyout.visible {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+}
+.nav-drawer-flyout-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  height: 44px;
+  padding: 0 16px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: 'Roboto', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.1px;
+  color: var(--md-on-surface-variant);
+  position: relative;
+  transition: background var(--md-duration-short4) var(--md-easing-standard);
+}
+.nav-drawer-flyout-item:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+.nav-drawer-flyout-item.active {
+  color: var(--md-on-secondary-container);
+  background: var(--md-secondary-container);
 }
 /* ─── Main Layout ─── */
 main { max-width: 1200px; margin: 0 auto; padding: 24px; }
@@ -2384,6 +2583,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   .top-app-bar { display: none !important; }
   .nav-drawer-toggle { display: none !important; }
   .nav-drawer-scrim { display: none !important; }
+  .nav-collapse-btn { display: inline-flex; }
 }
 
 /* Mobile: disable hover for submenu, rely on JS click toggle */
@@ -2411,6 +2611,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
     position: fixed;
     top: 0;
     left: -280px;
+    width: 280px !important; /* override any collapsed width */
     height: 100%;
     z-index: 201;
     border-right: none;
@@ -2418,6 +2619,17 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
     box-shadow: var(--md-elevation-3);
     transition: left var(--md-duration-medium3) var(--md-easing-emphasized-accelerate);
   }
+  /* Never show collapsed state on mobile */
+  .nav-collapse-btn { display: none !important; }
+  .nav-drawer.collapsed .nav-logo-expanded { display: block !important; }
+  .nav-drawer.collapsed .nav-logo-collapsed { display: none !important; }
+  .nav-drawer.collapsed .nav-drawer-label { opacity: 1; width: auto; position: static; pointer-events: auto; }
+  .nav-drawer.collapsed .nav-drawer-item { justify-content: flex-start; padding: 0 16px; height: 56px; border-radius: var(--md-shape-full); }
+  .nav-drawer.collapsed .nav-drawer-items { padding: 0 12px; }
+  .nav-drawer.collapsed .nav-drawer-expand-icon { display: block; }
+  .nav-drawer.collapsed .nav-drawer-icon-child { display: none; }
+  .nav-drawer.collapsed .nav-drawer-child { padding-left: 52px; justify-content: flex-start; }
+  .nav-drawer.collapsed .nav-drawer-active-indicator { border-radius: var(--md-shape-full); }
   .nav-drawer.open {
     left: 0;
     transition: left var(--md-duration-medium3) var(--md-easing-emphasized-decelerate);
