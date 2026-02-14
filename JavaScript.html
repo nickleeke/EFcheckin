@@ -295,6 +295,7 @@ function showView(viewId) {
   });
 
   var el = document.getElementById(viewId);
+  if (!el) return;
   el.classList.add('active');
 
   var oldOrder = VIEW_ORDER[oldId] != null ? VIEW_ORDER[oldId] : 0;
@@ -461,7 +462,7 @@ function renderDashboard(data) {
     }
 
     // Trend
-    var trendMap = { up: '&#9650; Up', down: '&#9660; Down', flat: '&#9654; Flat', none: '--' };
+    var trendMap = { up: '&#x25B2; Up', down: '&#x25BC; Down', flat: '&#x25B6; Flat', none: '--' };
     var trendClass = s.trend === 'up' ? 'trend-up' : s.trend === 'down' ? 'trend-down' : 'trend-flat';
     html += '<td><span class="' + trendClass + '">' + (trendMap[s.trend] || '--') + '</span></td>';
 
