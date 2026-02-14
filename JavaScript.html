@@ -4748,7 +4748,7 @@ function renderEvalFilesCard(evaluation) {
   var html = '<div class="eval-files-header">' +
     '<span class="eval-files-title">Files</span>' +
     '<button class="btn-icon btn-sm" onclick="openDrivePicker(\'' + esc(evaluation.id) + '\')" title="Add file from Drive">' +
-      '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>' +
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 14h-3v3h-2v-3H8v-2h3v-3h2v3h3v2zm-3-7V3.5L18.5 9H13z"/></svg>' +
     '</button>' +
   '</div>';
 
@@ -4943,14 +4943,19 @@ function removeEvalFileHandler(evalId, fileId) {
     title: 'Remove File?',
     body: 'This file reference will be removed from the checklist.',
     confirmLabel: 'Remove',
-    onConfirm: "doRemoveEvalFile('" + evalId + "', '" + fileId + "')"
+    onConfirm: "doRemoveEvalFile('" + esc(evalId) + "', '" + esc(fileId) + "')"
   });
 }
 
 function doRemoveEvalFile(evalId, fileId) {
+  // Save original files for rollback
+  var originalFiles = appState.currentEvaluation
+    ? (appState.currentEvaluation.files || []).slice()
+    : [];
+
   // Optimistic removal
   if (appState.currentEvaluation) {
-    appState.currentEvaluation.files = (appState.currentEvaluation.files || []).filter(function(f) { return f.id !== fileId; });
+    appState.currentEvaluation.files = originalFiles.filter(function(f) { return f.id !== fileId; });
     renderEvalFilesCard(appState.currentEvaluation);
   }
 
@@ -4959,11 +4964,19 @@ function doRemoveEvalFile(evalId, fileId) {
       if (result.success) {
         showToast('File removed');
       } else {
-        showToast('Error removing file');
+        showToast('Error removing file: ' + (result.error || 'Unknown'));
+        if (appState.currentEvaluation) {
+          appState.currentEvaluation.files = originalFiles;
+          renderEvalFilesCard(appState.currentEvaluation);
+        }
       }
     })
     .withFailureHandler(function(err) {
       showToast('Error: ' + (err && err.message ? err.message : String(err)));
+      if (appState.currentEvaluation) {
+        appState.currentEvaluation.files = originalFiles;
+        renderEvalFilesCard(appState.currentEvaluation);
+      }
     })
     .removeEvalFile(evalId, fileId);
 }
