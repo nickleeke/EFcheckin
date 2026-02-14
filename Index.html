@@ -85,6 +85,7 @@
 
     <!-- Dashboard View -->
     <div id="dashboard-view" class="view">
+      <div id="dashboard-greeting" class="dashboard-greeting"></div>
       <div class="view-header" style="display:flex;justify-content:flex-end;align-items:center;gap:8px;">
         <button onclick="showAddStudent()" class="btn btn-primary btn-sm" id="add-student-btn">+ Add Student</button>
         <button onclick="refreshDashboard()" class="btn-icon" id="dashboard-refresh-btn" aria-label="Refresh dashboard" title="Refresh data">
@@ -92,7 +93,18 @@
         </button>
       </div>
       <div id="tab-panel-caseload" class="tab-panel active">
-        <div id="eval-summary-strip" style="display:none"></div>
+        <div id="dashboard-at-a-glance" class="dashboard-section" style="display:none">
+          <h2 class="dashboard-subheader">At a Glance</h2>
+          <div id="at-a-glance-content"></div>
+        </div>
+        <div id="dashboard-evals-section" class="dashboard-section" style="display:none">
+          <h2 class="dashboard-subheader">Evals</h2>
+          <div id="evals-section-content"></div>
+        </div>
+        <div id="dashboard-recent-section" class="dashboard-section" style="display:none">
+          <h2 class="dashboard-subheader">Recent Students</h2>
+          <div id="recent-students-content"></div>
+        </div>
         <div id="dashboard-table-container"></div>
       </div>
       <div id="tab-panel-mycaseload" class="tab-panel">
