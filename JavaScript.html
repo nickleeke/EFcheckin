@@ -23,6 +23,7 @@ var appState = {
   drivePickerConfig: null,
   evalSummary: null,
   timelineExpandedDay: null,
+  editingEvalItemId: null,
   recentStudents: []
 };
 var _persistTimers = {};
@@ -33,6 +34,9 @@ var _ciAutosaveDirty = false;
 var _goalsAutosaveTimer = null;
 var _goalsAutosaveInFlight = false;
 var _goalsAutosaveDirty = false;
+var _evalAutosaveTimer = null;
+var _evalAutosaveInFlight = false;
+var _evalAutosaveDirty = false;
 
 var onboardingState = {
   step: 1,
@@ -3992,25 +3996,21 @@ function showEvalChecklistSkeleton() {
   // Items card skeleton
   html += '<div class="eval-items-card">';
   html += '<div class="eval-items-header">' +
-    '<span class="eval-items-header-task">Task</span>' +
-    '<div class="eval-items-header-meta">' +
-      '<span class="eval-items-header-due">Due Date</span>' +
-      '<span class="eval-items-header-completed">Completed</span>' +
-      '<span class="eval-items-header-actions"></span>' +
-    '</div>' +
+    '<span>Task</span>' +
+    '<span>Due Date</span>' +
+    '<span>Completed</span>' +
+    '<span style="text-align:right">Actions</span>' +
   '</div>';
   for (var i = 0; i < 6; i++) {
     var w = i % 3 === 0 ? 'w-75' : (i % 3 === 1 ? 'w-50' : 'w-40');
-    html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--md-outline-variant);">' +
-      '<div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;">' +
+    html += '<div class="eval-item" style="border-left:none;">' +
+      '<div class="eval-item-task" style="gap:12px;">' +
         '<div class="skeleton" style="width:20px;height:20px;border-radius:var(--md-shape-xs);flex-shrink:0;"></div>' +
         '<div class="skeleton skeleton-text ' + w + '" style="margin:0;"></div>' +
       '</div>' +
-      '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">' +
-        '<div class="skeleton" style="width:130px;height:28px;border-radius:var(--md-shape-xs);"></div>' +
-        '<div class="skeleton skeleton-text" style="width:70px;height:12px;margin:0 12px;"></div>' +
-        '<div style="width:36px;"></div>' +
-      '</div>' +
+      '<div class="eval-item-due"><div class="skeleton" style="width:80px;height:14px;border-radius:var(--md-shape-xs);"></div></div>' +
+      '<div class="eval-item-completed"><div class="skeleton skeleton-text" style="width:60px;height:12px;margin:0;"></div></div>' +
+      '<div class="eval-item-actions"><div class="skeleton" style="width:56px;height:24px;border-radius:var(--md-shape-xs);"></div></div>' +
     '</div>';
   }
   html += '</div>';
@@ -4781,6 +4781,8 @@ function handleViewEvalChecklist() {
 }
 
 function showEvalChecklistView(studentId, evaluation) {
+  resetEvalAutosave();
+  appState.editingEvalItemId = null;
   appState.evalChecklistStudentId = studentId;
   appState.currentEvaluation = evaluation;
 
@@ -4799,6 +4801,69 @@ function showEvalChecklistView(studentId, evaluation) {
   showView('eval-checklist-view');
 }
 
+function buildEvalItemRow(evalId, item) {
+  var isEditing = appState.editingEvalItemId === item.id;
+  var checkedClass = item.checked ? ' eval-item-checked' : '';
+  var completedDate = '';
+  if (item.checked && item.completedAt) {
+    var d = new Date(item.completedAt);
+    completedDate = (d.getMonth() + 1) + '/' + d.getDate() + '/' + d.getFullYear();
+  }
+  var now = new Date();
+  var isOverdue = !item.checked && item.dueDate && now > new Date(item.dueDate + 'T23:59:59');
+
+  var classes = 'eval-item' + checkedClass + (isOverdue ? ' eval-item-overdue' : '') + (isEditing ? ' eval-item-editing' : '');
+
+  var html = '<div class="' + classes + '" data-item-id="' + esc(item.id) + '">';
+
+  // Task column
+  html += '<div class="eval-item-task"><label class="eval-item-label">' +
+    '<input type="checkbox" class="eval-item-checkbox"' + (item.checked ? ' checked' : '') +
+      ' onchange="toggleEvalItem(\'' + esc(evalId) + '\', \'' + esc(item.id) + '\', this.checked)">';
+  if (isEditing) {
+    html += '<input type="text" class="eval-item-edit-input" id="eval-edit-text-' + esc(item.id) + '" value="' + esc(item.text) + '" ' +
+      'onkeydown="if(event.key===\'Enter\'){event.preventDefault();exitEvalEditMode();} if(event.key===\'Escape\'){cancelEvalEditMode(\'' + esc(item.id) + '\');}">';
+  } else {
+    html += '<span class="eval-item-text">' + esc(item.text) + '</span>';
+  }
+  html += '</label></div>';
+
+  // Due Date column
+  html += '<div class="eval-item-due">';
+  if (isEditing) {
+    html += '<input type="date" class="eval-item-due-date" id="eval-edit-due-' + esc(item.id) + '" value="' + esc(item.dueDate || '') + '">';
+  } else if (isOverdue) {
+    html += '<span class="eval-overdue-badge">Overdue</span> <span class="eval-due-text">' + esc(formatDateDisplay(item.dueDate)) + '</span>';
+  } else if (item.dueDate) {
+    html += '<span class="eval-due-text">' + esc(formatDateDisplay(item.dueDate)) + '</span>';
+  }
+  html += '</div>';
+
+  // Completed column
+  html += '<div class="eval-item-completed">' +
+    (completedDate ? '<span class="eval-item-date">' + esc(completedDate) + '</span>' : '') +
+  '</div>';
+
+  // Actions column
+  html += '<div class="eval-item-actions">';
+  if (isEditing) {
+    html += '<button class="btn-icon btn-sm eval-edit-done-btn" onclick="exitEvalEditMode()" title="Done editing">' +
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>' +
+    '</button>';
+  } else {
+    html += '<button class="btn-icon btn-sm" onclick="enterEvalEditMode(\'' + esc(item.id) + '\')" title="Edit task">' +
+      '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>' +
+    '</button>';
+  }
+  html += '<button class="btn-icon btn-sm eval-item-delete-btn" onclick="deleteEvalItemHandler(\'' + esc(evalId) + '\', \'' + esc(item.id) + '\')" title="Delete task">' +
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>' +
+  '</button>';
+  html += '</div>';
+
+  html += '</div>';
+  return html;
+}
+
 function renderEvalChecklist(evaluation) {
   var container = document.getElementById('eval-checklist-content');
   var items = evaluation.items || [];
@@ -4807,18 +4872,15 @@ function renderEvalChecklist(evaluation) {
   var pct = total > 0 ? Math.round(done / total * 100) : 0;
   var now = new Date();
 
-  // Compute overdue count
   var overdueCount = items.filter(function(it) {
     if (it.checked || !it.dueDate) return false;
-    return now > new Date(it.dueDate + 'T23:59:59');
+    return new Date() > new Date(it.dueDate + 'T23:59:59');
   }).length;
 
   var html = '';
 
   // Two-column layout: checklist (3/4) + files (1/4)
   html += '<div class="eval-checklist-layout">';
-
-  // ── Left column: main checklist ──
   html += '<div class="eval-checklist-main">';
 
   // Summary card
@@ -4835,52 +4897,22 @@ function renderEvalChecklist(evaluation) {
     '<span class="eval-summary-pct-label">complete</span>' +
   '</div>';
   html += '</div>';
+  html += '<div class="eval-autosave-row"><span id="eval-autosave-status"></span></div>';
 
-  // Checklist items
+  // Column headers + items
   html += '<div class="eval-items-card">';
   html += '<div class="eval-items-header">' +
-    '<span class="eval-items-header-task">Task</span>' +
-    '<div class="eval-items-header-meta">' +
-      '<span class="eval-items-header-due">Due Date</span>' +
-      '<span class="eval-items-header-completed">Completed</span>' +
-      '<span class="eval-items-header-actions"></span>' +
-    '</div>' +
+    '<span>Task</span>' +
+    '<span>Due Date</span>' +
+    '<span>Completed</span>' +
+    '<span style="text-align:right">Actions</span>' +
   '</div>';
   items.forEach(function(item) {
-    var checkedClass = item.checked ? ' eval-item-checked' : '';
-    var completedDate = '';
-    if (item.checked && item.completedAt) {
-      var d = new Date(item.completedAt);
-      completedDate = (d.getMonth() + 1) + '/' + d.getDate() + '/' + d.getFullYear();
-    }
-
-    // Overdue detection
-    var isOverdue = false;
-    if (item.dueDate && !item.checked) {
-      isOverdue = now > new Date(item.dueDate + 'T23:59:59');
-    }
-
-    html += '<div class="eval-item' + checkedClass + (isOverdue ? ' eval-item-overdue' : '') + '" data-item-id="' + esc(item.id) + '">' +
-      '<label class="eval-item-label">' +
-        '<input type="checkbox" class="eval-item-checkbox"' + (item.checked ? ' checked' : '') +
-          ' onchange="toggleEvalItem(\'' + esc(evaluation.id) + '\', \'' + esc(item.id) + '\', this.checked)">' +
-        '<span class="eval-item-text" onclick="event.preventDefault(); event.stopPropagation(); startEditEvalItemText(\'' + esc(evaluation.id) + '\', \'' + esc(item.id) + '\', this)">' + esc(item.text) + '</span>' +
-      '</label>' +
-      '<div class="eval-item-meta">' +
-        (isOverdue ? '<span class="eval-overdue-badge">Overdue</span>' : '') +
-        '<input type="date" class="eval-item-due-date" value="' + esc(item.dueDate || '') + '" ' +
-          'onchange="updateEvalItemDueDate(\'' + esc(evaluation.id) + '\', \'' + esc(item.id) + '\', this.value)" ' +
-          'onclick="event.stopPropagation()" title="Due date">' +
-        '<span class="eval-item-date">' + (completedDate ? esc(completedDate) : '') + '</span>' +
-        '<button class="btn-icon btn-sm eval-item-delete" onclick="deleteEvalItemHandler(\'' + esc(evaluation.id) + '\', \'' + esc(item.id) + '\')" title="Delete task">' +
-          '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>' +
-        '</button>' +
-      '</div>' +
-    '</div>';
+    html += buildEvalItemRow(evaluation.id, item);
   });
   html += '</div>';
 
-  // Add Task row + Delete button
+  // Add Task row
   html += '<div class="eval-add-task-row">' +
     '<button class="btn btn-secondary btn-sm" onclick="showAddEvalTaskForm(\'' + esc(evaluation.id) + '\')">+ Add Task</button>' +
   '</div>';
@@ -4897,9 +4929,8 @@ function renderEvalChecklist(evaluation) {
 
   html += '</div>'; // end .eval-checklist-main
 
-  // ── Right column: files sidebar ──
+  // Right column: files sidebar
   html += '<div class="eval-checklist-sidebar" id="eval-files-card"></div>';
-
   html += '</div>'; // end .eval-checklist-layout
 
   container.innerHTML = html;
@@ -4908,26 +4939,6 @@ function renderEvalChecklist(evaluation) {
 }
 
 function toggleEvalItem(evalId, itemId, checked) {
-  // Optimistic UI
-  var itemEl = document.querySelector('.eval-item[data-item-id="' + itemId + '"]');
-  if (itemEl) {
-    if (checked) {
-      itemEl.classList.add('eval-item-checked');
-      itemEl.classList.remove('eval-item-overdue');
-      var overdueEl = itemEl.querySelector('.eval-overdue-badge');
-      if (overdueEl) overdueEl.remove();
-      var dateSpan = itemEl.querySelector('.eval-item-date');
-      if (dateSpan) {
-        var now = new Date();
-        dateSpan.textContent = (now.getMonth() + 1) + '/' + now.getDate() + '/' + now.getFullYear();
-      }
-    } else {
-      itemEl.classList.remove('eval-item-checked');
-      var dateSpan = itemEl.querySelector('.eval-item-date');
-      if (dateSpan) dateSpan.textContent = '';
-    }
-  }
-
   // Update local state
   if (appState.currentEvaluation && appState.currentEvaluation.items) {
     appState.currentEvaluation.items.forEach(function(it) {
@@ -4938,19 +4949,10 @@ function toggleEvalItem(evalId, itemId, checked) {
     });
   }
 
+  // Targeted DOM update for the toggled row
+  rerenderEvalItem(itemId);
   updateEvalProgress();
-
-  // Save to backend
-  google.script.run
-    .withSuccessHandler(function(result) {
-      if (!result.success) {
-        showToast('Error saving: ' + (result.error || 'Unknown error'));
-      }
-    })
-    .withFailureHandler(function(err) {
-      showToast('Save error: ' + (err && err.message ? err.message : String(err)));
-    })
-    .updateEvaluationItem(evalId, itemId, { checked: checked });
+  scheduleEvalAutosave();
 }
 
 function updateEvalProgress() {
@@ -5001,11 +5003,12 @@ function confirmDeleteEvaluation(evalId) {
     title: 'Delete Checklist?',
     body: 'This will permanently delete this evaluation checklist and all its progress.',
     confirmLabel: 'Delete',
-    onConfirm: "doDeleteEvaluation('" + evalId + "')"
+    onConfirm: "doDeleteEvaluation('" + esc(evalId) + "')"
   });
 }
 
 function doDeleteEvaluation(evalId) {
+  resetEvalAutosave();
   showToast('Deleting checklist\u2026');
   google.script.run
     .withSuccessHandler(function(result) {
@@ -5024,6 +5027,8 @@ function doDeleteEvaluation(evalId) {
 }
 
 function goBackFromEvalChecklist() {
+  if (appState.editingEvalItemId) exitEvalEditMode();
+  resetEvalAutosave();
   showStudentProfile(appState.evalChecklistStudentId);
 }
 
@@ -5051,102 +5056,144 @@ function toggleEvalSectionCollapse() {
   if (btn) btn.classList.toggle('rotated', isCollapsed);
 }
 
-// ─── Editable Eval Tasks ───
+// ─── Eval Edit Mode ───
 
-function startEditEvalItemText(evalId, itemId, spanEl) {
-  if (spanEl.parentNode.querySelector('.eval-item-edit-input')) return; // already editing
-  var currentText = spanEl.textContent;
-  var input = document.createElement('input');
-  input.type = 'text';
-  input.className = 'eval-item-edit-input';
-  input.value = currentText;
-
-  function save() {
-    var newText = input.value.trim();
-    if (newText && newText !== currentText) {
-      spanEl.textContent = newText;
-      // Update local state
-      if (appState.currentEvaluation) {
-        appState.currentEvaluation.items.forEach(function(it) {
-          if (it.id === itemId) it.text = newText;
-        });
-      }
-      // Save to backend
-      google.script.run
-        .withSuccessHandler(function(result) {
-          if (!result.success) showToast('Error saving: ' + (result.error || ''));
-        })
-        .withFailureHandler(function(err) {
-          showToast('Save error: ' + (err && err.message ? err.message : String(err)));
-        })
-        .updateEvaluationItem(evalId, itemId, { text: newText });
-    } else {
-      spanEl.textContent = currentText;
-    }
-    spanEl.style.display = '';
-    if (input.parentNode) input.remove();
+function enterEvalEditMode(itemId) {
+  if (appState.editingEvalItemId) {
+    saveEvalEditModeChanges(appState.editingEvalItemId);
+    var prevId = appState.editingEvalItemId;
+    appState.editingEvalItemId = null;
+    rerenderEvalItem(prevId);
   }
+  appState.editingEvalItemId = itemId;
+  rerenderEvalItem(itemId);
+  var textInput = document.getElementById('eval-edit-text-' + itemId);
+  if (textInput) { textInput.focus(); textInput.select(); }
+}
 
-  input.addEventListener('blur', save);
-  input.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
-    if (e.key === 'Escape') { input.value = currentText; input.blur(); }
+function exitEvalEditMode() {
+  var itemId = appState.editingEvalItemId;
+  if (!itemId) return;
+  saveEvalEditModeChanges(itemId);
+  appState.editingEvalItemId = null;
+  rerenderEvalItem(itemId);
+  updateEvalProgress();
+}
+
+function cancelEvalEditMode(itemId) {
+  appState.editingEvalItemId = null;
+  rerenderEvalItem(itemId);
+}
+
+function saveEvalEditModeChanges(itemId) {
+  var textInput = document.getElementById('eval-edit-text-' + itemId);
+  var dueInput = document.getElementById('eval-edit-due-' + itemId);
+  if (!appState.currentEvaluation) return;
+
+  var changed = false;
+  appState.currentEvaluation.items.forEach(function(it) {
+    if (it.id === itemId) {
+      if (textInput) {
+        var newText = textInput.value.trim();
+        if (newText && newText !== it.text) { it.text = newText; changed = true; }
+      }
+      if (dueInput) {
+        var newDue = dueInput.value || null;
+        if (newDue !== it.dueDate) { it.dueDate = newDue; changed = true; }
+      }
+    }
   });
 
-  spanEl.style.display = 'none';
-  spanEl.parentNode.insertBefore(input, spanEl.nextSibling);
-  input.focus();
-  input.select();
+  if (changed) scheduleEvalAutosave();
 }
 
-function updateEvalItemDueDate(evalId, itemId, dateValue) {
-  // Update local state
-  if (appState.currentEvaluation) {
-    appState.currentEvaluation.items.forEach(function(it) {
-      if (it.id === itemId) it.dueDate = dateValue || null;
-    });
+function rerenderEvalItem(itemId) {
+  var el = document.querySelector('.eval-item[data-item-id="' + itemId + '"]');
+  if (!el || !appState.currentEvaluation) return;
+  var item = null;
+  for (var i = 0; i < appState.currentEvaluation.items.length; i++) {
+    if (appState.currentEvaluation.items[i].id === itemId) { item = appState.currentEvaluation.items[i]; break; }
   }
-  // Re-render to update overdue badges
-  renderEvalChecklist(appState.currentEvaluation);
+  if (!item) { el.remove(); return; }
+  el.outerHTML = buildEvalItemRow(appState.currentEvaluation.id, item);
+}
 
-  // Save to backend
+// ─── Eval Autosave ───
+
+function scheduleEvalAutosave() {
+  _evalAutosaveDirty = true;
+  updateAutosaveIndicator('unsaved', 'eval-autosave-status');
+  if (_evalAutosaveTimer) clearTimeout(_evalAutosaveTimer);
+  _evalAutosaveTimer = setTimeout(function() {
+    _evalAutosaveTimer = null;
+    performEvalAutosave();
+  }, 2000);
+}
+
+function performEvalAutosave() {
+  if (_evalAutosaveInFlight) {
+    scheduleEvalAutosave();
+    return;
+  }
+  var eval_ = appState.currentEvaluation;
+  if (!eval_ || !eval_.id || !eval_.items) return;
+
+  _evalAutosaveInFlight = true;
+  _evalAutosaveDirty = false;
+  updateAutosaveIndicator('saving', 'eval-autosave-status');
+
   google.script.run
     .withSuccessHandler(function(result) {
-      if (!result.success) showToast('Error saving due date');
+      _evalAutosaveInFlight = false;
+      if (result && result.success) {
+        appState.currentEvaluation.items = result.items;
+        if (_evalAutosaveDirty) {
+          scheduleEvalAutosave();
+        } else {
+          updateAutosaveIndicator('saved', 'eval-autosave-status');
+        }
+      } else {
+        updateAutosaveIndicator('error', 'eval-autosave-status');
+      }
     })
-    .withFailureHandler(function(err) { showToast('Save error'); })
-    .updateEvaluationItem(evalId, itemId, { dueDate: dateValue || null });
+    .withFailureHandler(function() {
+      _evalAutosaveInFlight = false;
+      updateAutosaveIndicator('error', 'eval-autosave-status');
+    })
+    .saveEvaluationItems(eval_.id, eval_.items);
 }
+
+function resetEvalAutosave() {
+  _evalAutosaveDirty = false;
+  _evalAutosaveInFlight = false;
+  if (_evalAutosaveTimer) { clearTimeout(_evalAutosaveTimer); _evalAutosaveTimer = null; }
+}
+
+// ─── Eval Item CRUD (local state + autosave) ───
 
 function deleteEvalItemHandler(evalId, itemId) {
   showConfirmDialog({
     title: 'Delete Task?',
     body: 'This task will be permanently removed from the checklist.',
     confirmLabel: 'Delete',
-    onConfirm: "doDeleteEvalItem('" + evalId + "', '" + itemId + "')"
+    onConfirm: "doDeleteEvalItem('" + esc(evalId) + "', '" + esc(itemId) + "')"
   });
 }
 
 function doDeleteEvalItem(evalId, itemId) {
-  // Optimistic UI
+  if (appState.editingEvalItemId === itemId) appState.editingEvalItemId = null;
+
+  // Remove DOM row
+  var el = document.querySelector('.eval-item[data-item-id="' + itemId + '"]');
+  if (el) el.remove();
+
+  // Update local state
   if (appState.currentEvaluation) {
     appState.currentEvaluation.items = appState.currentEvaluation.items.filter(function(it) { return it.id !== itemId; });
-    renderEvalChecklist(appState.currentEvaluation);
   }
 
-  google.script.run
-    .withSuccessHandler(function(result) {
-      if (result.success) {
-        appState.currentEvaluation.items = result.items;
-        updateEvalProgress();
-      } else {
-        showToast('Error: ' + (result.error || 'Unknown'));
-      }
-    })
-    .withFailureHandler(function(err) {
-      showToast('Error: ' + (err && err.message ? err.message : String(err)));
-    })
-    .deleteEvaluationItem(evalId, itemId);
+  updateEvalProgress();
+  scheduleEvalAutosave();
 }
 
 // ─── Add Task Form ───
@@ -5170,23 +5217,33 @@ function confirmAddEvalTask(evalId) {
   var dueInput = document.getElementById('eval-add-task-due');
   var text = (textInput ? textInput.value : '').trim();
   if (!text) { showToast('Please enter a task description'); return; }
-
   var dueDate = dueInput ? dueInput.value : '';
 
-  google.script.run
-    .withSuccessHandler(function(result) {
-      if (result.success) {
-        appState.currentEvaluation.items = result.items;
-        renderEvalChecklist(appState.currentEvaluation);
-        showToast('Task added');
-      } else {
-        showToast('Error: ' + (result.error || 'Unknown'));
-      }
-    })
-    .withFailureHandler(function(err) {
-      showToast('Error: ' + (err && err.message ? err.message : String(err)));
-    })
-    .addEvaluationItem(evalId, { text: text, dueDate: dueDate || null });
+  var newItem = {
+    id: 'item-custom-' + Date.now(),
+    text: text,
+    checked: false,
+    completedAt: null,
+    dueDate: dueDate || null
+  };
+
+  // Add to local state
+  if (appState.currentEvaluation) {
+    appState.currentEvaluation.items.push(newItem);
+  }
+
+  // Append row to DOM
+  var itemsCard = document.querySelector('.eval-items-card');
+  if (itemsCard) {
+    var temp = document.createElement('div');
+    temp.innerHTML = buildEvalItemRow(evalId, newItem);
+    itemsCard.appendChild(temp.firstChild);
+  }
+
+  updateEvalProgress();
+  hideAddEvalTaskForm();
+  scheduleEvalAutosave();
+  showToast('Task added');
 }
 
 // ─── Google Drive File Picker ───
@@ -5228,7 +5285,7 @@ function renderEvalFilesCard(evaluation) {
   var html = '<div class="eval-files-header">' +
     '<span class="eval-files-title">Files</span>' +
     '<button class="btn-icon btn-sm" onclick="openDrivePicker(\'' + esc(evaluation.id) + '\')" title="Add file from Drive">' +
-      '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>' +
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 14h-3v3h-2v-3H8v-2h3v-3h2v3h3v2zm-3-7V3.5L18.5 9H13z"/></svg>' +
     '</button>' +
   '</div>';
 
@@ -5423,14 +5480,19 @@ function removeEvalFileHandler(evalId, fileId) {
     title: 'Remove File?',
     body: 'This file reference will be removed from the checklist.',
     confirmLabel: 'Remove',
-    onConfirm: "doRemoveEvalFile('" + evalId + "', '" + fileId + "')"
+    onConfirm: "doRemoveEvalFile('" + esc(evalId) + "', '" + esc(fileId) + "')"
   });
 }
 
 function doRemoveEvalFile(evalId, fileId) {
+  // Save original files for rollback
+  var originalFiles = appState.currentEvaluation
+    ? (appState.currentEvaluation.files || []).slice()
+    : [];
+
   // Optimistic removal
   if (appState.currentEvaluation) {
-    appState.currentEvaluation.files = (appState.currentEvaluation.files || []).filter(function(f) { return f.id !== fileId; });
+    appState.currentEvaluation.files = originalFiles.filter(function(f) { return f.id !== fileId; });
     renderEvalFilesCard(appState.currentEvaluation);
   }
 
@@ -5439,11 +5501,19 @@ function doRemoveEvalFile(evalId, fileId) {
       if (result.success) {
         showToast('File removed');
       } else {
-        showToast('Error removing file');
+        showToast('Error removing file: ' + (result.error || 'Unknown'));
+        if (appState.currentEvaluation) {
+          appState.currentEvaluation.files = originalFiles;
+          renderEvalFilesCard(appState.currentEvaluation);
+        }
       }
     })
     .withFailureHandler(function(err) {
       showToast('Error: ' + (err && err.message ? err.message : String(err)));
+      if (appState.currentEvaluation) {
+        appState.currentEvaluation.files = originalFiles;
+        renderEvalFilesCard(appState.currentEvaluation);
+      }
     })
     .removeEvalFile(evalId, fileId);
 }
