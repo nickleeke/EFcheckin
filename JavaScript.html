@@ -22,7 +22,8 @@ var appState = {
   drivePickerLoaded: false,
   drivePickerConfig: null,
   evalSummary: null,
-  timelineExpandedDay: null
+  timelineExpandedDay: null,
+  recentStudents: []
 };
 var _persistTimers = {};
 var _persistInFlight = 0;
@@ -84,6 +85,25 @@ function buildEvalTypeDropdown_(evalId, currentType) {
     html += '<option value="' + esc(t.value) + '"' + (resolved === t.value ? ' selected' : '') + '>' + esc(t.label) + '</option>';
   });
   return html + '</select>';
+}
+
+// ─── Helpers ───
+function getFirstNameFromEmail(email) {
+  if (!email) return '';
+  var local = email.split('@')[0];
+  var firstName = local.split('.')[0];
+  return firstName.charAt(0).toUpperCase() + firstName.slice(1).toLowerCase();
+}
+
+function trackRecentStudent(studentId) {
+  appState.recentStudents = appState.recentStudents.filter(function(id) {
+    return id !== studentId;
+  });
+  appState.recentStudents.unshift(studentId);
+  if (appState.recentStudents.length > 5) {
+    appState.recentStudents = appState.recentStudents.slice(0, 5);
+  }
+  renderRecentStudents();
 }
 
 // ─── Preloaded Options ───
@@ -175,6 +195,12 @@ function enterApp() {
     })
     .withFailureHandler(function() {})
     .getCaseManagers();
+  // Render greeting
+  var greetingEl = document.getElementById('dashboard-greeting');
+  if (greetingEl) {
+    var firstName = getFirstNameFromEmail(appState.currentUserEmail);
+    greetingEl.textContent = firstName ? 'Hi, ' + firstName + '!' : 'Welcome!';
+  }
   showView('dashboard-view');
   showDashboardSkeleton();
 
@@ -296,6 +322,7 @@ function loadDashboard() {
   // local optimistic state to avoid overwriting unsaved changes.
   if (Object.keys(_persistTimers).length > 0 || _persistInFlight > 0) {
     renderDashboard(appState.dashboardData);
+    renderRecentStudents();
     if (appState.evalSummary) renderEvalSummary(appState.evalSummary);
     return;
   }
@@ -306,6 +333,7 @@ function loadDashboard() {
       try {
         appState.dashboardData = data || [];
         renderDashboard(data);
+        renderRecentStudents();
       } catch(e) {
         document.getElementById('dashboard-table-container').innerHTML =
           renderErrorState(e.message || String(e));
@@ -486,54 +514,24 @@ function loadEvalSummary() {
         appState.evalSummary = summary;
         renderEvalSummary(summary);
       } catch(e) {
-        var el = document.getElementById('eval-summary-strip');
-        if (el) el.style.display = 'none';
+        hideEvalSections_();
       }
     })
     .withFailureHandler(function() {
-      var el = document.getElementById('eval-summary-strip');
-      if (el) el.style.display = 'none';
+      hideEvalSections_();
     })
     .getEvalTaskSummary();
 }
 
-function renderEvalSummary(summary) {
-  var container = document.getElementById('eval-summary-strip');
-  if (!container) return;
+function hideEvalSections_() {
+  var a = document.getElementById('dashboard-at-a-glance');
+  var b = document.getElementById('dashboard-evals-section');
+  if (a) a.style.display = 'none';
+  if (b) b.style.display = 'none';
+}
 
-  var activeEvals = summary.activeEvals || [];
-  var hasAnyData = summary.dueThisWeekCount > 0 || summary.overdueCount > 0 ||
-    summary.timeline.some(function(d) { return d.tasks.length > 0; }) ||
-    activeEvals.length > 0;
-  if (!hasAnyData) {
-    container.style.display = 'none';
-    return;
-  }
-  container.style.display = '';
-
-  var html = '';
-
-  // ── Individual Eval Cards Carousel ──
-  if (activeEvals.length > 0) {
-    html += '<div class="eval-cards-carousel">';
-    activeEvals.forEach(function(ev) {
-      var pct = ev.total > 0 ? Math.round(ev.done / ev.total * 100) : 0;
-      var alertClass = ev.overdueCount > 0 ? ' eval-carousel-card-alert' : '';
-      html += '<div class="eval-carousel-card' + alertClass + '" onclick="navigateToEvalTask(\'' + esc(ev.studentId) + '\')">' +
-        '<div class="eval-carousel-card-name">' + esc(ev.studentName) + '</div>' +
-        '<div class="eval-carousel-card-type">' + esc(getEvalTypeLabel(ev.type)) + '</div>' +
-        '<div class="eval-carousel-card-progress">' +
-          '<div class="eval-carousel-bar"><div class="eval-carousel-bar-fill" style="width:' + pct + '%"></div></div>' +
-          '<span class="eval-carousel-card-pct">' + ev.done + '/' + ev.total + '</span>' +
-        '</div>' +
-        (ev.overdueCount > 0 ? '<span class="eval-carousel-card-overdue">' + ev.overdueCount + ' overdue</span>' : '') +
-      '</div>';
-    });
-    html += '</div>';
-  }
-
-  // ── Summary Cards ──
-  html += '<div class="eval-metric-cards">';
+function buildMetricCardsHtml_(summary) {
+  var html = '<div class="eval-metric-cards">';
 
   // Due This Week card
   html += '<div class="eval-metric-card">' +
@@ -563,9 +561,11 @@ function renderEvalSummary(summary) {
   '</div>';
 
   html += '</div>';
+  return html;
+}
 
-  // ── Timeline Strip ──
-  html += '<div class="eval-timeline-strip">';
+function buildTimelineHtml_(summary) {
+  var html = '<div class="eval-timeline-strip">';
   html += '<div class="eval-timeline-header">' +
     '<span class="eval-timeline-title">Next 7 Days</span>' +
   '</div>';
@@ -635,9 +635,147 @@ function renderEvalSummary(summary) {
   }
 
   html += '</div>';
+  return html;
+}
 
+function buildEvalCarouselHtml_(activeEvals) {
+  var html = '<div class="eval-cards-carousel">';
+  activeEvals.forEach(function(ev) {
+    var pct = ev.total > 0 ? Math.round(ev.done / ev.total * 100) : 0;
+    var alertClass = ev.overdueCount > 0 ? ' eval-carousel-card-alert' : '';
+    html += '<div class="eval-carousel-card' + alertClass + '" onclick="navigateToEvalTask(\'' + esc(ev.studentId) + '\')">' +
+      '<div class="eval-carousel-card-name">' + esc(ev.studentName) + '</div>' +
+      '<div class="eval-carousel-card-type">' + esc(getEvalTypeLabel(ev.type)) + '</div>' +
+      '<div class="eval-carousel-card-progress">' +
+        '<div class="eval-carousel-bar"><div class="eval-carousel-bar-fill" style="width:' + pct + '%"></div></div>' +
+        '<span class="eval-carousel-card-pct">' + ev.done + '/' + ev.total + '</span>' +
+      '</div>' +
+      (ev.overdueCount > 0 ? '<span class="eval-carousel-card-overdue">' + ev.overdueCount + ' overdue</span>' : '') +
+    '</div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+function renderEvalSummary(summary) {
+  var activeEvals = summary.activeEvals || [];
+
+  // ── At a Glance section: metric cards + timeline ──
+  var atAGlanceEl = document.getElementById('dashboard-at-a-glance');
+  var atAGlanceContent = document.getElementById('at-a-glance-content');
+  var hasMetrics = summary.dueThisWeekCount > 0 || summary.overdueCount > 0 ||
+    summary.timeline.some(function(d) { return d.tasks.length > 0; });
+
+  if (atAGlanceEl && atAGlanceContent) {
+    if (hasMetrics) {
+      atAGlanceEl.style.display = '';
+      atAGlanceContent.innerHTML = buildMetricCardsHtml_(summary) + buildTimelineHtml_(summary);
+      animateContentIn(atAGlanceContent);
+    } else {
+      atAGlanceEl.style.display = 'none';
+    }
+  }
+
+  // ── Evals section: individual eval cards carousel ──
+  var evalsEl = document.getElementById('dashboard-evals-section');
+  var evalsContent = document.getElementById('evals-section-content');
+  if (evalsEl && evalsContent) {
+    if (activeEvals.length > 0) {
+      evalsEl.style.display = '';
+      evalsContent.innerHTML = buildEvalCarouselHtml_(activeEvals);
+      animateContentIn(evalsContent);
+    } else {
+      evalsEl.style.display = 'none';
+    }
+  }
+}
+
+// ─── Recent Students ───
+function renderRecentStudents() {
+  var sectionEl = document.getElementById('dashboard-recent-section');
+  var container = document.getElementById('recent-students-content');
+  if (!sectionEl || !container) return;
+
+  var recentIds = appState.recentStudents || [];
+  if (recentIds.length === 0) {
+    sectionEl.style.display = 'none';
+    return;
+  }
+
+  // Resolve student data from dashboardData
+  var students = [];
+  recentIds.forEach(function(id) {
+    var s = getStudentById(id);
+    if (s) students.push(s);
+  });
+
+  if (students.length === 0) {
+    sectionEl.style.display = 'none';
+    return;
+  }
+
+  sectionEl.style.display = '';
+
+  var html = '<table class="dashboard-table recent-students-table"><thead><tr>' +
+    '<th>Name</th>' +
+    '<th>Case Manager</th>' +
+    '<th>Grade</th>' +
+    '<th>Actions</th>' +
+    '</tr></thead><tbody>';
+
+  students.forEach(function(s) {
+    var cmEmail = s.caseManagerEmail || '';
+    var cmName = cmEmail ? getCaseManagerName(cmEmail) : '--';
+
+    html += '<tr>';
+    html += '<td><strong>' + esc(s.firstName + ' ' + s.lastName) + '</strong></td>';
+    html += '<td>' + esc(cmName) + '</td>';
+    html += '<td>' + esc(s.grade || '--') + '</td>';
+    html += '<td><div class="action-btns">';
+
+    // Check-In button (black)
+    html += '<button class="action-btn" onclick="event.stopPropagation(); startCheckIn(\'' + s.id + '\')" title="Check-In">' +
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>' +
+    '</button>';
+
+    // Student Profile button (black)
+    html += '<button class="action-btn" onclick="event.stopPropagation(); showStudentProfile(\'' + s.id + '\')" title="Student Profile">' +
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>' +
+    '</button>';
+
+    // Contact Card button (black) - navigates to contacts section
+    html += '<button class="action-btn" onclick="event.stopPropagation(); navigateToContacts(\'' + s.id + '\')" title="View Contacts">' +
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M20 0H4v2h16V0zM4 24h16v-2H4v2zM20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-8 2.75c1.24 0 2.25 1.01 2.25 2.25s-1.01 2.25-2.25 2.25S9.75 10.24 9.75 9s1.01-2.25 2.25-2.25zM17 17H7v-1.5c0-1.67 3.33-2.5 5-2.5s5 .83 5 2.5V17z"/></svg>' +
+    '</button>';
+
+    html += '</div></td>';
+    html += '</tr>';
+  });
+
+  html += '</tbody></table>';
   container.innerHTML = html;
-  animateContentIn(container);
+}
+
+function navigateToContacts(studentId) {
+  showStudentProfile(studentId);
+  // Poll for the contacts card to appear (async data load)
+  var attempts = 0;
+  var scrollInterval = setInterval(function() {
+    var contactsCard = document.getElementById('profile-contacts-card');
+    attempts++;
+    if (contactsCard) {
+      clearInterval(scrollInterval);
+      setTimeout(function() {
+        contactsCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        contactsCard.classList.add('contacts-highlight');
+        setTimeout(function() {
+          contactsCard.classList.remove('contacts-highlight');
+        }, 2000);
+      }, 100);
+    } else if (attempts > 30) {
+      clearInterval(scrollInterval);
+    }
+  }, 100);
 }
 
 function toggleTimelineDay(dayIndex) {
@@ -670,6 +808,7 @@ function navigateToEvalTask(studentId) {
 function openSidePanel(index) {
   var s = appState.dashboardData[index];
   if (!s) return;
+  trackRecentStudent(s.id);
 
   document.getElementById('side-panel-title').textContent = s.firstName + ' ' + s.lastName;
 
@@ -1915,6 +2054,7 @@ function editStudent(studentId) {
 
 function showStudentProfile(studentId) {
   appState.currentStudentId = studentId;
+  trackRecentStudent(studentId);
   document.getElementById('student-view-breadcrumb').textContent = 'Student Profile';
   document.getElementById('student-view-title').innerHTML = '<span class="skeleton skeleton-title-inline"></span>';
   showStudentProfileSkeleton();
@@ -3074,15 +3214,15 @@ function printStudentReport() {
   var html = '<!DOCTYPE html><html><head><title>Report - ' + esc(name) + '</title>' +
     '<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">' +
     '<style>' +
-    'body { font-family: "Roboto", Arial, sans-serif; color: #201A1A; margin: 0; padding: 24px 32px; font-size: 13px; -webkit-font-smoothing: antialiased; }' +
+    'body { font-family: "Roboto", Arial, sans-serif; color: #1C1B1F; margin: 0; padding: 24px 32px; font-size: 13px; -webkit-font-smoothing: antialiased; }' +
     '.report-logo { text-align: center; margin-bottom: 16px; }' +
     '.report-logo img { height: 48px; }' +
     'h1 { font-size: 20px; margin: 0 0 4px; }' +
-    '.subtitle { color: #534343; font-size: 13px; margin-bottom: 20px; }' +
+    '.subtitle { color: #49454F; font-size: 13px; margin-bottom: 20px; }' +
     'h2 { font-size: 15px; font-weight: 500; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 2px solid #C41E3A; }' +
     'table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }' +
-    'th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid #D8C2C2; }' +
-    'th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #534343; background: #F9EAEA; font-weight: 500; }' +
+    'th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid #C8C8C8; }' +
+    'th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #49454F; background: #EEEEEE; font-weight: 500; }' +
     '.period-col { width: 60px; text-align: center; }' +
     '.grade-col { width: 60px; text-align: center; }' +
     '.missing-col { width: 80px; text-align: center; }' +
@@ -3098,10 +3238,10 @@ function printStudentReport() {
     '.type-tag { font-size: 11px; padding: 1px 6px; border-radius: 4px; }' +
     '.type-formative { background: #E3F2FD; color: #0D47A1; }' +
     '.type-summative { background: #FCE4EC; color: #880E4F; }' +
-    '.gpa-bar { padding: 8px 12px; background: #F9EAEA; border-radius: 8px; margin-bottom: 12px; display: flex; gap: 16px; align-items: center; }' +
-    '.gpa-bar .label { font-size: 12px; color: #534343; }' +
+    '.gpa-bar { padding: 8px 12px; background: #EEEEEE; border-radius: 8px; margin-bottom: 12px; display: flex; gap: 16px; align-items: center; }' +
+    '.gpa-bar .label { font-size: 12px; color: #49454F; }' +
     '.gpa-bar .value { font-size: 16px; font-weight: 600; }' +
-    '.footer { margin-top: 24px; font-size: 11px; color: #857373; text-align: center; }' +
+    '.footer { margin-top: 24px; font-size: 11px; color: #757575; text-align: center; }' +
     '@media print { body { padding: 12px 16px; } }' +
     '</style></head><body>';
 
@@ -3186,7 +3326,7 @@ function printStudentReport() {
     }
   } else {
     html += '<h2>Classes &amp; Grades</h2>';
-    html += '<p style="color:#534343;">No academic data from the latest check-in.</p>';
+    html += '<p style="color:#49454F;">No academic data from the latest check-in.</p>';
   }
 
   html += '<div class="footer">Richfield Public Schools</div>';
@@ -3556,10 +3696,11 @@ function refreshDashboard() {
 
 // ─── Skeleton Loading Functions ───
 function showDashboardSkeleton() {
-  // Eval summary skeleton
-  var summaryContainer = document.getElementById('eval-summary-strip');
-  if (summaryContainer) {
-    summaryContainer.style.display = '';
+  // At a Glance skeleton
+  var atAGlanceEl = document.getElementById('dashboard-at-a-glance');
+  var atAGlanceContent = document.getElementById('at-a-glance-content');
+  if (atAGlanceEl && atAGlanceContent) {
+    atAGlanceEl.style.display = '';
     var skelHtml = '<div class="skeleton-fade-in">' +
       '<div class="eval-metric-cards">' +
         '<div class="eval-metric-card"><div class="skeleton" style="width:120px;height:40px;border-radius:8px;"></div></div>' +
@@ -3571,7 +3712,7 @@ function showDashboardSkeleton() {
       skelHtml += '<div class="skeleton" style="width:48px;height:64px;border-radius:12px;flex:1;"></div>';
     }
     skelHtml += '</div></div></div>';
-    summaryContainer.innerHTML = skelHtml;
+    atAGlanceContent.innerHTML = skelHtml;
   }
 
   // Dashboard table skeleton
