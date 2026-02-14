@@ -799,6 +799,11 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .btn-icon.btn-icon-danger:hover { background: rgba(186,26,26,0.08); }
 .btn-icon.btn-icon-danger:focus-visible { background: rgba(186,26,26,0.12); outline: none; }
 .btn-icon.btn-icon-danger:active { background: rgba(186,26,26,0.12); }
+.btn-icon.btn-sm {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+}
 
 /* ─── Ghost Button (M3 Text Button) ─── */
 .btn-ghost {
@@ -993,6 +998,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 }
 .sp-gpa.high { background: #FFDEAB; color: #2A1800; }
 .sp-gpa.mid  { background: #D6F5D6; color: #1B5E20; }
+.sp-gpa.caution { background: #FFF3CD; color: #7A5900; }
 .sp-gpa.low  { background: var(--md-error-container); color: var(--md-on-error-container); }
 .sp-gpa.none { background: var(--md-surface-container); color: var(--md-on-surface-variant); font-size: 16px; line-height: 24px; }
 
@@ -1427,21 +1433,23 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   font-weight: 500;
   color: var(--md-on-surface);
   background: transparent;
-  border: 1px solid var(--md-outline-variant);
+  border: none;
   border-radius: var(--md-shape-xs);
-  padding: 2px 6px;
+  padding: 4px 8px;
   cursor: pointer;
-  transition: border-color var(--md-duration-short3) var(--md-easing-standard),
-              background var(--md-duration-short3) var(--md-easing-standard);
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  text-align: right;
+  text-align-last: right;
+  transition: background var(--md-duration-short3) var(--md-easing-standard);
 }
 .profile-grade-select:hover {
-  border-color: var(--md-outline);
-  background: rgba(0,0,0,0.04);
+  background: rgba(0,0,0,0.06);
 }
 .profile-grade-select:focus {
   outline: none;
-  border-color: var(--md-primary);
-  box-shadow: 0 0 0 1px var(--md-primary);
+  background: rgba(0,0,0,0.08);
 }
 
 /* ─── Profile Academics Two-Column Layout ─── */
@@ -1555,6 +1563,12 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 }
 .profile-stat-card.gpa-good-standing .profile-stat-label { color: #2E7D32; }
 .profile-stat-card.gpa-good-standing .profile-stat-number { color: #1B5E20; }
+.profile-stat-card.gpa-caution {
+  background: #FFF3CD;
+  border-color: #D4A854;
+}
+.profile-stat-card.gpa-caution .profile-stat-label { color: #7A5900; }
+.profile-stat-card.gpa-caution .profile-stat-number { color: #7A5900; }
 .profile-stat-card.gpa-at-risk {
   background: var(--md-error-container);
   border-color: #E57373;
@@ -1676,8 +1690,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   flex-shrink: 0;
 }
 .profile-contact-actions .btn-icon {
-  width: 28px;
-  height: 28px;
   color: var(--md-on-surface-variant);
 }
 .profile-contact-actions .btn-icon:hover {
@@ -3105,8 +3117,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   color: var(--md-on-surface-variant);
 }
 .sp-case-manager .btn-icon {
-  width: 28px;
-  height: 28px;
+  flex-shrink: 0;
 }
 
 /* ─── Case Manager in Student Form ─── */
@@ -3132,11 +3143,15 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 
 /* ─── Eval Section Card (profile, above academics — collapsible) ─── */
 .profile-eval-section {
-  background: var(--md-primary-container);
-  border: 2px solid var(--md-primary);
+  background: transparent;
+  border: 1px solid var(--md-outline);
   border-radius: var(--md-shape-md);
   padding: 0;
   margin-bottom: 16px;
+  transition: border-color var(--md-duration-short3) var(--md-easing-standard);
+}
+.profile-eval-section.profile-eval-overdue {
+  border-color: var(--md-error);
 }
 .profile-eval-section-header {
   display: flex;
@@ -3155,16 +3170,21 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   gap: 12px;
   flex-wrap: wrap;
 }
+.profile-eval-section-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .profile-eval-section-title {
   font-size: 16px;
   font-weight: 500;
-  color: var(--md-on-primary-container);
+  color: var(--md-on-surface);
 }
 .profile-eval-section-progress {
   font-size: 12px;
   font-weight: 500;
   color: var(--md-primary);
-  background: var(--md-surface);
+  background: var(--md-primary-container);
   padding: 2px 10px;
   border-radius: var(--md-shape-full);
 }
@@ -3175,6 +3195,25 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   background: var(--md-error-container);
   padding: 2px 8px;
   border-radius: var(--md-shape-full);
+}
+.profile-eval-meeting-date {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--md-on-surface-variant);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.profile-eval-meeting-date:hover {
+  color: var(--md-on-surface);
+}
+.profile-eval-meeting-input {
+  font-size: 12px;
+  font-family: inherit;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-xs);
+  padding: 2px 6px;
+  color: var(--md-on-surface);
+  background: var(--md-surface);
 }
 .eval-collapse-btn {
   transition: transform var(--md-duration-short4) var(--md-easing-standard);
@@ -3540,58 +3579,18 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   color: var(--md-on-surface-variant);
 }
 
-/* ─── Eval Checklist: Profile Card (inner, clickable) ─── */
-.profile-eval-card {
-  background: var(--md-surface);
-  border: 1px solid var(--md-outline-variant);
-  border-radius: var(--md-shape-md);
-  padding: 16px;
-  cursor: pointer;
-  transition: box-shadow var(--md-duration-short3) var(--md-easing-standard),
-              transform var(--md-duration-short3) var(--md-easing-standard);
-  display: flex;
-  flex-direction: column;
-}
-.profile-eval-card:hover {
-  box-shadow: var(--md-elevation-1);
-  transform: translateY(-1px);
-}
-.eval-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-.eval-card-type {
-  font-size: 12px;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--md-on-surface-variant);
-}
-.eval-card-progress {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--md-primary);
-  background: var(--md-primary-container);
-  padding: 2px 8px;
-  border-radius: var(--md-shape-full);
-}
+/* ─── Eval Checklist: Profile Task List ─── */
 .eval-card-tasks {
   list-style: none;
   padding: 0;
   margin: 0;
-  flex: 1;
   overflow: hidden;
 }
 .eval-card-task {
   font-size: 13px;
   color: var(--md-on-surface);
-  padding: 4px 0;
+  padding: 6px 0;
   border-bottom: 1px solid var(--md-outline-variant);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -3607,12 +3606,50 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   background: var(--md-outline);
   flex-shrink: 0;
 }
+.eval-card-task-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.eval-card-task-overdue::before {
+  background: var(--md-error);
+}
+.eval-card-task-overdue .eval-card-task-text {
+  color: var(--md-error);
+}
+.eval-card-task-overdue-badge {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--md-on-error-container);
+  background: var(--md-error-container);
+  padding: 2px 8px;
+  border-radius: var(--md-shape-full);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.eval-card-task-more::before,
+.eval-card-task-complete::before {
+  display: none;
+}
+.eval-card-task-more {
+  color: var(--md-on-surface-variant);
+  font-style: italic;
+}
+.eval-card-task-complete {
+  color: var(--md-primary);
+  font-style: italic;
+}
 .eval-card-action {
   margin-top: 12px;
   font-size: 12px;
   font-weight: 500;
   color: var(--md-primary);
   text-align: right;
+  cursor: pointer;
+}
+.eval-card-action:hover {
+  text-decoration: underline;
 }
 
 /* ─── Eval Checklist View ─── */
@@ -3689,10 +3726,34 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 }
 .eval-summary-footer {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   align-items: center;
   margin-top: 8px;
   min-height: 16px;
+}
+.eval-meeting-date-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.eval-meeting-date-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--md-on-surface-variant);
+  white-space: nowrap;
+}
+.eval-meeting-date-input {
+  font-size: 12px;
+  font-family: inherit;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-xs);
+  padding: 4px 8px;
+  color: var(--md-on-surface);
+  background: var(--md-surface);
+}
+.eval-meeting-date-input:focus {
+  outline: none;
+  border-color: var(--md-primary);
 }
 .eval-progress-fill {
   height: 100%;

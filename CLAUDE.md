@@ -45,7 +45,7 @@ Each user gets their own Google Sheet stored in UserProperties. The web app must
 
 **CoTeachers sheet:** email, role, addedAt
 
-**Evaluations sheet:** id, studentId, type, itemsJson, createdAt, updatedAt, filesJson
+**Evaluations sheet:** id, studentId, type, itemsJson, createdAt, updatedAt, filesJson, meetingDate
 
 ### Eval Types
 
@@ -165,7 +165,8 @@ GPA values are color-coded consistently across three surfaces using MD3 containe
 | Tier | Threshold | Background | Text | Indicator |
 |---|---|---|---|---|
 | **Honor Roll** | GPA >= 3.5 | `#FFDEAB` (gold) | `#2A1800` | Trophy emoji at GPA >= 3.7 |
-| **Good Standing** | GPA >= 2.5 | `#D6F5D6` (green) | `#1B5E20` | — |
+| **Good Standing** | 3.0 < GPA < 3.5 | `#D6F5D6` (green) | `#1B5E20` | — |
+| **Caution** | 2.5 <= GPA <= 3.0 | `#FFF3CD` (yellow) | `#7A5900` | — |
 | **At Risk** | GPA < 2.5 | `--md-error-container` | `--md-on-error-container` | — |
 | **No Data** | null | `--md-surface-container` | `--md-on-surface-variant` | Displays "--" |
 
@@ -173,14 +174,14 @@ GPA values are color-coded consistently across three surfaces using MD3 containe
 
 | Surface | CSS Classes | Notes |
 |---|---|---|
-| **Dashboard table** | `.chip-gold`, `.chip-green`, `.chip-red` | GPA chip; trophy `&#x1F3C6;` appended inline at >= 3.7 |
-| **Side panel** | `.sp-gpa.high`, `.sp-gpa.mid`, `.sp-gpa.low`, `.sp-gpa.none` | Large display (Display Small typography) |
-| **Profile stat card** | `.gpa-honor-roll`, `.gpa-good-standing`, `.gpa-at-risk` | Card-level background + border; trophy via `.profile-trophy.visible` at >= 3.7 |
+| **Dashboard table** | `.chip-gold`, `.chip-green`, `.chip-yellow`, `.chip-red` | GPA chip; trophy `&#x1F3C6;` appended inline at >= 3.7 |
+| **Side panel** | `.sp-gpa.high`, `.sp-gpa.mid`, `.sp-gpa.caution`, `.sp-gpa.low`, `.sp-gpa.none` | Large display (Display Small typography) |
+| **Profile stat card** | `.gpa-honor-roll`, `.gpa-good-standing`, `.gpa-caution`, `.gpa-at-risk` | Card-level background + border; trophy via `.profile-trophy.visible` at >= 3.7 |
 
 **When adding new color-coded indicators**, follow this pattern:
 1. Use MD3 container/on-container color pairs — never raw colors for text without a matching container background
-2. Derive tier colors from the existing palette (tertiary-gold for positive, green for satisfactory, error tokens for concern)
-3. Keep thresholds consistent across all surfaces (3.5 for honor roll, 2.5 for good standing)
+2. Derive tier colors from the existing palette (tertiary-gold for positive, green for satisfactory, yellow for caution, error tokens for concern)
+3. Keep thresholds consistent across all surfaces (3.5 for honor roll, 3.0 for good standing, 2.5 for caution)
 4. Update dynamically: card classes are swapped via `classList.remove()/add()` when data changes without a full re-render
 
 ### General Status Chip Colors

@@ -599,7 +599,7 @@ function renderDashboard(data) {
 
     // GPA
     if (s.gpa != null) {
-      var gpaClass = s.gpa >= 3.5 ? 'chip-gold' : s.gpa >= 2.5 ? 'chip-green' : 'chip-red';
+      var gpaClass = s.gpa >= 3.5 ? 'chip-gold' : s.gpa > 3.0 ? 'chip-green' : s.gpa >= 2.5 ? 'chip-yellow' : 'chip-red';
       var trophy = s.gpa >= 3.7 ? ' &#x1F3C6;' : '';
       html += '<td><span class="chip ' + gpaClass + '">' + s.gpa.toFixed(2) + trophy + '</span></td>';
     } else {
@@ -957,8 +957,8 @@ function openSidePanel(index) {
     var cmName = getCaseManagerName(cmEmail);
     content += '<div class="sp-case-manager">' +
       '<span class="sp-case-manager-name">Case Manager: ' + esc(cmName) + '</span>' +
-      '<a href="mailto:' + esc(cmEmail) + '" class="btn-icon" title="Email case manager" onclick="event.stopPropagation();" style="width:28px;height:28px;">' +
-        '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>' +
+      '<a href="mailto:' + esc(cmEmail) + '" class="btn-icon" title="Email case manager" onclick="event.stopPropagation();">' +
+        '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>' +
       '</a>' +
     '</div>';
   }
@@ -967,7 +967,7 @@ function openSidePanel(index) {
   content += '<div class="sp-section">';
   content += '<div class="sp-section-title">Current GPA</div>';
   if (s.gpa != null) {
-    var gpaClass = s.gpa >= 3.5 ? 'high' : s.gpa >= 2.5 ? 'mid' : 'low';
+    var gpaClass = s.gpa >= 3.5 ? 'high' : s.gpa > 3.0 ? 'mid' : s.gpa >= 2.5 ? 'caution' : 'low';
     content += '<div class="sp-gpa ' + gpaClass + '">' + s.gpa.toFixed(2) + '</div>';
   } else {
     content += '<div class="sp-gpa none">No GPA data</div>';
@@ -2024,9 +2024,9 @@ function profileChangeGrade(studentId, classIdx, newGrade) {
   var gpaNumber = document.getElementById('profile-gpa-number');
   var gpaTrophy = document.getElementById('profile-gpa-trophy');
   if (gpaCard) {
-    gpaCard.classList.remove('gpa-honor-roll', 'gpa-good-standing', 'gpa-at-risk');
+    gpaCard.classList.remove('gpa-honor-roll', 'gpa-good-standing', 'gpa-caution', 'gpa-at-risk');
     if (student.gpa != null) {
-      gpaCard.classList.add(student.gpa >= 3.5 ? 'gpa-honor-roll' : student.gpa >= 2.5 ? 'gpa-good-standing' : 'gpa-at-risk');
+      gpaCard.classList.add(student.gpa >= 3.5 ? 'gpa-honor-roll' : student.gpa > 3.0 ? 'gpa-good-standing' : student.gpa >= 2.5 ? 'gpa-caution' : 'gpa-at-risk');
     }
   }
   if (gpaNumber) {
@@ -2266,12 +2266,17 @@ function renderStudentProfileDashboard(student) {
   html += '<span class="profile-eval-section-progress" id="profile-eval-section-progress"></span>';
   html += '<span class="profile-eval-overdue-badge" id="profile-eval-overdue-badge" style="display:none"></span>';
   html += '</div>';
+  html += '<div class="profile-eval-section-right">';
+  html += '<span class="profile-eval-meeting-date" id="profile-eval-meeting-date" onclick="event.stopPropagation(); handleEvalMeetingDateClick()"></span>';
+  html += '<input type="date" class="profile-eval-meeting-input" id="profile-eval-meeting-input" style="display:none" onclick="event.stopPropagation()" onchange="saveEvalMeetingDate(this.value)">';
   html += '<button class="btn-icon btn-sm eval-collapse-btn" id="eval-collapse-btn" onclick="event.stopPropagation(); toggleEvalSectionCollapse()" aria-label="Toggle eval section">' +
-    '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/></svg>' +
+    '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/></svg>' +
   '</button>';
   html += '</div>';
+  html += '</div>';
   html += '<div class="profile-eval-section-body" id="profile-eval-section-body">';
-  html += '<div class="profile-eval-card" id="profile-eval-card" onclick="handleEvalCardClick(\'' + esc(student.id) + '\')"></div>';
+  html += '<ul class="eval-card-tasks" id="profile-eval-tasks"></ul>';
+  html += '<div class="eval-card-action" id="profile-eval-action" onclick="handleEvalCardClick(\'' + esc(student.id) + '\')">View all &#x2192;</div>';
   html += '</div>';
   html += '</div>';
 
@@ -2396,7 +2401,7 @@ function renderStudentProfileDashboard(student) {
   // GPA Card
   var gpaCardClass = 'profile-stat-card';
   if (student.gpa != null) {
-    gpaCardClass += student.gpa >= 3.5 ? ' gpa-honor-roll' : student.gpa >= 2.5 ? ' gpa-good-standing' : ' gpa-at-risk';
+    gpaCardClass += student.gpa >= 3.5 ? ' gpa-honor-roll' : student.gpa > 3.0 ? ' gpa-good-standing' : student.gpa >= 2.5 ? ' gpa-caution' : ' gpa-at-risk';
   }
   html += '<div class="' + gpaCardClass + '" id="profile-gpa-card">';
   html += '<div class="profile-stat-label">Current GPA</div>';
@@ -2433,7 +2438,7 @@ function renderStudentProfileDashboard(student) {
   html += '<div class="profile-contacts-header">';
   html += '<span class="profile-section-title">Contacts</span>';
   html += '<button class="btn-icon btn-sm" onclick="addProfileContact(\'' + esc(student.id) + '\')" title="Add contact">' +
-    '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>' +
+    '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>' +
   '</button>';
   html += '</div>';
   html += '<div class="profile-contacts-list" id="profile-contacts-list">';
@@ -2571,8 +2576,8 @@ function renderStudentForm(student) {
     var cmName = getCaseManagerName(student.caseManagerEmail);
     cmDisplayHtml = '<div class="case-manager-display" style="margin-top:4px;">' +
       '<span style="font-size:12px;color:var(--md-on-surface-variant);">Assigned: ' + esc(cmName) + '</span>' +
-      '<a href="mailto:' + esc(student.caseManagerEmail) + '" class="btn-icon" title="Email case manager" style="width:28px;height:28px;">' +
-        '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>' +
+      '<a href="mailto:' + esc(student.caseManagerEmail) + '" class="btn-icon" title="Email case manager">' +
+        '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>' +
       '</a>' +
     '</div>';
   }
@@ -2785,10 +2790,10 @@ function renderProfileContactItem(studentId, contact, idx) {
   html += '</div>';
   html += '<div class="profile-contact-actions">';
   html += '<button class="btn-icon btn-sm" onclick="event.stopPropagation(); editProfileContact(\'' + esc(studentId) + '\', ' + idx + ')" title="Edit contact">' +
-    '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>' +
+    '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>' +
   '</button>';
   html += '<button class="btn-icon btn-sm" onclick="event.stopPropagation(); removeProfileContact(\'' + esc(studentId) + '\', ' + idx + ')" title="Remove contact">' +
-    '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>' +
+    '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>' +
   '</button>';
   html += '</div></div>';
   return html;
@@ -3174,7 +3179,7 @@ function renderCheckInHistory(checkIns, student) {
 
       html += '<div class="history-card-actions">' +
         '<button class="btn-icon btn-sm" onclick="event.stopPropagation(); confirmDeleteCheckIn(\'' + ci.id + '\', \'' + student.id + '\')" title="Delete check-in">' +
-          '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>' +
+          '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>' +
         '</button>' +
       '</div>';
 
@@ -3264,7 +3269,7 @@ function renderStudentMenu(studentId) {
   container.innerHTML =
     '<div class="menu-anchor">' +
       '<button class="btn-icon" onclick="toggleStudentMenu(event)" aria-label="More options">' +
-        '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>' +
+        '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>' +
       '</button>' +
       '<div class="dropdown-menu" id="student-dropdown">' +
         items +
@@ -4399,7 +4404,7 @@ function renderMyCaseload() {
     html += '<td>' + esc(s.grade || '-') + '</td>';
 
     if (s.gpa != null) {
-      var gpaClass = s.gpa >= 3.5 ? 'chip-gold' : s.gpa >= 2.5 ? 'chip-green' : 'chip-red';
+      var gpaClass = s.gpa >= 3.5 ? 'chip-gold' : s.gpa > 3.0 ? 'chip-green' : s.gpa >= 2.5 ? 'chip-yellow' : 'chip-red';
       var trophy = s.gpa >= 3.7 ? ' &#x1F3C6;' : '';
       html += '<td><span class="chip ' + gpaClass + '">' + s.gpa.toFixed(2) + trophy + '</span></td>';
     } else {
@@ -4616,7 +4621,6 @@ function loadEvalCardState(studentId) {
   google.script.run
     .withSuccessHandler(function(evaluation) {
       var sectionEl = document.getElementById('profile-eval-section');
-      var cardEl = document.getElementById('profile-eval-card');
 
       if (evaluation) {
         appState.currentEvaluation = evaluation;
@@ -4637,6 +4641,13 @@ function loadEvalCardState(studentId) {
             return now > new Date(it.dueDate + 'T23:59:59');
           }).length;
 
+          // Toggle overdue border
+          if (overdueCount > 0) {
+            sectionEl.classList.add('profile-eval-overdue');
+          } else {
+            sectionEl.classList.remove('profile-eval-overdue');
+          }
+
           // Update section header
           var titleEl = document.getElementById('profile-eval-section-title');
           if (titleEl) titleEl.textContent = typeLabel;
@@ -4654,31 +4665,39 @@ function loadEvalCardState(studentId) {
             }
           }
 
-          // Populate inner card with task list
-          if (cardEl) {
-            var cardHtml = '<div class="eval-card-header">' +
-              '<span class="eval-card-type">' + esc(typeLabel) + '</span>' +
-              '<span class="eval-card-progress">' + done + '/' + items.length + '</span>' +
-              (overdueCount > 0 ? '<span class="eval-card-overdue-badge">' + overdueCount + ' overdue</span>' : '') +
-            '</div>';
-            cardHtml += '<ul class="eval-card-tasks">';
+          // Meeting date label
+          var meetingDateEl = document.getElementById('profile-eval-meeting-date');
+          if (meetingDateEl) {
+            if (evaluation.meetingDate) {
+              meetingDateEl.textContent = 'Meeting: ' + formatDateDisplay(evaluation.meetingDate);
+              meetingDateEl.style.display = '';
+            } else {
+              meetingDateEl.textContent = 'Set meeting date';
+              meetingDateEl.style.display = '';
+            }
+          }
+
+          // Populate task list directly
+          var tasksEl = document.getElementById('profile-eval-tasks');
+          if (tasksEl) {
+            var taskHtml = '';
             var show = remaining.slice(0, 6);
             show.forEach(function(item) {
-              var taskClass = '';
-              if (item.dueDate && !item.checked && now > new Date(item.dueDate + 'T23:59:59')) {
-                taskClass = ' style="color:var(--md-error);"';
+              var isOverdue = item.dueDate && !item.checked && now > new Date(item.dueDate + 'T23:59:59');
+              taskHtml += '<li class="eval-card-task' + (isOverdue ? ' eval-card-task-overdue' : '') + '">';
+              taskHtml += '<span class="eval-card-task-text">' + esc(item.text) + '</span>';
+              if (isOverdue) {
+                taskHtml += '<span class="eval-card-task-overdue-badge">Overdue</span>';
               }
-              cardHtml += '<li class="eval-card-task"' + taskClass + '>' + esc(item.text) + '</li>';
+              taskHtml += '</li>';
             });
             if (remaining.length > 6) {
-              cardHtml += '<li class="eval-card-task" style="color:var(--md-on-surface-variant);font-style:italic;">+' + (remaining.length - 6) + ' more</li>';
+              taskHtml += '<li class="eval-card-task eval-card-task-more">+' + (remaining.length - 6) + ' more</li>';
             }
             if (remaining.length === 0) {
-              cardHtml += '<li class="eval-card-task" style="color:var(--md-primary);font-style:italic;">All tasks complete!</li>';
+              taskHtml += '<li class="eval-card-task eval-card-task-complete">All tasks complete!</li>';
             }
-            cardHtml += '</ul>';
-            cardHtml += '<div class="eval-card-action">View all &rarr;</div>';
-            cardEl.innerHTML = cardHtml;
+            tasksEl.innerHTML = taskHtml;
           }
         }
 
@@ -4699,6 +4718,55 @@ function handleEvalCardClick(studentId) {
   if (appState.currentEvaluation) {
     showEvalChecklistView(studentId, appState.currentEvaluation);
   }
+}
+
+function handleEvalMeetingDateClick() {
+  var labelEl = document.getElementById('profile-eval-meeting-date');
+  var inputEl = document.getElementById('profile-eval-meeting-input');
+  if (!labelEl || !inputEl) return;
+
+  if (inputEl.style.display === 'none') {
+    inputEl.value = (appState.currentEvaluation && appState.currentEvaluation.meetingDate) || '';
+    inputEl.style.display = '';
+    labelEl.style.display = 'none';
+    inputEl.focus();
+  } else {
+    inputEl.style.display = 'none';
+    labelEl.style.display = '';
+  }
+}
+
+function saveEvalMeetingDate(dateValue) {
+  var eval_ = appState.currentEvaluation;
+  if (!eval_) return;
+
+  var labelEl = document.getElementById('profile-eval-meeting-date');
+  var inputEl = document.getElementById('profile-eval-meeting-input');
+
+  // Optimistic UI
+  if (eval_) eval_.meetingDate = dateValue || '';
+  if (labelEl) {
+    if (dateValue) {
+      labelEl.textContent = 'Meeting: ' + formatDateDisplay(dateValue);
+    } else {
+      labelEl.textContent = 'Set meeting date';
+    }
+    labelEl.style.display = '';
+  }
+  if (inputEl) inputEl.style.display = 'none';
+
+  // Also update eval checklist view if present
+  var checklistInput = document.getElementById('eval-meeting-date-input');
+  if (checklistInput) checklistInput.value = dateValue || '';
+
+  google.script.run
+    .withSuccessHandler(function() {
+      showToast('Meeting date saved');
+    })
+    .withFailureHandler(function() {
+      showToast('Failed to save meeting date');
+    })
+    .updateEvalMeetingDate(eval_.id, dateValue || '');
 }
 
 function openEvalFromBadge(studentId) {
@@ -4852,15 +4920,15 @@ function buildEvalItemRow(evalId, item) {
   html += '<div class="eval-item-actions">';
   if (isEditing) {
     html += '<button class="btn-icon btn-sm eval-edit-done-btn" onclick="exitEvalEditMode()" title="Done editing">' +
-      '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>' +
+      '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>' +
     '</button>';
   } else {
     html += '<button class="btn-icon btn-sm" onclick="enterEvalEditMode(\'' + esc(item.id) + '\')" title="Edit task">' +
-      '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>' +
+      '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>' +
     '</button>';
   }
   html += '<button class="btn-icon btn-sm eval-item-delete-btn" onclick="deleteEvalItemHandler(\'' + esc(evalId) + '\', \'' + esc(item.id) + '\')" title="Delete task">' +
-    '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>' +
+    '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>' +
   '</button>';
   html += '</div>';
 
@@ -4902,7 +4970,14 @@ function renderEvalChecklist(evaluation) {
   '</div>';
   html += '</div>'; // end .eval-summary-top
   html += '<div class="eval-progress-bar"><div class="eval-progress-fill" id="eval-progress-fill" style="width:' + pct + '%"></div></div>';
-  html += '<div class="eval-summary-footer"><span id="eval-autosave-status"></span></div>';
+  var meetingVal = evaluation.meetingDate || '';
+  html += '<div class="eval-summary-footer">' +
+    '<span id="eval-autosave-status"></span>' +
+    '<div class="eval-meeting-date-row">' +
+      '<label class="eval-meeting-date-label" for="eval-meeting-date-input">Meeting date:</label>' +
+      '<input type="date" id="eval-meeting-date-input" class="eval-meeting-date-input" value="' + esc(meetingVal) + '" onchange="saveEvalMeetingDate(this.value)">' +
+    '</div>' +
+  '</div>';
   html += '</div>'; // end .eval-summary-card
 
   // Column headers + items (split incomplete/completed)
@@ -5395,7 +5470,7 @@ function renderEvalFilesCard(evaluation) {
           '<span class="eval-file-name">' + esc(file.name) + '</span>' +
         '</a>' +
         '<button class="btn-icon btn-sm eval-file-remove" onclick="removeEvalFileHandler(\'' + esc(evaluation.id) + '\', \'' + esc(file.id) + '\')" title="Remove file">' +
-          '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>' +
+          '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>' +
         '</button>' +
       '</div>';
     });
