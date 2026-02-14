@@ -7,8 +7,8 @@ A Google Apps Script web application for Richfield Public Schools educators to m
 ## Tech Stack
 
 - **Backend:** Google Apps Script (`code.gs`)
-- **Frontend:** Vanilla JavaScript (`JavaScript.html`, ~3,600 lines)
-- **Styling:** Vanilla CSS implementing Material Design 3 (`Stylesheet.html`, ~2,500 lines)
+- **Frontend:** Vanilla JavaScript (`JavaScript.html`, ~4,600 lines)
+- **Styling:** Vanilla CSS implementing Material Design 3 (`Stylesheet.html`, ~3,100 lines)
 - **Data:** Google Sheets (per-user, auto-provisioned in Drive)
 - **Auth:** Google Session API (`Session.getActiveUser()`)
 - **Hosting:** Google Apps Script web app deployment
@@ -41,7 +41,7 @@ Each user gets their own Google Sheet stored in UserProperties. The web app must
 
 **Students sheet:** id, firstName, lastName, grade, period, focusGoal, accommodations, notes, classesJson, createdAt, updatedAt, iepGoal, goalsJson, caseManagerEmail
 
-**CheckIns sheet:** id, studentId, weekOf, planningRating, followThroughRating, regulationRating, focusGoalRating, effortRating, whatWentWell, barrier, microGoal, microGoalCategory, teacherNotes, academicDataJson, createdAt
+**CheckIns sheet:** id, studentId, weekOf, planningRating, followThroughRating, regulationRating, focusGoalRating, effortRating, whatWentWell, barrier, microGoal, microGoalCategory, teacherNotes, academicDataJson, createdAt, goalMet
 
 **CoTeachers sheet:** email, role, addedAt
 
@@ -77,6 +77,9 @@ Read-through cache in UserProperties with 2-minute TTL. Invalidated on writes. C
 - **Optimistic UI:** Local state updated immediately, server call follows.
 - **View stack:** Single HTML container with views toggled via `.active` CSS class.
 - **Confirmation dialogs:** Created dynamically via `showConfirmDialog()` helper.
+- **Caseload filter:** `appState.caseloadFilter` ('all' or 'my') controls which students are displayed. All dashboard renderers (`renderDashboard`, `renderNeedsAttention`, `renderCheckInProgress`, `renderMissingAggregate`) receive pre-filtered data via `applyFilter_()`. The My Caseload drawer item redirects to `setCaseloadFilter('my')` rather than rendering a separate panel.
+- **Keyboard shortcuts:** Dashboard supports arrow key navigation, Enter to open side panel, `n` for check-in, `p` for profile, `?` for help. Guards against input/textarea/select focus. `appState.highlightedRowIndex` is reset on every `renderDashboard` call.
+- **Dashboard enrichment:** `getDashboardData()` returns `daysSinceCheckIn` (days since last check-in, null if none) and `efHistory` (array of up to 6 weekly EF averages, oldest first) for each student.
 
 ## Backend Helpers (code.gs)
 
@@ -84,6 +87,7 @@ Read-through cache in UserProperties with 2-minute TTL. Invalidated on writes. C
 - `buildColIdx_(headers)` — Converts header array to `{headerName: 1-based-column-index}` map
 - `batchSetValues_(sheet, rowIndex, colIdx, fields)` — Updates multiple cells in one row using a field map
 - `normalizeRole_(role)` — Normalizes legacy 'owner' role to 'caseload-manager'
+- `appendStudentNote(studentId, noteText)` — Appends timestamped note to student's notes field, invalidates cache
 
 ## Frontend Helpers (JavaScript.html)
 
@@ -102,6 +106,15 @@ Read-through cache in UserProperties with 2-minute TTL. Invalidated on writes. C
 - `setEvalMenuVisibility_(hasEval)` — Toggles create/view menu items for eval checklists
 - `updateEvalBreadcrumb_(typeLabel)` — Updates eval checklist breadcrumb text
 - `buildEvalTypeDropdown_(evalId, currentType)` — Builds `<select>` HTML for eval type picker
+- `computeUrgencyScore(s)` — Returns integer priority score for student triage (daysSinceCheckIn, avgRating, totalMissing, trend)
+- `formatRelativeDate(dateStr)` — Returns `{text, tier}` for staleness display ("3d ago"/"1 wk ago", green/yellow/red)
+- `buildSparklineSvg(efHistory)` — Returns inline SVG sparkline (60x24) for EF trend visualization
+- `applyFilter_(data)` — Filters dashboardData by caseManagerEmail when `appState.caseloadFilter === 'my'`
+- `setCaseloadFilter(filter)` — Toggles filter chip state and re-renders all dashboard sections
+- `renderNeedsAttention(data)` — Renders horizontally scrolling cards for flagged students or "all on track" empty state
+- `renderCheckInProgress(data)` — Renders "X of Y checked in this week" counter with progress bar
+- `renderMissingAggregate(data)` — Renders total missing assignments metric card with expandable student list
+- `toggleKeyboardHelp()` — Shows/hides keyboard shortcut help overlay
 
 ## UI Design System — Material Design 3
 
@@ -157,6 +170,12 @@ Cardinal Red `#C41E3A` (Richfield school brand)
 - **Segmented Buttons:** Rating button groups (1-5)
 - **Skeleton Loading:** Shimmer animation placeholders per-view, cross-fade to content via `animateContentIn()`
 - **Dropdown Menu:** Positioned below trigger with shadow, CSS opacity/transform animation via `.dropdown-open`
+- **Filter Chips:** Toggle buttons (`.filter-chip` / `.filter-chip-active`) for caseload filtering with `aria-pressed`
+- **Needs Attention Cards:** Horizontally scrolling card strip (`.needs-attention-cards`) with red border, reason tags, and action buttons
+- **Progress Bar:** Thin linear indicator (`.checkin-progress-bar` / `.checkin-progress-fill`) with ARIA progressbar role
+- **Sparklines:** Inline SVG mini-charts (`.ef-sparkline`) for EF trend visualization in table cells
+- **Staleness Chips:** Color-coded relative date chips (`.staleness-green/yellow/red`) replacing raw date display
+- **Keyboard Help Dialog:** Fixed-position hint button + overlay dialog with shortcut reference
 
 ### GPA Color Tiers
 
@@ -208,7 +227,7 @@ Status chips (`.chip`) use a consistent traffic-light scheme across the app for 
 Shared Axis X pattern: forward views slide in from right, backward from left. Managed by `showView()` which tracks `_currentViewId` and `VIEW_ORDER` to determine direction.
 
 ### Ripple Effect
-Delegated click handler creates `<span class="ripple-effect">` inside buttons. Buttons get `overflow: hidden` to contain the ripple, **except** `.rating-btn` (segmented buttons need `overflow: visible` for overlapping borders).
+Delegated click handler creates `<span class="ripple-effect">` inside buttons. Buttons get `overflow: hidden` to contain the ripple, **except** `.rating-btn` (segmented buttons need `overflow: visible` for overlapping borders). When adding new button classes (e.g., `.filter-chip`, `.goal-met-btn`), add them to the ripple overflow selector in `Stylesheet.html` (`.btn, .btn-icon, .btn-ghost, .action-btn, .rating-btn, .nav-drawer-item, .filter-chip, .goal-met-btn`).
 
 ### Animation Safety Rules
 - **Never set explicit `opacity: 0`** on elements that rely on animation to become visible (e.g., `.stagger-row`). Use `animation-fill-mode: both` instead — if the animation fails, the element falls back to visible.
@@ -279,6 +298,28 @@ function buildEvalTypeDropdown_(evalId, currentType) { /* one place for <select>
 **Do:** When building a summary endpoint (like `getEvalTaskSummary`), include all data the frontend might need to decide visibility — e.g., return `activeEvals` alongside aggregate counts.
 
 **Don't:** Return only aggregate metrics (due this week, overdue count) that require items to have due dates set. If the frontend hides the entire section when aggregates are zero, newly created records with no due dates become invisible.
+
+### Always Use Global Constants for Lookup Maps (e.g., `GPA_MAP`)
+
+**Do:** Reference the single global `GPA_MAP` constant (line 52 of `JavaScript.html`) for grade-to-point conversions in all functions.
+
+**Don't:** Redeclare a local `gradePoints` map with different precision values (e.g., 3.67 vs 3.7 for A-). The side panel and profile view will compute different GPAs, causing tier threshold discrepancies and confusing users.
+
+### Always Apply `applyFilter_()` When Rendering Dashboard Data
+
+**Do:** Wrap every `renderDashboard()` call with `applyFilter_()`: `renderDashboard(applyFilter_(appState.dashboardData))`.
+
+**Don't:** Pass raw `appState.dashboardData` directly. When the "My Students" filter is active, this bypasses the filter and momentarily shows all students. This applies to all call sites: `toggleSort`, `saveCheckIn`, `goBackFromMissing`, `saveStudentForm`, `doDeleteStudent`, `refreshDashboard`.
+
+### ID Conventions for `toggleMetricDropdown`
+
+Expandable metric cards (eval due/overdue, missing aggregate) must use the `metric-card-{key}` and `metric-dropdown-{key}` ID convention so `toggleMetricDropdown(key)` can find them. The card element needs `id="metric-card-{key}"` and the dropdown needs `id="metric-dropdown-{key}"`.
+
+### Clickable `<div>` Elements Need Keyboard Accessibility
+
+**Do:** Add `role="button" tabindex="0" onkeydown="if(event.key==='Enter')..."` to any `<div>` with an `onclick` handler.
+
+**Don't:** Create clickable cards or list rows as bare `<div onclick="...">` — keyboard users and screen readers cannot interact with them.
 
 ### Use `.view-title-row` for Header + Action Layouts
 
