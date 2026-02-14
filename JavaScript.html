@@ -23,7 +23,8 @@ var appState = {
   drivePickerConfig: null,
   evalSummary: null,
   timelineExpandedDay: null,
-  editingEvalItemId: null
+  editingEvalItemId: null,
+  recentStudents: []
 };
 var _persistTimers = {};
 var _persistInFlight = 0;
@@ -47,6 +48,67 @@ var GPA_MAP = {
   'A':4.0, 'A-':3.7, 'B+':3.3, 'B':3.0, 'B-':2.7,
   'C+':2.3, 'C':2.0, 'C-':1.7, 'D+':1.3, 'D':1.0, 'D-':0.7, 'F':0.0
 };
+
+// ─── Eval Type Definitions ───
+var EVAL_TYPES = [
+  { value: 'annual-iep', label: 'Annual IEP' },
+  { value: '3-year-reeval', label: '3 Year Re-Eval' },
+  { value: 'initial-eval', label: 'Initial Eval' }
+];
+var EVAL_TYPE_ALIASES = { 'eval': 'initial-eval', 'reeval': '3-year-reeval' };
+
+function getEvalTypeLabel(type) {
+  var resolved = EVAL_TYPE_ALIASES[type] || type;
+  for (var i = 0; i < EVAL_TYPES.length; i++) {
+    if (EVAL_TYPES[i].value === resolved) return EVAL_TYPES[i].label;
+  }
+  return 'Eval';
+}
+
+function setEvalMenuVisibility_(hasEval) {
+  var createIds = ['menu-create-annual-iep', 'menu-create-3-year-reeval', 'menu-create-initial-eval'];
+  var showCreate = !hasEval;
+  createIds.forEach(function(id) { var el = document.getElementById(id); if (el) el.style.display = showCreate ? '' : 'none'; });
+  var viewEl = document.getElementById('menu-view-eval');
+  if (viewEl) viewEl.style.display = hasEval ? '' : 'none';
+}
+
+function updateEvalBreadcrumb_(typeLabel) {
+  var el = document.getElementById('eval-checklist-breadcrumb');
+  if (!el) return;
+  el.innerHTML =
+    '<button class="breadcrumb-link" onclick="goBackFromEvalChecklist()">Student Profile</button> ' +
+    '<svg class="breadcrumb-chevron" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg> ' +
+    esc(typeLabel);
+}
+
+function buildEvalTypeDropdown_(evalId, currentType) {
+  var resolved = EVAL_TYPE_ALIASES[currentType] || currentType;
+  var html = '<select class="eval-type-select" onchange="updateEvalType(\'' + esc(evalId) + '\', this.value)">';
+  EVAL_TYPES.forEach(function(t) {
+    html += '<option value="' + esc(t.value) + '"' + (resolved === t.value ? ' selected' : '') + '>' + esc(t.label) + '</option>';
+  });
+  return html + '</select>';
+}
+
+// ─── Helpers ───
+function getFirstNameFromEmail(email) {
+  if (!email) return '';
+  var local = email.split('@')[0];
+  var firstName = local.split('.')[0];
+  return firstName.charAt(0).toUpperCase() + firstName.slice(1).toLowerCase();
+}
+
+function trackRecentStudent(studentId) {
+  appState.recentStudents = appState.recentStudents.filter(function(id) {
+    return id !== studentId;
+  });
+  appState.recentStudents.unshift(studentId);
+  if (appState.recentStudents.length > 5) {
+    appState.recentStudents = appState.recentStudents.slice(0, 5);
+  }
+  renderRecentStudents();
+}
 
 // ─── Preloaded Options ───
 var PRELOADED_CLASSES = [
@@ -114,29 +176,35 @@ document.addEventListener('DOMContentLoaded', function() {
 /** Enter the main app (for returning users or after onboarding). */
 function enterApp() {
   var navbar = document.getElementById('navbar');
-  var tabBar = document.getElementById('tab-bar');
+  var navDrawer = document.getElementById('nav-drawer');
   if (navbar) navbar.style.display = '';
-  if (tabBar) tabBar.style.display = '';
+  if (navDrawer) navDrawer.style.display = '';
   // Load global case managers list
   google.script.run
     .withSuccessHandler(function(cms) {
       appState.caseManagers = cms || [];
-      // Show My Caseload tab if current user is a case manager
+      // Show My Caseload drawer item if current user is a case manager
       var isCM = cms.some(function(cm) {
         return cm.email === (appState.currentUserEmail || '').toLowerCase();
       });
       if (isCM) {
-        var myCaseloadTab = document.getElementById('tab-mycaseload');
-        if (myCaseloadTab) myCaseloadTab.style.display = '';
+        var myCaseloadItem = document.getElementById('drawer-mycaseload');
+        if (myCaseloadItem) myCaseloadItem.style.display = '';
       }
-      // Show Admin tab if superuser
+      // Show Admin drawer item if superuser
       if (appState.isSuperuser) {
-        var adminTab = document.getElementById('tab-admin');
-        if (adminTab) adminTab.style.display = '';
+        var adminItem = document.getElementById('drawer-admin');
+        if (adminItem) adminItem.style.display = '';
       }
     })
     .withFailureHandler(function() {})
     .getCaseManagers();
+  // Render greeting
+  var greetingEl = document.getElementById('dashboard-greeting');
+  if (greetingEl) {
+    var firstName = getFirstNameFromEmail(appState.currentUserEmail);
+    greetingEl.textContent = firstName ? 'Hi, ' + firstName + '!' : 'Welcome!';
+  }
   showView('dashboard-view');
   showDashboardSkeleton();
 
@@ -157,10 +225,174 @@ function enterApp() {
     .initializeSheets();
 }
 
-// Close side panel on Escape key
+// ─── Navigation Drawer Toggle ───
+var _navDrawerOpen = false;
+
+// Mobile: toggle submenu on parent click (hover doesn't work on touch)
+(function() {
+  document.addEventListener('click', function(e) {
+    var parent = e.target.closest('.nav-drawer-parent');
+    if (!parent) return;
+    if (window.innerWidth > 840) return; // desktop uses hover
+    var group = parent.closest('.nav-drawer-group');
+    if (group) group.classList.toggle('submenu-open');
+  });
+})();
+
+function toggleNavDrawer() {
+  _navDrawerOpen ? closeNavDrawer() : openNavDrawer();
+}
+function openNavDrawer() {
+  closeSidePanel();
+  var drawer = document.getElementById('nav-drawer');
+  var scrim = document.getElementById('nav-drawer-scrim');
+  if (drawer) drawer.classList.add('open');
+  if (scrim) scrim.classList.add('open');
+  _navDrawerOpen = true;
+}
+function closeNavDrawer() {
+  var drawer = document.getElementById('nav-drawer');
+  var scrim = document.getElementById('nav-drawer-scrim');
+  if (drawer) drawer.classList.remove('open');
+  if (scrim) scrim.classList.remove('open');
+  _navDrawerOpen = false;
+}
+function closeNavDrawerIfMobile_() {
+  if (window.innerWidth < 840) closeNavDrawer();
+}
+
+// ─── Navigation Drawer Collapse (desktop) ───
+var _navDrawerCollapsed = false;
+var _tooltipEl = null;
+var _tooltipTimer = null;
+var _flyoutEl = null;
+var _flyoutHideTimer = null;
+
+// Restore collapse state from localStorage
+(function() {
+  try {
+    if (localStorage.getItem('navDrawerCollapsed') === 'true') {
+      _navDrawerCollapsed = true;
+      var drawer = document.getElementById('nav-drawer');
+      if (drawer) drawer.classList.add('collapsed');
+    }
+  } catch(e) { /* localStorage unavailable */ }
+})();
+
+function toggleNavDrawerCollapse() {
+  var drawer = document.getElementById('nav-drawer');
+  if (!drawer) return;
+  _navDrawerCollapsed = !_navDrawerCollapsed;
+  if (_navDrawerCollapsed) {
+    drawer.classList.add('collapsed');
+  } else {
+    drawer.classList.remove('collapsed');
+  }
+  hideNavTooltip_();
+  hideNavFlyout_();
+  var btn = document.getElementById('nav-collapse-btn');
+  if (btn) btn.setAttribute('aria-label', _navDrawerCollapsed ? 'Expand navigation' : 'Collapse navigation');
+  try { localStorage.setItem('navDrawerCollapsed', _navDrawerCollapsed); } catch(e) {}
+}
+
+// ─── Tooltips for collapsed nav items ───
+function showNavTooltip_(target) {
+  if (!_navDrawerCollapsed || window.innerWidth <= 840) return;
+  var text = target.getAttribute('data-tooltip');
+  if (!text) return;
+  hideNavTooltip_();
+  clearTimeout(_tooltipTimer);
+  _tooltipTimer = setTimeout(function() {
+    if (!_tooltipEl) {
+      _tooltipEl = document.createElement('div');
+      _tooltipEl.className = 'nav-drawer-tooltip';
+      document.body.appendChild(_tooltipEl);
+    }
+    _tooltipEl.textContent = text;
+    var rect = target.getBoundingClientRect();
+    _tooltipEl.style.left = (rect.right + 8) + 'px';
+    _tooltipEl.style.top = (rect.top + rect.height / 2 - 14) + 'px';
+    _tooltipEl.offsetHeight; // force reflow
+    _tooltipEl.classList.add('visible');
+  }, 400);
+}
+
+function hideNavTooltip_() {
+  clearTimeout(_tooltipTimer);
+  if (_tooltipEl) _tooltipEl.classList.remove('visible');
+}
+
+// Delegated hover events for tooltips
+document.addEventListener('mouseover', function(e) {
+  var item = e.target.closest('.nav-drawer-item[data-tooltip]');
+  if (item) showNavTooltip_(item);
+});
+document.addEventListener('mouseout', function(e) {
+  var item = e.target.closest('.nav-drawer-item[data-tooltip]');
+  if (item) hideNavTooltip_();
+});
+
+// ─── Flyout submenu for collapsed nav groups ───
+function showNavFlyout_(groupEl) {
+  if (!_navDrawerCollapsed || window.innerWidth <= 840) return;
+  clearTimeout(_flyoutHideTimer);
+  hideNavTooltip_();
+  var children = groupEl.querySelectorAll('.nav-drawer-child');
+  if (!children.length) return;
+  if (!_flyoutEl) {
+    _flyoutEl = document.createElement('div');
+    _flyoutEl.className = 'nav-drawer-flyout';
+    _flyoutEl.addEventListener('mouseenter', function() { clearTimeout(_flyoutHideTimer); });
+    _flyoutEl.addEventListener('mouseleave', function() { scheduleFlyoutHide_(); });
+    document.body.appendChild(_flyoutEl);
+  }
+  _flyoutEl.innerHTML = '';
+  children.forEach(function(child) {
+    if (child.style.display === 'none') return;
+    var btn = document.createElement('button');
+    btn.className = 'nav-drawer-flyout-item';
+    if (child.classList.contains('active')) btn.classList.add('active');
+    btn.textContent = child.getAttribute('data-tooltip') || child.querySelector('.nav-drawer-label').textContent;
+    btn.onclick = function() { child.click(); hideNavFlyout_(); };
+    _flyoutEl.appendChild(btn);
+  });
+  if (!_flyoutEl.children.length) return;
+  var parentItem = groupEl.querySelector('.nav-drawer-parent');
+  if (!parentItem) return;
+  var rect = parentItem.getBoundingClientRect();
+  _flyoutEl.style.left = (rect.right + 4) + 'px';
+  _flyoutEl.style.top = rect.top + 'px';
+  _flyoutEl.offsetHeight; // force reflow
+  _flyoutEl.classList.add('visible');
+}
+
+function hideNavFlyout_() {
+  clearTimeout(_flyoutHideTimer);
+  if (_flyoutEl) _flyoutEl.classList.remove('visible');
+}
+
+function scheduleFlyoutHide_() {
+  clearTimeout(_flyoutHideTimer);
+  _flyoutHideTimer = setTimeout(hideNavFlyout_, 200);
+}
+
+// Delegated hover for flyout
+document.addEventListener('mouseover', function(e) {
+  var group = e.target.closest('.nav-drawer-group');
+  if (group && _navDrawerCollapsed && window.innerWidth > 840) showNavFlyout_(group);
+});
+document.addEventListener('mouseout', function(e) {
+  var group = e.target.closest('.nav-drawer-group');
+  if (group && _navDrawerCollapsed) scheduleFlyoutHide_();
+});
+
+// Close panels on Escape key
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') {
+    closeNavDrawer();
     closeSidePanel();
+    hideNavTooltip_();
+    hideNavFlyout_();
     // Also close any confirmation dialogs
     var overlay = document.querySelector('.confirm-overlay');
     if (overlay) closeConfirmDialog(overlay);
@@ -194,6 +426,7 @@ function showView(viewId) {
   });
 
   var el = document.getElementById(viewId);
+  if (!el) return;
   el.classList.add('active');
 
   var oldOrder = VIEW_ORDER[oldId] != null ? VIEW_ORDER[oldId] : 0;
@@ -213,7 +446,7 @@ function showView(viewId) {
 
 // ─── Dashboard ───
 function showDashboard() {
-  switchDashboardTab('caseload');
+  switchDashboardTab('dashboard');
 }
 
 function loadDashboard() {
@@ -221,6 +454,7 @@ function loadDashboard() {
   // local optimistic state to avoid overwriting unsaved changes.
   if (Object.keys(_persistTimers).length > 0 || _persistInFlight > 0) {
     renderDashboard(appState.dashboardData);
+    renderRecentStudents();
     if (appState.evalSummary) renderEvalSummary(appState.evalSummary);
     return;
   }
@@ -231,6 +465,7 @@ function loadDashboard() {
       try {
         appState.dashboardData = data || [];
         renderDashboard(data);
+        renderRecentStudents();
       } catch(e) {
         document.getElementById('dashboard-table-container').innerHTML =
           renderErrorState(e.message || String(e));
@@ -246,21 +481,27 @@ function loadDashboard() {
 function switchDashboardTab(tabName) {
   // Ensure dashboard view is visible (handles clicks from child pages)
   showView('dashboard-view');
-  // Deactivate all tabs and panels
-  document.querySelectorAll('.nav-tab').forEach(function(t) { t.classList.remove('active'); });
+  // Deactivate all drawer child items and panels
+  document.querySelectorAll('.nav-drawer-child').forEach(function(t) { t.classList.remove('active'); });
+  document.querySelectorAll('.nav-drawer-items > .nav-drawer-item').forEach(function(t) { t.classList.remove('active'); });
   document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
-  // Activate selected
-  var tab = document.getElementById('tab-' + tabName);
-  var panel = document.getElementById('tab-panel-' + tabName);
-  if (tab) tab.classList.add('active');
+  // Activate selected (map 'dashboard' to 'caseload' panel — same content)
+  var panelName = (tabName === 'dashboard') ? 'caseload' : tabName;
+  var item = document.getElementById('drawer-' + tabName);
+  var panel = document.getElementById('tab-panel-' + panelName);
+  if (item) item.classList.add('active');
   if (panel) panel.classList.add('active');
   // Show/hide refresh button and add student button (not relevant for admin)
   var refreshBtn = document.getElementById('dashboard-refresh-btn');
   if (refreshBtn) refreshBtn.style.display = (tabName === 'admin') ? 'none' : '';
   var addStudentBtn = document.getElementById('add-student-btn');
   if (addStudentBtn) addStudentBtn.style.display = (tabName === 'admin') ? 'none' : '';
+  // Close mobile submenu and drawer
+  var openGroup = document.querySelector('.nav-drawer-group.submenu-open');
+  if (openGroup) openGroup.classList.remove('submenu-open');
+  closeNavDrawerIfMobile_();
   // Render tab content
-  if (tabName === 'caseload') {
+  if (tabName === 'caseload' || tabName === 'dashboard') {
     loadDashboard();
   } else if (tabName === 'mycaseload') {
     renderMyCaseload();
@@ -335,7 +576,12 @@ function renderDashboard(data) {
     var origIndex = data.indexOf(s);
     var delay = Math.min(index * 50, 400);
     html += '<tr class="stagger-row" style="animation-delay:' + delay + 'ms" onclick="openSidePanel(' + origIndex + ')" title="Click for quick view">';
-    html += '<td><strong>' + esc(s.firstName + ' ' + s.lastName) + '</strong></td>';
+    html += '<td><strong>' + esc(s.firstName + ' ' + s.lastName) + '</strong>';
+    if (s.evalType) {
+      var evalLabel = getEvalTypeLabel(s.evalType);
+      html += ' <span class="chip chip-clickable eval-badge" onclick="event.stopPropagation(); openEvalFromBadge(\'' + s.id + '\')" title="View ' + evalLabel + ' checklist">' + evalLabel + '</span>';
+    }
+    html += '</td>';
     html += '<td>' + esc(s.grade || '-') + '</td>';
 
     // EF Average
@@ -347,7 +593,7 @@ function renderDashboard(data) {
     }
 
     // Trend
-    var trendMap = { up: '&#9650; Up', down: '&#9660; Down', flat: '&#9654; Flat', none: '--' };
+    var trendMap = { up: '&#x25B2; Up', down: '&#x25BC; Down', flat: '&#x25B6; Flat', none: '--' };
     var trendClass = s.trend === 'up' ? 'trend-up' : s.trend === 'down' ? 'trend-down' : 'trend-flat';
     html += '<td><span class="' + trendClass + '">' + (trendMap[s.trend] || '--') + '</span></td>';
 
@@ -400,33 +646,24 @@ function loadEvalSummary() {
         appState.evalSummary = summary;
         renderEvalSummary(summary);
       } catch(e) {
-        var el = document.getElementById('eval-summary-strip');
-        if (el) el.style.display = 'none';
+        hideEvalSections_();
       }
     })
     .withFailureHandler(function() {
-      var el = document.getElementById('eval-summary-strip');
-      if (el) el.style.display = 'none';
+      hideEvalSections_();
     })
     .getEvalTaskSummary();
 }
 
-function renderEvalSummary(summary) {
-  var container = document.getElementById('eval-summary-strip');
-  if (!container) return;
+function hideEvalSections_() {
+  var a = document.getElementById('dashboard-at-a-glance');
+  var b = document.getElementById('dashboard-evals-section');
+  if (a) a.style.display = 'none';
+  if (b) b.style.display = 'none';
+}
 
-  var hasAnyData = summary.dueThisWeekCount > 0 || summary.overdueCount > 0 ||
-    summary.timeline.some(function(d) { return d.tasks.length > 0; });
-  if (!hasAnyData) {
-    container.style.display = 'none';
-    return;
-  }
-  container.style.display = '';
-
-  var html = '';
-
-  // ── Summary Cards ──
-  html += '<div class="eval-metric-cards">';
+function buildMetricCardsHtml_(summary) {
+  var html = '<div class="eval-metric-cards">';
 
   // Due This Week card
   html += '<div class="eval-metric-card">' +
@@ -456,9 +693,11 @@ function renderEvalSummary(summary) {
   '</div>';
 
   html += '</div>';
+  return html;
+}
 
-  // ── Timeline Strip ──
-  html += '<div class="eval-timeline-strip">';
+function buildTimelineHtml_(summary) {
+  var html = '<div class="eval-timeline-strip">';
   html += '<div class="eval-timeline-header">' +
     '<span class="eval-timeline-title">Next 7 Days</span>' +
   '</div>';
@@ -508,7 +747,7 @@ function renderEvalSummary(summary) {
       '</div>';
 
       expandedDay.tasks.forEach(function(task) {
-        var typeLabel = task.evalType === 'eval' ? 'Eval' : 'Re-eval';
+        var typeLabel = getEvalTypeLabel(task.evalType);
         html += '<div class="eval-timeline-task" onclick="navigateToEvalTask(\'' + esc(task.studentId) + '\')">' +
           '<span class="eval-timeline-task-dot"></span>' +
           '<div class="eval-timeline-task-info">' +
@@ -528,9 +767,147 @@ function renderEvalSummary(summary) {
   }
 
   html += '</div>';
+  return html;
+}
 
+function buildEvalCarouselHtml_(activeEvals) {
+  var html = '<div class="eval-cards-carousel">';
+  activeEvals.forEach(function(ev) {
+    var pct = ev.total > 0 ? Math.round(ev.done / ev.total * 100) : 0;
+    var alertClass = ev.overdueCount > 0 ? ' eval-carousel-card-alert' : '';
+    html += '<div class="eval-carousel-card' + alertClass + '" onclick="navigateToEvalTask(\'' + esc(ev.studentId) + '\')">' +
+      '<div class="eval-carousel-card-name">' + esc(ev.studentName) + '</div>' +
+      '<div class="eval-carousel-card-type">' + esc(getEvalTypeLabel(ev.type)) + '</div>' +
+      '<div class="eval-carousel-card-progress">' +
+        '<div class="eval-carousel-bar"><div class="eval-carousel-bar-fill" style="width:' + pct + '%"></div></div>' +
+        '<span class="eval-carousel-card-pct">' + ev.done + '/' + ev.total + '</span>' +
+      '</div>' +
+      (ev.overdueCount > 0 ? '<span class="eval-carousel-card-overdue">' + ev.overdueCount + ' overdue</span>' : '') +
+    '</div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+function renderEvalSummary(summary) {
+  var activeEvals = summary.activeEvals || [];
+
+  // ── At a Glance section: metric cards + timeline ──
+  var atAGlanceEl = document.getElementById('dashboard-at-a-glance');
+  var atAGlanceContent = document.getElementById('at-a-glance-content');
+  var hasMetrics = summary.dueThisWeekCount > 0 || summary.overdueCount > 0 ||
+    summary.timeline.some(function(d) { return d.tasks.length > 0; });
+
+  if (atAGlanceEl && atAGlanceContent) {
+    if (hasMetrics) {
+      atAGlanceEl.style.display = '';
+      atAGlanceContent.innerHTML = buildMetricCardsHtml_(summary) + buildTimelineHtml_(summary);
+      animateContentIn(atAGlanceContent);
+    } else {
+      atAGlanceEl.style.display = 'none';
+    }
+  }
+
+  // ── Evals section: individual eval cards carousel ──
+  var evalsEl = document.getElementById('dashboard-evals-section');
+  var evalsContent = document.getElementById('evals-section-content');
+  if (evalsEl && evalsContent) {
+    if (activeEvals.length > 0) {
+      evalsEl.style.display = '';
+      evalsContent.innerHTML = buildEvalCarouselHtml_(activeEvals);
+      animateContentIn(evalsContent);
+    } else {
+      evalsEl.style.display = 'none';
+    }
+  }
+}
+
+// ─── Recent Students ───
+function renderRecentStudents() {
+  var sectionEl = document.getElementById('dashboard-recent-section');
+  var container = document.getElementById('recent-students-content');
+  if (!sectionEl || !container) return;
+
+  var recentIds = appState.recentStudents || [];
+  if (recentIds.length === 0) {
+    sectionEl.style.display = 'none';
+    return;
+  }
+
+  // Resolve student data from dashboardData
+  var students = [];
+  recentIds.forEach(function(id) {
+    var s = getStudentById(id);
+    if (s) students.push(s);
+  });
+
+  if (students.length === 0) {
+    sectionEl.style.display = 'none';
+    return;
+  }
+
+  sectionEl.style.display = '';
+
+  var html = '<table class="dashboard-table recent-students-table"><thead><tr>' +
+    '<th>Name</th>' +
+    '<th>Case Manager</th>' +
+    '<th>Grade</th>' +
+    '<th>Actions</th>' +
+    '</tr></thead><tbody>';
+
+  students.forEach(function(s) {
+    var cmEmail = s.caseManagerEmail || '';
+    var cmName = cmEmail ? getCaseManagerName(cmEmail) : '--';
+
+    html += '<tr>';
+    html += '<td><strong>' + esc(s.firstName + ' ' + s.lastName) + '</strong></td>';
+    html += '<td>' + esc(cmName) + '</td>';
+    html += '<td>' + esc(s.grade || '--') + '</td>';
+    html += '<td><div class="action-btns">';
+
+    // Check-In button (black)
+    html += '<button class="action-btn" onclick="event.stopPropagation(); startCheckIn(\'' + s.id + '\')" title="Check-In">' +
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>' +
+    '</button>';
+
+    // Student Profile button (black)
+    html += '<button class="action-btn" onclick="event.stopPropagation(); showStudentProfile(\'' + s.id + '\')" title="Student Profile">' +
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>' +
+    '</button>';
+
+    // Contact Card button (black) - navigates to contacts section
+    html += '<button class="action-btn" onclick="event.stopPropagation(); navigateToContacts(\'' + s.id + '\')" title="View Contacts">' +
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M20 0H4v2h16V0zM4 24h16v-2H4v2zM20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-8 2.75c1.24 0 2.25 1.01 2.25 2.25s-1.01 2.25-2.25 2.25S9.75 10.24 9.75 9s1.01-2.25 2.25-2.25zM17 17H7v-1.5c0-1.67 3.33-2.5 5-2.5s5 .83 5 2.5V17z"/></svg>' +
+    '</button>';
+
+    html += '</div></td>';
+    html += '</tr>';
+  });
+
+  html += '</tbody></table>';
   container.innerHTML = html;
-  animateContentIn(container);
+}
+
+function navigateToContacts(studentId) {
+  showStudentProfile(studentId);
+  // Poll for the contacts card to appear (async data load)
+  var attempts = 0;
+  var scrollInterval = setInterval(function() {
+    var contactsCard = document.getElementById('profile-contacts-card');
+    attempts++;
+    if (contactsCard) {
+      clearInterval(scrollInterval);
+      setTimeout(function() {
+        contactsCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        contactsCard.classList.add('contacts-highlight');
+        setTimeout(function() {
+          contactsCard.classList.remove('contacts-highlight');
+        }, 2000);
+      }, 100);
+    } else if (attempts > 30) {
+      clearInterval(scrollInterval);
+    }
+  }, 100);
 }
 
 function toggleTimelineDay(dayIndex) {
@@ -563,6 +940,7 @@ function navigateToEvalTask(studentId) {
 function openSidePanel(index) {
   var s = appState.dashboardData[index];
   if (!s) return;
+  trackRecentStudent(s.id);
 
   document.getElementById('side-panel-title').textContent = s.firstName + ' ' + s.lastName;
 
@@ -1808,6 +2186,7 @@ function editStudent(studentId) {
 
 function showStudentProfile(studentId) {
   appState.currentStudentId = studentId;
+  trackRecentStudent(studentId);
   document.getElementById('student-view-breadcrumb').textContent = 'Student Profile';
   document.getElementById('student-view-title').innerHTML = '<span class="skeleton skeleton-title-inline"></span>';
   showStudentProfileSkeleton();
@@ -2043,15 +2422,16 @@ function renderStudentProfileDashboard(student) {
 
   html += '</div>'; // end .profile-academics-right
   html += '</div>'; // end .profile-academics-layout
+  html += '</div>'; // end .profile-section-card (Academics)
 
-  // Contacts Card (full-width, below academics grid)
+  // Contacts Card (full-width, below academics section)
   var contacts = student.contacts || [];
   if (!contacts.length && student.contactsJson) {
     try { contacts = JSON.parse(student.contactsJson); } catch(e) { contacts = []; }
   }
   html += '<div class="profile-contacts-card" id="profile-contacts-card">';
   html += '<div class="profile-contacts-header">';
-  html += '<span class="profile-stat-label" style="margin-bottom:0;">Contacts</span>';
+  html += '<span class="profile-section-title">Contacts</span>';
   html += '<button class="btn-icon btn-sm" onclick="addProfileContact(\'' + esc(student.id) + '\')" title="Add contact">' +
     '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>' +
   '</button>';
@@ -2065,7 +2445,6 @@ function renderStudentProfileDashboard(student) {
     });
   }
   html += '</div></div>';
-  html += '</div>'; // end .profile-section-card
 
   // ─── Section 2: Goals & Objectives ───
   html += '<div class="profile-section-card">';
@@ -2093,7 +2472,7 @@ function renderStudentProfileDashboard(student) {
   }
 
   html += '</div>';
-  html += '<button type="button" class="btn btn-sm btn-secondary" onclick="addGoal()" style="margin-top:8px;">+ Add Goal</button>';
+  html += '<button type="button" class="btn btn-sm btn-secondary profile-add-goal-btn" onclick="addGoal()">+ Add Goal</button>';
   html += '</div>';
 
   // ─── Section 3: Check-In History placeholder ───
@@ -2132,7 +2511,7 @@ function renderGoalItem(goal) {
       '</div>';
     });
   }
-  html += '<button type="button" class="btn-ghost btn-sm" onclick="addObjective(\'' + esc(goal.id) + '\')" style="margin-top:4px;">+ Add Objective</button>';
+  html += '<button type="button" class="btn-ghost btn-sm profile-add-objective-btn" onclick="addObjective(\'' + esc(goal.id) + '\')">+ Add Objective</button>';
   html += '</div>';
 
   html += '</div>';
@@ -2753,14 +3132,14 @@ function renderCheckInHistory(checkIns, student) {
   var section = document.getElementById('checkin-history-section');
   if (!section) return;
 
-  var html = '<div class="form-card" style="margin-top:20px;">' +
-    '<div class="form-section-title" style="display:flex;justify-content:space-between;align-items:center;">' +
-      '<span>Check-In History (' + checkIns.length + ')</span>' +
+  var html = '<div class="profile-section-card">' +
+    '<div class="profile-section-header">' +
+      '<span class="profile-section-title">Check-In History (' + checkIns.length + ')</span>' +
       '<button class="btn btn-sm btn-primary" onclick="startCheckIn(\'' + student.id + '\')">New Check-In</button>' +
     '</div>';
 
   if (checkIns.length === 0) {
-    html += '<p class="hint" style="margin-top:12px;">No check-ins recorded yet.</p>';
+    html += '<div class="profile-empty-state"><p>No check-ins recorded yet.</p></div>';
   } else {
     checkIns.forEach(function(ci) {
       var ratings = [
@@ -2793,8 +3172,8 @@ function renderCheckInHistory(checkIns, student) {
         html += '<div class="history-goal">Goal: ' + esc(ci.microGoal) + '</div>';
       }
 
-      html += '<div style="margin-top:8px;text-align:right;">' +
-        '<button class="action-btn danger" onclick="event.stopPropagation(); confirmDeleteCheckIn(\'' + ci.id + '\', \'' + student.id + '\')" title="Delete check-in">' +
+      html += '<div class="history-card-actions">' +
+        '<button class="btn-icon btn-sm" onclick="event.stopPropagation(); confirmDeleteCheckIn(\'' + ci.id + '\', \'' + student.id + '\')" title="Delete check-in">' +
           '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>' +
         '</button>' +
       '</div>';
@@ -2877,8 +3256,9 @@ function renderStudentMenu(studentId) {
   }
 
   // Eval checklist items (visibility toggled async by loadEvalCardState)
-  items += '<button class="dropdown-item" id="menu-create-eval" style="display:none" onclick="handleCreateEvalChecklist(\'eval\')">Create Eval Checklist</button>';
-  items += '<button class="dropdown-item" id="menu-create-reeval" style="display:none" onclick="handleCreateEvalChecklist(\'reeval\')">Create Re-eval Checklist</button>';
+  items += '<button class="dropdown-item" id="menu-create-annual-iep" style="display:none" onclick="handleCreateEvalChecklist(\'annual-iep\')">Create Annual IEP Checklist</button>';
+  items += '<button class="dropdown-item" id="menu-create-3-year-reeval" style="display:none" onclick="handleCreateEvalChecklist(\'3-year-reeval\')">Create 3 Year Re-Eval Checklist</button>';
+  items += '<button class="dropdown-item" id="menu-create-initial-eval" style="display:none" onclick="handleCreateEvalChecklist(\'initial-eval\')">Create Initial Eval Checklist</button>';
   items += '<button class="dropdown-item" id="menu-view-eval" style="display:none" onclick="handleViewEvalChecklist()">View Checklist</button>';
 
   container.innerHTML =
@@ -2966,15 +3346,15 @@ function printStudentReport() {
   var html = '<!DOCTYPE html><html><head><title>Report - ' + esc(name) + '</title>' +
     '<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">' +
     '<style>' +
-    'body { font-family: "Roboto", Arial, sans-serif; color: #201A1A; margin: 0; padding: 24px 32px; font-size: 13px; -webkit-font-smoothing: antialiased; }' +
+    'body { font-family: "Roboto", Arial, sans-serif; color: #1C1B1F; margin: 0; padding: 24px 32px; font-size: 13px; -webkit-font-smoothing: antialiased; }' +
     '.report-logo { text-align: center; margin-bottom: 16px; }' +
     '.report-logo img { height: 48px; }' +
     'h1 { font-size: 20px; margin: 0 0 4px; }' +
-    '.subtitle { color: #534343; font-size: 13px; margin-bottom: 20px; }' +
+    '.subtitle { color: #49454F; font-size: 13px; margin-bottom: 20px; }' +
     'h2 { font-size: 15px; font-weight: 500; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 2px solid #C41E3A; }' +
     'table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }' +
-    'th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid #D8C2C2; }' +
-    'th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #534343; background: #F9EAEA; font-weight: 500; }' +
+    'th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid #C8C8C8; }' +
+    'th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #49454F; background: #EEEEEE; font-weight: 500; }' +
     '.period-col { width: 60px; text-align: center; }' +
     '.grade-col { width: 60px; text-align: center; }' +
     '.missing-col { width: 80px; text-align: center; }' +
@@ -2990,10 +3370,10 @@ function printStudentReport() {
     '.type-tag { font-size: 11px; padding: 1px 6px; border-radius: 4px; }' +
     '.type-formative { background: #E3F2FD; color: #0D47A1; }' +
     '.type-summative { background: #FCE4EC; color: #880E4F; }' +
-    '.gpa-bar { padding: 8px 12px; background: #F9EAEA; border-radius: 8px; margin-bottom: 12px; display: flex; gap: 16px; align-items: center; }' +
-    '.gpa-bar .label { font-size: 12px; color: #534343; }' +
+    '.gpa-bar { padding: 8px 12px; background: #EEEEEE; border-radius: 8px; margin-bottom: 12px; display: flex; gap: 16px; align-items: center; }' +
+    '.gpa-bar .label { font-size: 12px; color: #49454F; }' +
     '.gpa-bar .value { font-size: 16px; font-weight: 600; }' +
-    '.footer { margin-top: 24px; font-size: 11px; color: #857373; text-align: center; }' +
+    '.footer { margin-top: 24px; font-size: 11px; color: #757575; text-align: center; }' +
     '@media print { body { padding: 12px 16px; } }' +
     '</style></head><body>';
 
@@ -3078,7 +3458,7 @@ function printStudentReport() {
     }
   } else {
     html += '<h2>Classes &amp; Grades</h2>';
-    html += '<p style="color:#534343;">No academic data from the latest check-in.</p>';
+    html += '<p style="color:#49454F;">No academic data from the latest check-in.</p>';
   }
 
   html += '<div class="footer">Richfield Public Schools</div>';
@@ -3172,9 +3552,9 @@ function saveFeedbackSetup() {
 
 function showInviteModal(invite, isNewUser) {
   var navbar = document.getElementById('navbar');
-  var tabBar = document.getElementById('tab-bar');
+  var navDrawer = document.getElementById('nav-drawer');
   if (navbar) navbar.style.display = '';
-  if (tabBar) tabBar.style.display = '';
+  if (navDrawer) navDrawer.style.display = '';
   showView('auth-loading'); // keep loading state visible behind the modal
   if (!isNewUser) showView('dashboard-view');
 
@@ -3244,9 +3624,10 @@ function declineInvite(isNewUser) {
 // ─── Co-Teacher Management View ───
 
 function showCoTeachers() {
-  document.querySelectorAll('.nav-tab').forEach(function(t) { t.classList.remove('active'); });
-  var teamTab = document.getElementById('tab-team');
-  if (teamTab) teamTab.classList.add('active');
+  document.querySelectorAll('.nav-drawer-item').forEach(function(t) { t.classList.remove('active'); });
+  var teamItem = document.getElementById('drawer-team');
+  if (teamItem) teamItem.classList.add('active');
+  closeNavDrawerIfMobile_();
   showView('coteacher-view');
   document.getElementById('coteacher-content-container').innerHTML =
     '<div class="skeleton-fade-in"><div class="form-card">' +
@@ -3432,8 +3813,8 @@ function refreshDashboard() {
         appState.dashboardData = data || [];
         renderDashboard(data);
         // Also refresh My Caseload if that tab is active
-        var mcTab = document.getElementById('tab-mycaseload');
-        if (mcTab && mcTab.classList.contains('active')) {
+        var mcItem = document.getElementById('drawer-mycaseload');
+        if (mcItem && mcItem.classList.contains('active')) {
           renderMyCaseload();
         }
         showToast('Dashboard refreshed');
@@ -3447,10 +3828,11 @@ function refreshDashboard() {
 
 // ─── Skeleton Loading Functions ───
 function showDashboardSkeleton() {
-  // Eval summary skeleton
-  var summaryContainer = document.getElementById('eval-summary-strip');
-  if (summaryContainer) {
-    summaryContainer.style.display = '';
+  // At a Glance skeleton
+  var atAGlanceEl = document.getElementById('dashboard-at-a-glance');
+  var atAGlanceContent = document.getElementById('at-a-glance-content');
+  if (atAGlanceEl && atAGlanceContent) {
+    atAGlanceEl.style.display = '';
     var skelHtml = '<div class="skeleton-fade-in">' +
       '<div class="eval-metric-cards">' +
         '<div class="eval-metric-card"><div class="skeleton" style="width:120px;height:40px;border-radius:8px;"></div></div>' +
@@ -3462,7 +3844,7 @@ function showDashboardSkeleton() {
       skelHtml += '<div class="skeleton" style="width:48px;height:64px;border-radius:12px;flex:1;"></div>';
     }
     skelHtml += '</div></div></div>';
-    summaryContainer.innerHTML = skelHtml;
+    atAGlanceContent.innerHTML = skelHtml;
   }
 
   // Dashboard table skeleton
@@ -3589,6 +3971,61 @@ function showCheckInSkeleton() {
     '<div class="skeleton skeleton-btn" style="width:110px;height:40px;"></div>' +
   '</div>';
   html += '</div></div>';
+  container.innerHTML = html;
+}
+
+function showEvalChecklistSkeleton() {
+  var container = document.getElementById('eval-checklist-content');
+  var html = '<div class="skeleton-fade-in">';
+  // Two-column layout matching eval checklist
+  html += '<div class="eval-checklist-layout">';
+  // Left column: main checklist
+  html += '<div class="eval-checklist-main">';
+  // Summary card skeleton
+  html += '<div class="eval-summary-card">' +
+    '<div class="eval-summary-left" style="flex:1;">' +
+      '<div class="skeleton skeleton-text w-30" style="height:20px;margin-bottom:8px;"></div>' +
+      '<div class="skeleton skeleton-text w-50" style="height:14px;margin-bottom:8px;"></div>' +
+      '<div class="skeleton" style="width:100%;height:6px;border-radius:var(--md-shape-full);"></div>' +
+    '</div>' +
+    '<div class="eval-summary-right">' +
+      '<div class="skeleton" style="width:48px;height:32px;border-radius:var(--md-shape-sm);margin:0 auto 4px;"></div>' +
+      '<div class="skeleton skeleton-text" style="width:48px;height:10px;margin:0 auto;"></div>' +
+    '</div>' +
+  '</div>';
+  // Items card skeleton
+  html += '<div class="eval-items-card">';
+  html += '<div class="eval-items-header">' +
+    '<span>Task</span>' +
+    '<span>Due Date</span>' +
+    '<span>Completed</span>' +
+    '<span style="text-align:right">Actions</span>' +
+  '</div>';
+  for (var i = 0; i < 6; i++) {
+    var w = i % 3 === 0 ? 'w-75' : (i % 3 === 1 ? 'w-50' : 'w-40');
+    html += '<div class="eval-item" style="border-left:none;">' +
+      '<div class="eval-item-task" style="gap:12px;">' +
+        '<div class="skeleton" style="width:20px;height:20px;border-radius:var(--md-shape-xs);flex-shrink:0;"></div>' +
+        '<div class="skeleton skeleton-text ' + w + '" style="margin:0;"></div>' +
+      '</div>' +
+      '<div class="eval-item-due"><div class="skeleton" style="width:80px;height:14px;border-radius:var(--md-shape-xs);"></div></div>' +
+      '<div class="eval-item-completed"><div class="skeleton skeleton-text" style="width:60px;height:12px;margin:0;"></div></div>' +
+      '<div class="eval-item-actions"><div class="skeleton" style="width:56px;height:24px;border-radius:var(--md-shape-xs);"></div></div>' +
+    '</div>';
+  }
+  html += '</div>';
+  html += '</div>'; // end .eval-checklist-main
+  // Right column: files sidebar skeleton
+  html += '<div class="eval-checklist-sidebar">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
+      '<div class="skeleton skeleton-text w-30" style="margin:0;height:16px;"></div>' +
+      '<div class="skeleton" style="width:28px;height:28px;border-radius:var(--md-shape-sm);"></div>' +
+    '</div>' +
+    '<div class="skeleton skeleton-text w-75" style="height:12px;"></div>' +
+    '<div class="skeleton skeleton-text w-50" style="height:12px;"></div>' +
+  '</div>';
+  html += '</div>'; // end .eval-checklist-layout
+  html += '</div>'; // end .skeleton-fade-in
   container.innerHTML = html;
 }
 
@@ -3951,7 +4388,12 @@ function renderMyCaseload() {
   myStudents.forEach(function(s) {
     var origIndex = appState.dashboardData.indexOf(s);
     html += '<tr onclick="openSidePanel(' + origIndex + ')" title="Click for quick view">';
-    html += '<td><strong>' + esc(s.firstName + ' ' + s.lastName) + '</strong></td>';
+    html += '<td><strong>' + esc(s.firstName + ' ' + s.lastName) + '</strong>';
+    if (s.evalType) {
+      var evalLabel = getEvalTypeLabel(s.evalType);
+      html += ' <span class="chip chip-clickable eval-badge" onclick="event.stopPropagation(); openEvalFromBadge(\'' + s.id + '\')" title="View ' + evalLabel + ' checklist">' + evalLabel + '</span>';
+    }
+    html += '</td>';
     html += '<td>' + esc(s.grade || '-') + '</td>';
 
     if (s.gpa != null) {
@@ -4173,9 +4615,6 @@ function loadEvalCardState(studentId) {
     .withSuccessHandler(function(evaluation) {
       var sectionEl = document.getElementById('profile-eval-section');
       var cardEl = document.getElementById('profile-eval-card');
-      var menuCreateEval = document.getElementById('menu-create-eval');
-      var menuCreateReeval = document.getElementById('menu-create-reeval');
-      var menuViewEval = document.getElementById('menu-view-eval');
 
       if (evaluation) {
         appState.currentEvaluation = evaluation;
@@ -4187,7 +4626,7 @@ function loadEvalCardState(studentId) {
           var items = evaluation.items || [];
           var remaining = items.filter(function(it) { return !it.checked; });
           var done = items.length - remaining.length;
-          var typeLabel = evaluation.type === 'eval' ? 'Eval Checklist' : 'Re-eval Checklist';
+          var typeLabel = getEvalTypeLabel(evaluation.type);
 
           // Compute overdue count
           var now = new Date();
@@ -4241,28 +4680,15 @@ function loadEvalCardState(studentId) {
           }
         }
 
-        // Update menu items
-        if (menuCreateEval) menuCreateEval.style.display = 'none';
-        if (menuCreateReeval) menuCreateReeval.style.display = 'none';
-        if (menuViewEval) menuViewEval.style.display = '';
+        setEvalMenuVisibility_(true);
       } else {
         appState.currentEvaluation = null;
-
-        // Hide eval section
         if (sectionEl) sectionEl.style.display = 'none';
-
-        // Show create menu items
-        if (menuCreateEval) menuCreateEval.style.display = '';
-        if (menuCreateReeval) menuCreateReeval.style.display = '';
-        if (menuViewEval) menuViewEval.style.display = 'none';
+        setEvalMenuVisibility_(false);
       }
     })
     .withFailureHandler(function() {
-      // On error, show create options in menu
-      var menuCreateEval = document.getElementById('menu-create-eval');
-      var menuCreateReeval = document.getElementById('menu-create-reeval');
-      if (menuCreateEval) menuCreateEval.style.display = '';
-      if (menuCreateReeval) menuCreateReeval.style.display = '';
+      setEvalMenuVisibility_(false);
     })
     .getEvaluation(studentId);
 }
@@ -4273,12 +4699,46 @@ function handleEvalCardClick(studentId) {
   }
 }
 
+function openEvalFromBadge(studentId) {
+  // Optimistic UI: navigate immediately and show skeleton
+  appState.currentStudentId = studentId;
+  var student = getStudentById(studentId);
+  var studentName = student ? (student.firstName + ' ' + student.lastName) : 'Student';
+  document.getElementById('eval-checklist-title').innerHTML = '<span class="skeleton skeleton-title-inline"></span>';
+  updateEvalBreadcrumb_('Eval Checklist');
+  document.getElementById('eval-checklist-actions').innerHTML = '';
+  showEvalChecklistSkeleton();
+  showView('eval-checklist-view');
+
+  google.script.run
+    .withSuccessHandler(function(evaluation) {
+      if (evaluation) {
+        appState.currentEvaluation = evaluation;
+        appState.evalChecklistStudentId = studentId;
+        var typeLabel = getEvalTypeLabel(evaluation.type);
+        updateEvalBreadcrumb_(typeLabel);
+        document.getElementById('eval-checklist-title').textContent = studentName;
+        document.getElementById('eval-checklist-actions').innerHTML =
+          '<a href="https://15.spedforms.org/students2020.php?login=1" target="_blank" class="btn btn-secondary">Open SpEdForms</a>';
+        renderEvalChecklist(evaluation);
+      } else {
+        showToast('No active evaluation found');
+        goBackFromEvalChecklist();
+      }
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error loading evaluation');
+      goBackFromEvalChecklist();
+    })
+    .getEvaluation(studentId);
+}
+
 function handleCreateEvalChecklist(type) {
   closeStudentMenu();
   var studentId = appState.currentStudentId;
   if (!studentId) return;
 
-  var typeLabel = type === 'eval' ? 'Eval' : 'Re-eval';
+  var typeLabel = getEvalTypeLabel(type);
   showConfirmDialog({
     title: 'Create ' + typeLabel + ' Checklist?',
     body: 'This will create a new <strong>' + typeLabel + ' Checklist</strong> for this student. Only one checklist can be active at a time.',
@@ -4328,14 +4788,14 @@ function showEvalChecklistView(studentId, evaluation) {
 
   var student = getStudentById(studentId);
   var studentName = student ? (student.firstName + ' ' + student.lastName) : 'Student';
-  var typeLabel = evaluation.type === 'eval' ? 'Eval Checklist' : 'Re-eval Checklist';
+  var typeLabel = getEvalTypeLabel(evaluation.type);
 
-  document.getElementById('eval-checklist-breadcrumb').innerHTML =
-    '<button class="breadcrumb-link" onclick="goBackFromEvalChecklist()">Student Profile</button> ' +
-    '<svg class="breadcrumb-chevron" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg> ' +
-    esc(typeLabel);
+  updateEvalBreadcrumb_(typeLabel);
 
   document.getElementById('eval-checklist-title').textContent = studentName;
+
+  document.getElementById('eval-checklist-actions').innerHTML =
+    '<a href="https://15.spedforms.org/students2020.php?login=1" target="_blank" class="btn btn-secondary">Open SpEdForms</a>';
 
   renderEvalChecklist(evaluation);
   showView('eval-checklist-view');
@@ -4410,7 +4870,7 @@ function renderEvalChecklist(evaluation) {
   var done = items.filter(function(it) { return it.checked; }).length;
   var total = items.length;
   var pct = total > 0 ? Math.round(done / total * 100) : 0;
-  var typeLabel = evaluation.type === 'eval' ? 'Eval Checklist' : 'Re-eval Checklist';
+  var now = new Date();
 
   var overdueCount = items.filter(function(it) {
     if (it.checked || !it.dueDate) return false;
@@ -4419,19 +4879,14 @@ function renderEvalChecklist(evaluation) {
 
   var html = '';
 
-  // SpEdForms button
-  html += '<div class="eval-spedforms-row">' +
-    '<a href="https://15.spedforms.org/students2020.php?login=1" target="_blank" class="btn btn-secondary">Open SpEdForms</a>' +
-  '</div>';
-
-  // Two-column layout
+  // Two-column layout: checklist (3/4) + files (1/4)
   html += '<div class="eval-checklist-layout">';
   html += '<div class="eval-checklist-main">';
 
   // Summary card
   html += '<div class="eval-summary-card">';
   html += '<div class="eval-summary-left">' +
-    '<div class="eval-summary-type">' + esc(typeLabel) + '</div>' +
+    '<div class="eval-summary-type">' + buildEvalTypeDropdown_(evaluation.id, evaluation.type) + '</div>' +
     '<div class="eval-summary-progress" id="eval-summary-progress">' + done + ' of ' + total + ' tasks completed' +
       (overdueCount > 0 ? ' <span class="eval-overdue-count" id="eval-overdue-count">' + overdueCount + ' overdue</span>' : '<span class="eval-overdue-count" id="eval-overdue-count" style="display:none"></span>') +
     '</div>' +
@@ -4575,6 +5030,20 @@ function goBackFromEvalChecklist() {
   if (appState.editingEvalItemId) exitEvalEditMode();
   resetEvalAutosave();
   showStudentProfile(appState.evalChecklistStudentId);
+}
+
+function updateEvalType(evalId, newType) {
+  if (!appState.currentEvaluation) return;
+  appState.currentEvaluation.type = newType;
+  updateEvalBreadcrumb_(getEvalTypeLabel(newType));
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (!result.success) showToast(result.error || 'Error updating type');
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error: ' + (err && err.message ? err.message : String(err)));
+    })
+    .updateEvaluationType(evalId, newType);
 }
 
 // ─── Collapsible Eval Section (profile) ───
@@ -5062,7 +5531,7 @@ function createRipple(target, clientX, clientY) {
   ripple.addEventListener('animationend', function() { ripple.remove(); });
 }
 document.addEventListener('click', function(e) {
-  var btn = e.target.closest('.btn, .btn-icon, .btn-ghost, .action-btn, .rating-btn, .nav-tab');
+  var btn = e.target.closest('.btn, .btn-icon, .btn-ghost, .action-btn, .rating-btn, .nav-drawer-item');
   if (btn) createRipple(btn, e.clientX, e.clientY);
 });
 </script>

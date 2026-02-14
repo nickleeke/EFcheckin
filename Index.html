@@ -7,42 +7,73 @@
 </head>
 <body>
 
-  <!-- Top App Bar (hidden until auth resolves) -->
-  <header id="navbar" class="top-app-bar" style="display:none">
-    <div class="top-app-bar-content">
-      <div class="nav-brand">
-        <img src="https://resources.finalsite.net/images/f_auto,q_auto/v1593114034/richfieldschoolsorg/jztydvqdo8o8hchpy6oy/MS_Horiz_W.png" alt="Richfield Public Schools Logo" class="nav-logo">
+  <div id="app-layout" class="app-layout">
+
+    <!-- Nav Drawer Scrim (mobile overlay) -->
+    <div id="nav-drawer-scrim" class="nav-drawer-scrim" onclick="closeNavDrawer()"></div>
+
+    <!-- MD3 Navigation Drawer (hidden until auth resolves) -->
+    <aside id="nav-drawer" class="nav-drawer" role="navigation" aria-label="Main navigation" style="display:none">
+      <div class="nav-drawer-header" onclick="showDashboard()" role="button" tabindex="0" aria-label="Go to dashboard" onkeydown="if(event.key==='Enter')showDashboard()">
+        <img src="https://resources.finalsite.net/images/f_auto,q_auto/v1593114034/richfieldschoolsorg/fbdgkdnvwf9nhuugg19c/MS_Stacked_C.png" alt="Richfield Public Schools Logo" class="nav-logo nav-logo-expanded">
+        <img src="https://resources.finalsite.net/images/f_auto,q_auto/v1595430487/richfieldschoolsorg/rfrcmvocatzil4spzjcp/Diamond-R_red-blackWeb_Socialfile.png" alt="Richfield R Logo" class="nav-logo nav-logo-collapsed">
       </div>
-    </div>
-  </header>
+      <nav class="nav-drawer-items">
+        <button class="nav-drawer-item active" id="drawer-dashboard" onclick="switchDashboardTab('dashboard')" data-tooltip="Dashboard">
+          <span class="nav-drawer-active-indicator"></span>
+          <svg class="nav-drawer-icon" viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+          <span class="nav-drawer-label">Dashboard</span>
+        </button>
+        <div class="nav-drawer-group" id="nav-group-students">
+          <div class="nav-drawer-item nav-drawer-parent" data-tooltip="Students">
+            <svg class="nav-drawer-icon" viewBox="0 0 24 24"><path d="M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3L1 9l11 6 9-4.91V17h2V9L12 3z"/></svg>
+            <span class="nav-drawer-label">Students</span>
+            <svg class="nav-drawer-expand-icon" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
+          </div>
+          <div class="nav-drawer-submenu">
+            <button class="nav-drawer-item nav-drawer-child" id="drawer-caseload" onclick="switchDashboardTab('caseload')" data-tooltip="All Students">
+              <span class="nav-drawer-active-indicator"></span>
+              <svg class="nav-drawer-icon nav-drawer-icon-child" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+              <span class="nav-drawer-label">All Students</span>
+            </button>
+            <button class="nav-drawer-item nav-drawer-child" id="drawer-mycaseload" onclick="switchDashboardTab('mycaseload')" style="display:none;" data-tooltip="My Caseload">
+              <span class="nav-drawer-active-indicator"></span>
+              <svg class="nav-drawer-icon nav-drawer-icon-child" viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13z"/></svg>
+              <span class="nav-drawer-label">My Caseload</span>
+            </button>
+          </div>
+        </div>
+        <button class="nav-drawer-item" id="drawer-admin" onclick="switchDashboardTab('admin')" style="display:none;" data-tooltip="Admin">
+          <span class="nav-drawer-active-indicator"></span>
+          <svg class="nav-drawer-icon" viewBox="0 0 24 24"><path d="M17 11c.34 0 .67.04 1 .09V6.27L10.5 3 3 6.27v4.91c0 4.54 3.2 8.79 7.5 9.82.55-.13 1.08-.32 1.6-.55-.69-.98-1.1-2.17-1.1-3.45 0-3.31 2.69-6 6-6z"/><path d="M17 13c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 1.38c.62 0 1.12.51 1.12 1.12s-.51 1.12-1.12 1.12-1.12-.51-1.12-1.12.5-1.12 1.12-1.12zm0 5.37c-.93 0-1.74-.46-2.24-1.17.05-.72 1.51-1.08 2.24-1.08s2.19.36 2.24 1.08c-.5.71-1.31 1.17-2.24 1.17z"/></svg>
+          <span class="nav-drawer-label">Admin</span>
+        </button>
+        <div class="nav-drawer-divider"></div>
+        <button class="nav-drawer-item" id="drawer-team" onclick="showCoTeachers()" data-tooltip="Team">
+          <span class="nav-drawer-active-indicator"></span>
+          <svg class="nav-drawer-icon" viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+          <span class="nav-drawer-label">Team</span>
+        </button>
+      </nav>
+      <!-- Collapse toggle (desktop only) -->
+      <button id="nav-collapse-btn" class="nav-collapse-btn" onclick="toggleNavDrawerCollapse()" aria-label="Collapse navigation">
+        <svg class="nav-collapse-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+      </button>
+    </aside>
 
-  <!-- MD3 Primary Tabs (separate from app bar) -->
-  <div id="tab-bar" class="tab-bar" style="display:none">
-    <div class="tab-bar-content">
-      <button class="nav-tab active" id="tab-caseload" onclick="switchDashboardTab('caseload')">
-        <svg class="nav-tab-icon" viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
-        <span class="nav-tab-label">Dashboard</span>
-        <span class="tab-indicator"></span>
-      </button>
-      <button class="nav-tab" id="tab-mycaseload" onclick="switchDashboardTab('mycaseload')" style="display:none;">
-        <svg class="nav-tab-icon" viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13zm-3 3c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zm4 8H6v-1c0-1.33 2.67-2 4-2s4 .67 4 2v1z"/></svg>
-        <span class="nav-tab-label">My Caseload</span>
-        <span class="tab-indicator"></span>
-      </button>
-      <button class="nav-tab" id="tab-admin" onclick="switchDashboardTab('admin')" style="display:none;">
-        <svg class="nav-tab-icon" viewBox="0 0 24 24"><path d="M17 11c.34 0 .67.04 1 .09V6.27L10.5 3 3 6.27v4.91c0 4.54 3.2 8.79 7.5 9.82.55-.13 1.08-.32 1.6-.55-.69-.98-1.1-2.17-1.1-3.45 0-3.31 2.69-6 6-6z"/><path d="M17 13c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 1.38c.62 0 1.12.51 1.12 1.12s-.51 1.12-1.12 1.12-1.12-.51-1.12-1.12.5-1.12 1.12-1.12zm0 5.37c-.93 0-1.74-.46-2.24-1.17.05-.72 1.51-1.08 2.24-1.08s2.19.36 2.24 1.08c-.5.71-1.31 1.17-2.24 1.17z"/></svg>
-        <span class="nav-tab-label">Admin</span>
-        <span class="tab-indicator"></span>
-      </button>
-      <button class="nav-tab" id="tab-team" onclick="showCoTeachers()">
-        <svg class="nav-tab-icon" viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
-        <span class="nav-tab-label">Team</span>
-        <span class="tab-indicator"></span>
-      </button>
-    </div>
-  </div>
+    <!-- App Content -->
+    <div class="app-content">
 
-  <main id="main-content">
+      <!-- Top App Bar (hidden until auth resolves) -->
+      <header id="navbar" class="top-app-bar" style="display:none">
+        <div class="top-app-bar-content">
+          <button id="nav-drawer-toggle" class="nav-drawer-toggle" onclick="toggleNavDrawer()" aria-label="Open navigation menu">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <main id="main-content">
 
     <!-- Auth Loading State (shown while getUserStatus is in flight) -->
     <div id="auth-loading" class="view active">
@@ -61,6 +92,7 @@
 
     <!-- Dashboard View -->
     <div id="dashboard-view" class="view">
+      <div id="dashboard-greeting" class="dashboard-greeting"></div>
       <div class="view-header" style="display:flex;justify-content:flex-end;align-items:center;gap:8px;">
         <button onclick="showAddStudent()" class="btn btn-primary btn-sm" id="add-student-btn">+ Add Student</button>
         <button onclick="refreshDashboard()" class="btn-icon" id="dashboard-refresh-btn" aria-label="Refresh dashboard" title="Refresh data">
@@ -68,7 +100,18 @@
         </button>
       </div>
       <div id="tab-panel-caseload" class="tab-panel active">
-        <div id="eval-summary-strip" style="display:none"></div>
+        <div id="dashboard-at-a-glance" class="dashboard-section" style="display:none">
+          <h2 class="dashboard-subheader">At a Glance</h2>
+          <div id="at-a-glance-content"></div>
+        </div>
+        <div id="dashboard-evals-section" class="dashboard-section" style="display:none">
+          <h2 class="dashboard-subheader">Evals</h2>
+          <div id="evals-section-content"></div>
+        </div>
+        <div id="dashboard-recent-section" class="dashboard-section" style="display:none">
+          <h2 class="dashboard-subheader">Recent Students</h2>
+          <div id="recent-students-content"></div>
+        </div>
         <div id="dashboard-table-container"></div>
       </div>
       <div id="tab-panel-mycaseload" class="tab-panel">
@@ -137,7 +180,10 @@
             Eval Checklist
           </span>
         </div>
-        <h1 id="eval-checklist-title" class="view-title">Eval Checklist</h1>
+        <div class="view-title-row">
+          <h1 id="eval-checklist-title" class="view-title">Eval Checklist</h1>
+          <div id="eval-checklist-actions"></div>
+        </div>
       </div>
       <div id="eval-checklist-content"></div>
     </div>
@@ -157,6 +203,9 @@
     </div>
 
   </main>
+
+    </div><!-- .app-content -->
+  </div><!-- .app-layout -->
 
   <!-- Side Panel Overlay -->
   <div id="side-panel-overlay" class="side-panel-overlay" onclick="closeSidePanel()"></div>

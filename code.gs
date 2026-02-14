@@ -185,6 +185,8 @@ var CHECKIN_HEADERS = [
 ];
 var COTEACHER_HEADERS = ['email', 'role', 'addedAt'];
 var EVALUATION_HEADERS = ['id', 'studentId', 'type', 'itemsJson', 'createdAt', 'updatedAt', 'filesJson'];
+var VALID_EVAL_TYPES = ['annual-iep', '3-year-reeval', 'initial-eval', 'eval', 'reeval'];
+var EVAL_INITIAL_TYPES_ = ['initial-eval', 'eval'];
 
 function initializeSheets() {
   const ss = getSS_();
@@ -530,6 +532,20 @@ function getDashboardData() {
   const ss = getSS_();
   const ciSheet = ss.getSheetByName(SHEET_CHECKINS);
 
+  // Build eval type lookup (studentId -> 'eval' or 'reeval')
+  const evalTypeMap = {};
+  const evalSheet = ss.getSheetByName(SHEET_EVALUATIONS);
+  if (evalSheet && evalSheet.getLastRow() > 1) {
+    const evalData = evalSheet.getDataRange().getValues();
+    const evalHeaders = evalData[0];
+    const evalColIdx = buildColIdx_(evalHeaders);
+    for (let i = 1; i < evalData.length; i++) {
+      const sid = evalData[i][evalColIdx['studentId'] - 1];
+      const etype = evalData[i][evalColIdx['type'] - 1];
+      if (sid) evalTypeMap[sid] = etype || 'eval';
+    }
+  }
+
   // Build all check-ins once
   const allCheckIns = [];
   if (ciSheet && ciSheet.getLastRow() > 1) {
@@ -619,7 +635,8 @@ function getDashboardData() {
       trend: trend,
       gpa: gpa,
       totalMissing: totalMissing,
-      academicData: academicData
+      academicData: academicData,
+      evalType: evalTypeMap[s.id] || null
     };
   });
 
@@ -713,6 +730,7 @@ function getEvalTaskSummary() {
 
   var overdueCount = 0;
   var dueThisWeekCount = 0;
+  var activeEvals = [];
 
   for (var i = 1; i < evalData.length; i++) {
     var studentId = evalData[i][evalColIdx['studentId'] - 1];
@@ -724,11 +742,15 @@ function getEvalTaskSummary() {
 
     var studentInfo = studentMap[studentId] || { firstName: 'Unknown', lastName: '' };
 
+    var evalDone = 0;
+    var evalOverdue = 0;
     items.forEach(function(item) {
-      if (item.checked || !item.dueDate) return;
+      if (item.checked) { evalDone++; return; }
+      if (!item.dueDate) return;
 
       if (item.dueDate < todayStr) {
         overdueCount++;
+        evalOverdue++;
         return;
       }
 
@@ -749,12 +771,23 @@ function getEvalTaskSummary() {
         }
       }
     });
+
+    activeEvals.push({
+      evalId: evalId,
+      studentId: studentId,
+      studentName: studentInfo.firstName + ' ' + studentInfo.lastName,
+      type: evalType,
+      done: evalDone,
+      total: items.length,
+      overdueCount: evalOverdue
+    });
   }
 
   var result = {
     dueThisWeekCount: dueThisWeekCount,
     overdueCount: overdueCount,
-    timeline: timelineDays
+    timeline: timelineDays,
+    activeEvals: activeEvals
   };
 
   setCache_('eval_summary', result);
@@ -1035,14 +1068,13 @@ function getEvaluation(studentId) {
 
 function createEvaluation(studentId, type) {
   initializeSheetsIfNeeded_();
-  if (type !== 'eval' && type !== 'reeval') {
+  if (VALID_EVAL_TYPES.indexOf(type) === -1) {
     return { success: false, error: 'Invalid evaluation type.' };
   }
 
   var existing = getEvaluation(studentId);
   if (existing) {
-    return { success: false, error: 'This student already has an active ' +
-      (existing.type === 'eval' ? 'Eval' : 'Re-eval') + ' checklist.' };
+    return { success: false, error: 'This student already has an active checklist.' };
   }
 
   var ss = getSS_();
@@ -1052,7 +1084,7 @@ function createEvaluation(studentId, type) {
     ensureHeaders_(sheet, EVALUATION_HEADERS);
   }
 
-  var items = type === 'eval' ? getEvalTemplateItems_() : getReEvalTemplateItems_();
+  var items = EVAL_INITIAL_TYPES_.indexOf(type) !== -1 ? getEvalTemplateItems_() : getReEvalTemplateItems_();
   var now = new Date().toISOString();
   var id = Utilities.getUuid();
 
@@ -1060,6 +1092,26 @@ function createEvaluation(studentId, type) {
   invalidateCache_();
 
   return { success: true, id: id, studentId: studentId, type: type, items: items, files: [] };
+}
+
+function updateEvaluationType(evalId, newType) {
+  if (VALID_EVAL_TYPES.indexOf(newType) === -1) {
+    return { success: false, error: 'Invalid evaluation type.' };
+  }
+  initializeSheetsIfNeeded_();
+  var ss = getSS_();
+  var sheet = ss.getSheetByName(SHEET_EVALUATIONS);
+  if (!sheet) return { success: false, error: 'Evaluations sheet not found.' };
+
+  var found = findRowById_(sheet, evalId);
+  if (!found) return { success: false, error: 'Evaluation not found.' };
+
+  batchSetValues_(sheet, found.rowIndex, found.colIdx, {
+    type: newType,
+    updatedAt: new Date().toISOString()
+  });
+  invalidateCache_();
+  return { success: true };
 }
 
 // ─── Primary items-save endpoint (replaces granular item CRUD) ───
