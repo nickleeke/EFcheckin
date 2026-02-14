@@ -257,11 +257,138 @@ function closeNavDrawerIfMobile_() {
   if (window.innerWidth < 840) closeNavDrawer();
 }
 
+// ─── Navigation Drawer Collapse (desktop) ───
+var _navDrawerCollapsed = false;
+var _tooltipEl = null;
+var _tooltipTimer = null;
+var _flyoutEl = null;
+var _flyoutHideTimer = null;
+
+// Restore collapse state from localStorage
+(function() {
+  try {
+    if (localStorage.getItem('navDrawerCollapsed') === 'true') {
+      _navDrawerCollapsed = true;
+      var drawer = document.getElementById('nav-drawer');
+      if (drawer) drawer.classList.add('collapsed');
+    }
+  } catch(e) { /* localStorage unavailable */ }
+})();
+
+function toggleNavDrawerCollapse() {
+  var drawer = document.getElementById('nav-drawer');
+  if (!drawer) return;
+  _navDrawerCollapsed = !_navDrawerCollapsed;
+  if (_navDrawerCollapsed) {
+    drawer.classList.add('collapsed');
+  } else {
+    drawer.classList.remove('collapsed');
+  }
+  hideNavTooltip_();
+  hideNavFlyout_();
+  var btn = document.getElementById('nav-collapse-btn');
+  if (btn) btn.setAttribute('aria-label', _navDrawerCollapsed ? 'Expand navigation' : 'Collapse navigation');
+  try { localStorage.setItem('navDrawerCollapsed', _navDrawerCollapsed); } catch(e) {}
+}
+
+// ─── Tooltips for collapsed nav items ───
+function showNavTooltip_(target) {
+  if (!_navDrawerCollapsed || window.innerWidth <= 840) return;
+  var text = target.getAttribute('data-tooltip');
+  if (!text) return;
+  hideNavTooltip_();
+  clearTimeout(_tooltipTimer);
+  _tooltipTimer = setTimeout(function() {
+    if (!_tooltipEl) {
+      _tooltipEl = document.createElement('div');
+      _tooltipEl.className = 'nav-drawer-tooltip';
+      document.body.appendChild(_tooltipEl);
+    }
+    _tooltipEl.textContent = text;
+    var rect = target.getBoundingClientRect();
+    _tooltipEl.style.left = (rect.right + 8) + 'px';
+    _tooltipEl.style.top = (rect.top + rect.height / 2 - 14) + 'px';
+    _tooltipEl.offsetHeight; // force reflow
+    _tooltipEl.classList.add('visible');
+  }, 400);
+}
+
+function hideNavTooltip_() {
+  clearTimeout(_tooltipTimer);
+  if (_tooltipEl) _tooltipEl.classList.remove('visible');
+}
+
+// Delegated hover events for tooltips
+document.addEventListener('mouseover', function(e) {
+  var item = e.target.closest('.nav-drawer-item[data-tooltip]');
+  if (item) showNavTooltip_(item);
+});
+document.addEventListener('mouseout', function(e) {
+  var item = e.target.closest('.nav-drawer-item[data-tooltip]');
+  if (item) hideNavTooltip_();
+});
+
+// ─── Flyout submenu for collapsed nav groups ───
+function showNavFlyout_(groupEl) {
+  if (!_navDrawerCollapsed || window.innerWidth <= 840) return;
+  clearTimeout(_flyoutHideTimer);
+  hideNavTooltip_();
+  var children = groupEl.querySelectorAll('.nav-drawer-child');
+  if (!children.length) return;
+  if (!_flyoutEl) {
+    _flyoutEl = document.createElement('div');
+    _flyoutEl.className = 'nav-drawer-flyout';
+    _flyoutEl.addEventListener('mouseenter', function() { clearTimeout(_flyoutHideTimer); });
+    _flyoutEl.addEventListener('mouseleave', function() { scheduleFlyoutHide_(); });
+    document.body.appendChild(_flyoutEl);
+  }
+  _flyoutEl.innerHTML = '';
+  children.forEach(function(child) {
+    if (child.style.display === 'none') return;
+    var btn = document.createElement('button');
+    btn.className = 'nav-drawer-flyout-item';
+    if (child.classList.contains('active')) btn.classList.add('active');
+    btn.textContent = child.getAttribute('data-tooltip') || child.querySelector('.nav-drawer-label').textContent;
+    btn.onclick = function() { child.click(); hideNavFlyout_(); };
+    _flyoutEl.appendChild(btn);
+  });
+  if (!_flyoutEl.children.length) return;
+  var parentItem = groupEl.querySelector('.nav-drawer-parent');
+  if (!parentItem) return;
+  var rect = parentItem.getBoundingClientRect();
+  _flyoutEl.style.left = (rect.right + 4) + 'px';
+  _flyoutEl.style.top = rect.top + 'px';
+  _flyoutEl.offsetHeight; // force reflow
+  _flyoutEl.classList.add('visible');
+}
+
+function hideNavFlyout_() {
+  clearTimeout(_flyoutHideTimer);
+  if (_flyoutEl) _flyoutEl.classList.remove('visible');
+}
+
+function scheduleFlyoutHide_() {
+  clearTimeout(_flyoutHideTimer);
+  _flyoutHideTimer = setTimeout(hideNavFlyout_, 200);
+}
+
+// Delegated hover for flyout
+document.addEventListener('mouseover', function(e) {
+  var group = e.target.closest('.nav-drawer-group');
+  if (group && _navDrawerCollapsed && window.innerWidth > 840) showNavFlyout_(group);
+});
+document.addEventListener('mouseout', function(e) {
+  var group = e.target.closest('.nav-drawer-group');
+  if (group && _navDrawerCollapsed) scheduleFlyoutHide_();
+});
+
 // Close panels on Escape key
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') {
     closeNavDrawer();
     closeSidePanel();
+    hideNavTooltip_();
+    hideNavFlyout_();
     // Also close any confirmation dialogs
     var overlay = document.querySelector('.confirm-overlay');
     if (overlay) closeConfirmDialog(overlay);
