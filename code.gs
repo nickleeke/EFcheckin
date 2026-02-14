@@ -1057,10 +1057,42 @@ function createEvaluation(studentId, type) {
   var id = Utilities.getUuid();
 
   sheet.appendRow([id, studentId, type, JSON.stringify(items), now, now, JSON.stringify([])]);
+  invalidateCache_();
 
   return { success: true, id: id, studentId: studentId, type: type, items: items, files: [] };
 }
 
+// ─── Primary items-save endpoint (replaces granular item CRUD) ───
+
+function saveEvaluationItems(evalId, items) {
+  initializeSheetsIfNeeded_();
+  var ss = getSS_();
+  var sheet = ss.getSheetByName(SHEET_EVALUATIONS);
+  if (!sheet) return { success: false, error: 'Evaluations sheet not found.' };
+
+  var found = findRowById_(sheet, evalId);
+  if (!found) return { success: false, error: 'Evaluation not found.' };
+
+  var sanitized = (items || []).map(function(item) {
+    return {
+      id: String(item.id || ''),
+      text: String(item.text || '').trim(),
+      checked: !!item.checked,
+      completedAt: item.completedAt || null,
+      dueDate: item.dueDate || null
+    };
+  });
+
+  batchSetValues_(sheet, found.rowIndex, found.colIdx, {
+    itemsJson: JSON.stringify(sanitized),
+    updatedAt: new Date().toISOString()
+  });
+  invalidateCache_();
+
+  return { success: true, items: sanitized };
+}
+
+// Deprecated: use saveEvaluationItems instead
 function updateEvaluationItem(evalId, itemId, updates) {
   // Backward compat: old callers pass a boolean for checked
   if (typeof updates === 'boolean') {
@@ -1117,12 +1149,14 @@ function deleteEvaluation(evalId) {
   for (var i = data.length - 1; i >= 1; i--) {
     if (data[i][0] === evalId) {
       sheet.deleteRow(i + 1);
+      invalidateCache_();
       return { success: true };
     }
   }
   return { success: false };
 }
 
+// Deprecated: use saveEvaluationItems instead
 function addEvaluationItem(evalId, itemData) {
   initializeSheetsIfNeeded_();
   var ss = getSS_();
@@ -1156,6 +1190,7 @@ function addEvaluationItem(evalId, itemData) {
   return { success: true, items: items, newItem: newItem };
 }
 
+// Deprecated: use saveEvaluationItems instead
 function deleteEvaluationItem(evalId, itemId) {
   initializeSheetsIfNeeded_();
   var ss = getSS_();

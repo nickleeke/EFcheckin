@@ -2270,7 +2270,9 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   .profile-academics-right { flex-direction: row; flex-wrap: wrap; gap: 12px; }
   .eval-checklist-layout { grid-template-columns: 1fr; }
   .eval-checklist-sidebar { position: static; }
-  .eval-item-meta { flex-wrap: wrap; }
+  .eval-items-header { display: none; }
+  .eval-item { grid-template-columns: 1fr; gap: 4px; }
+  .eval-item-actions { justify-content: flex-start; }
   .profile-stat-card { flex: 1; }
   .profile-contact-item { max-width: none; }
   .pst-col-grade { width: 64px; }
@@ -3164,10 +3166,27 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   overflow: hidden;
   margin-bottom: 16px;
 }
+/* ─── Eval Items Column Layout ─── */
+.eval-items-header {
+  display: grid;
+  grid-template-columns: 1fr 130px 100px 88px;
+  gap: 8px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--md-outline-variant);
+  background: var(--md-surface-container-lowest);
+}
+.eval-items-header > span {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--md-on-surface-variant);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
 .eval-item {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 130px 100px 88px;
+  gap: 8px;
   align-items: center;
-  justify-content: space-between;
   padding: 14px 20px;
   border-bottom: 1px solid var(--md-outline-variant);
   transition: background var(--md-duration-short3) var(--md-easing-standard);
@@ -3184,13 +3203,53 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .eval-item-checked:hover {
   background: rgba(0, 128, 0, 0.07);
 }
+.eval-item-editing {
+  background: var(--md-surface-container-low);
+  border-left: 3px solid var(--md-primary);
+  padding-left: 17px;
+}
+.eval-item-task {
+  min-width: 0;
+}
 .eval-item-label {
   display: flex;
   align-items: center;
   gap: 12px;
   cursor: pointer;
-  flex: 1;
   min-width: 0;
+}
+.eval-item-due {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.eval-due-text {
+  font-size: 12px;
+  color: var(--md-on-surface-variant);
+  white-space: nowrap;
+}
+.eval-item-completed {
+  font-size: 12px;
+  color: var(--md-on-surface-variant);
+  white-space: nowrap;
+}
+.eval-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  justify-content: flex-end;
+}
+.eval-item-delete-btn {
+  color: var(--md-error);
+}
+.eval-edit-done-btn {
+  color: var(--md-primary);
+}
+.eval-autosave-row {
+  display: flex;
+  justify-content: flex-end;
+  padding: 4px 24px;
+  min-height: 20px;
 }
 .eval-item-checkbox {
   appearance: none;
@@ -3224,7 +3283,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   font-size: 14px;
   color: var(--md-on-surface);
   line-height: 20px;
-  cursor: text;
 }
 .eval-item-checked .eval-item-text {
   text-decoration: line-through;
@@ -3234,8 +3292,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   font-size: 12px;
   color: var(--md-on-surface-variant);
   white-space: nowrap;
-  margin-left: 12px;
-  flex-shrink: 0;
 }
 .eval-actions {
   margin-top: 16px;
@@ -3340,14 +3396,10 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   padding: 4px 8px;
   outline: none;
   background: var(--md-surface);
-  flex: 1;
+  width: 100%;
   min-width: 0;
-}
-.eval-item-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
+  appearance: none;
+  -webkit-appearance: none;
 }
 .eval-item-due-date {
   font-size: 12px;
@@ -3359,7 +3411,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   background: var(--md-surface);
   cursor: pointer;
   transition: border-color var(--md-duration-short3) var(--md-easing-standard);
-  width: 130px;
+  width: 120px;
   appearance: none;
   -webkit-appearance: none;
 }
@@ -3369,14 +3421,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 }
 .eval-item-due-date::-webkit-calendar-picker-indicator {
   cursor: pointer;
-}
-.eval-item-delete {
-  opacity: 0;
-  transition: opacity var(--md-duration-short3) var(--md-easing-standard);
-  color: var(--md-error);
-}
-.eval-item:hover .eval-item-delete {
-  opacity: 1;
 }
 
 /* ─── Overdue Badges ─── */
