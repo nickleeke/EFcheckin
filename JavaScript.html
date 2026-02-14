@@ -3917,6 +3917,26 @@ function showDashboardSkeleton() {
     atAGlanceContent.innerHTML = skelHtml;
   }
 
+  // Evals carousel skeleton
+  var evalsEl = document.getElementById('dashboard-evals-section');
+  var evalsContent = document.getElementById('evals-section-content');
+  if (evalsEl && evalsContent) {
+    evalsEl.style.display = '';
+    var evalsSkelHtml = '<div class="skeleton-fade-in"><div class="eval-cards-carousel">';
+    for (var c = 0; c < 4; c++) {
+      evalsSkelHtml += '<div class="eval-carousel-card" style="pointer-events:none;">' +
+        '<div class="skeleton" style="width:75%;height:16px;border-radius:4px;margin-bottom:6px;"></div>' +
+        '<div class="skeleton" style="width:50%;height:12px;border-radius:4px;margin-bottom:12px;"></div>' +
+        '<div style="display:flex;align-items:center;gap:8px;">' +
+          '<div class="skeleton" style="flex:1;height:4px;border-radius:4px;"></div>' +
+          '<div class="skeleton" style="width:32px;height:12px;border-radius:4px;"></div>' +
+        '</div>' +
+      '</div>';
+    }
+    evalsSkelHtml += '</div></div>';
+    evalsContent.innerHTML = evalsSkelHtml;
+  }
+
   // Dashboard table skeleton
   var container = document.getElementById('dashboard-table-container');
   var html = '<div class="skeleton-fade-in"><table class="skeleton-table"><thead><tr>' +
