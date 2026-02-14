@@ -184,7 +184,7 @@ var CHECKIN_HEADERS = [
   'teacherNotes','academicDataJson','createdAt'
 ];
 var COTEACHER_HEADERS = ['email', 'role', 'addedAt'];
-var EVALUATION_HEADERS = ['id', 'studentId', 'type', 'itemsJson', 'createdAt', 'updatedAt', 'filesJson'];
+var EVALUATION_HEADERS = ['id', 'studentId', 'type', 'itemsJson', 'createdAt', 'updatedAt', 'filesJson', 'meetingDate'];
 var VALID_EVAL_TYPES = ['annual-iep', '3-year-reeval', 'initial-eval', 'eval', 'reeval'];
 var EVAL_INITIAL_TYPES_ = ['initial-eval', 'eval'];
 
@@ -1088,10 +1088,27 @@ function createEvaluation(studentId, type) {
   var now = new Date().toISOString();
   var id = Utilities.getUuid();
 
-  sheet.appendRow([id, studentId, type, JSON.stringify(items), now, now, JSON.stringify([])]);
+  sheet.appendRow([id, studentId, type, JSON.stringify(items), now, now, JSON.stringify([]), '']);
   invalidateCache_();
 
-  return { success: true, id: id, studentId: studentId, type: type, items: items, files: [] };
+  return { success: true, id: id, studentId: studentId, type: type, items: items, files: [], meetingDate: '' };
+}
+
+function updateEvalMeetingDate(evalId, meetingDate) {
+  initializeSheetsIfNeeded_();
+  var ss = getSS_();
+  var sheet = ss.getSheetByName(SHEET_EVALUATIONS);
+  if (!sheet) return { success: false, error: 'Evaluations sheet not found.' };
+
+  var found = findRowById_(sheet, evalId);
+  if (!found) return { success: false, error: 'Evaluation not found.' };
+
+  batchSetValues_(sheet, found.rowIndex, found.colIdx, {
+    meetingDate: meetingDate || '',
+    updatedAt: new Date().toISOString()
+  });
+  invalidateCache_();
+  return { success: true };
 }
 
 function updateEvaluationType(evalId, newType) {
