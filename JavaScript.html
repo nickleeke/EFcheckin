@@ -3983,15 +3983,17 @@ function showEvalChecklistSkeleton() {
   html += '<div class="eval-checklist-main">';
   // Summary card skeleton
   html += '<div class="eval-summary-card">' +
-    '<div class="eval-summary-left" style="flex:1;">' +
-      '<div class="skeleton skeleton-text w-30" style="height:20px;margin-bottom:8px;"></div>' +
-      '<div class="skeleton skeleton-text w-50" style="height:14px;margin-bottom:8px;"></div>' +
-      '<div class="skeleton" style="width:100%;height:6px;border-radius:var(--md-shape-full);"></div>' +
+    '<div class="eval-summary-top">' +
+      '<div class="eval-summary-left" style="flex:1;">' +
+        '<div class="skeleton skeleton-text w-30" style="height:20px;margin-bottom:8px;"></div>' +
+        '<div class="skeleton skeleton-text w-50" style="height:14px;"></div>' +
+      '</div>' +
+      '<div class="eval-summary-right">' +
+        '<div class="skeleton" style="width:48px;height:32px;border-radius:var(--md-shape-sm);"></div>' +
+        '<div class="skeleton skeleton-text" style="width:48px;height:10px;"></div>' +
+      '</div>' +
     '</div>' +
-    '<div class="eval-summary-right">' +
-      '<div class="skeleton" style="width:48px;height:32px;border-radius:var(--md-shape-sm);margin:0 auto 4px;"></div>' +
-      '<div class="skeleton skeleton-text" style="width:48px;height:10px;margin:0 auto;"></div>' +
-    '</div>' +
+    '<div class="skeleton" style="width:100%;height:8px;border-radius:var(--md-shape-full);"></div>' +
   '</div>';
   // Items card skeleton
   html += '<div class="eval-items-card">';
@@ -4830,6 +4832,7 @@ function buildEvalItemRow(evalId, item) {
 
   // Due Date column
   html += '<div class="eval-item-due">';
+  html += '<span class="eval-item-mobile-label">Due Date</span>';
   if (isEditing) {
     html += '<input type="date" class="eval-item-due-date" id="eval-edit-due-' + esc(item.id) + '" value="' + esc(item.dueDate || '') + '">';
   } else if (isOverdue) {
@@ -4841,6 +4844,7 @@ function buildEvalItemRow(evalId, item) {
 
   // Completed column
   html += '<div class="eval-item-completed">' +
+    '<span class="eval-item-mobile-label">Completed</span>' +
     (completedDate ? '<span class="eval-item-date">' + esc(completedDate) + '</span>' : '') +
   '</div>';
 
@@ -4885,36 +4889,70 @@ function renderEvalChecklist(evaluation) {
 
   // Summary card
   html += '<div class="eval-summary-card">';
+  html += '<div class="eval-summary-top">';
   html += '<div class="eval-summary-left">' +
     '<div class="eval-summary-type">' + buildEvalTypeDropdown_(evaluation.id, evaluation.type) + '</div>' +
     '<div class="eval-summary-progress" id="eval-summary-progress">' + done + ' of ' + total + ' tasks completed' +
       (overdueCount > 0 ? ' <span class="eval-overdue-count" id="eval-overdue-count">' + overdueCount + ' overdue</span>' : '<span class="eval-overdue-count" id="eval-overdue-count" style="display:none"></span>') +
     '</div>' +
-    '<div class="eval-progress-bar"><div class="eval-progress-fill" id="eval-progress-fill" style="width:' + pct + '%"></div></div>' +
   '</div>';
   html += '<div class="eval-summary-right">' +
-    '<div class="eval-summary-percent" id="eval-summary-percent">' + pct + '%</div>' +
+    '<span class="eval-summary-percent" id="eval-summary-percent">' + pct + '%</span>' +
     '<span class="eval-summary-pct-label">complete</span>' +
   '</div>';
-  html += '</div>';
-  html += '<div class="eval-autosave-row"><span id="eval-autosave-status"></span></div>';
+  html += '</div>'; // end .eval-summary-top
+  html += '<div class="eval-progress-bar"><div class="eval-progress-fill" id="eval-progress-fill" style="width:' + pct + '%"></div></div>';
+  html += '<div class="eval-summary-footer"><span id="eval-autosave-status"></span></div>';
+  html += '</div>'; // end .eval-summary-card
 
-  // Column headers + items
+  // Column headers + items (split incomplete/completed)
+  var incompleteItems = items.filter(function(it) { return !it.checked; });
+  var completedItems = items.filter(function(it) { return it.checked; });
+
   html += '<div class="eval-items-card">';
+  html += '<div id="eval-items-list">';
   html += '<div class="eval-items-header">' +
     '<span>Task</span>' +
     '<span>Due Date</span>' +
     '<span>Completed</span>' +
     '<span style="text-align:right">Actions</span>' +
   '</div>';
-  items.forEach(function(item) {
+
+  if (incompleteItems.length === 0 && completedItems.length > 0) {
+    html += '<div class="eval-all-complete">' +
+      '<div class="eval-all-complete-icon">&#x2705;</div>' +
+      '<div class="eval-all-complete-text">All tasks completed!</div>' +
+    '</div>';
+  }
+
+  incompleteItems.forEach(function(item) {
     html += buildEvalItemRow(evaluation.id, item);
   });
-  html += '</div>';
 
-  // Add Task row
-  html += '<div class="eval-add-task-row">' +
-    '<button class="btn btn-secondary btn-sm" onclick="showAddEvalTaskForm(\'' + esc(evaluation.id) + '\')">+ Add Task</button>' +
+  if (completedItems.length > 0 && incompleteItems.length > 0) {
+    var defaultCollapsed = (completedItems.length / total) > 0.5;
+    html += '<div class="eval-completed-divider" onclick="toggleCompletedSection()" id="eval-completed-divider">' +
+      '<svg class="eval-completed-divider-icon' + (defaultCollapsed ? ' collapsed' : '') + '" id="eval-completed-chevron" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>' +
+      '<span class="eval-completed-divider-text">' + completedItems.length + ' completed</span>' +
+    '</div>';
+    html += '<div class="eval-completed-items' + (defaultCollapsed ? ' collapsed' : '') + '" id="eval-completed-items">';
+  }
+
+  completedItems.forEach(function(item) {
+    html += buildEvalItemRow(evaluation.id, item);
+  });
+
+  if (completedItems.length > 0 && incompleteItems.length > 0) {
+    html += '</div>'; // end .eval-completed-items
+  }
+  html += '</div>'; // end #eval-items-list
+
+  // Add Task (inside the items card)
+  html += '<div class="eval-add-task-row" id="eval-add-task-row">' +
+    '<button class="btn btn-ghost btn-sm" onclick="showAddEvalTaskForm(\'' + esc(evaluation.id) + '\')">' +
+      '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="margin-right:4px"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>' +
+      'Add Task' +
+    '</button>' +
   '</div>';
   html += '<div class="eval-add-task-form" id="eval-add-task-form" style="display:none;">' +
     '<input type="text" class="eval-add-task-input" id="eval-add-task-input" placeholder="Task description..." onkeydown="if(event.key===\'Enter\'){event.preventDefault();confirmAddEvalTask(\'' + esc(evaluation.id) + '\');}">' +
@@ -4923,9 +4961,7 @@ function renderEvalChecklist(evaluation) {
     '<button class="btn btn-ghost btn-sm" onclick="hideAddEvalTaskForm()">Cancel</button>' +
   '</div>';
 
-  html += '<div class="eval-actions">' +
-    '<button class="btn btn-danger btn-sm" onclick="confirmDeleteEvaluation(\'' + esc(evaluation.id) + '\')">Delete Checklist</button>' +
-  '</div>';
+  html += '</div>'; // end .eval-items-card
 
   html += '</div>'; // end .eval-checklist-main
 
@@ -4949,8 +4985,8 @@ function toggleEvalItem(evalId, itemId, checked) {
     });
   }
 
-  // Targeted DOM update for the toggled row
-  rerenderEvalItem(itemId);
+  // Rebuild items card to move item between sections
+  rebuildEvalItemsCard(evalId);
   updateEvalProgress();
   scheduleEvalAutosave();
 }
@@ -5054,6 +5090,65 @@ function toggleEvalSectionCollapse() {
   if (!body) return;
   var isCollapsed = body.classList.toggle('collapsed');
   if (btn) btn.classList.toggle('rotated', isCollapsed);
+}
+
+// ─── Completed Items Section ───
+
+function toggleCompletedSection() {
+  var items = document.getElementById('eval-completed-items');
+  var chevron = document.getElementById('eval-completed-chevron');
+  if (!items) return;
+  items.classList.toggle('collapsed');
+  if (chevron) chevron.classList.toggle('collapsed');
+}
+
+function rebuildEvalItemsCard(evalId) {
+  var eval_ = appState.currentEvaluation;
+  if (!eval_ || !eval_.items) return;
+  var listEl = document.getElementById('eval-items-list');
+  if (!listEl) return;
+
+  var items = eval_.items;
+  var incompleteItems = items.filter(function(it) { return !it.checked; });
+  var completedItems = items.filter(function(it) { return it.checked; });
+  var total = items.length;
+
+  var html = '<div class="eval-items-header">' +
+    '<span>Task</span><span>Due Date</span><span>Completed</span><span style="text-align:right">Actions</span>' +
+  '</div>';
+
+  if (incompleteItems.length === 0 && completedItems.length > 0) {
+    html += '<div class="eval-all-complete">' +
+      '<div class="eval-all-complete-icon">&#x2705;</div>' +
+      '<div class="eval-all-complete-text">All tasks completed!</div>' +
+    '</div>';
+  }
+
+  incompleteItems.forEach(function(item) {
+    html += buildEvalItemRow(evalId, item);
+  });
+
+  if (completedItems.length > 0 && incompleteItems.length > 0) {
+    var wasCollapsed = false;
+    var prevEl = document.getElementById('eval-completed-items');
+    if (prevEl) wasCollapsed = prevEl.classList.contains('collapsed');
+
+    html += '<div class="eval-completed-divider" onclick="toggleCompletedSection()" id="eval-completed-divider">' +
+      '<svg class="eval-completed-divider-icon' + (wasCollapsed ? ' collapsed' : '') + '" id="eval-completed-chevron" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>' +
+      '<span class="eval-completed-divider-text">' + completedItems.length + ' completed</span>' +
+    '</div>';
+    html += '<div class="eval-completed-items' + (wasCollapsed ? ' collapsed' : '') + '" id="eval-completed-items">';
+  }
+
+  completedItems.forEach(function(item) {
+    html += buildEvalItemRow(evalId, item);
+  });
+
+  if (completedItems.length > 0 && incompleteItems.length > 0) {
+    html += '</div>';
+  }
+
+  listEl.innerHTML = html;
 }
 
 // ─── Eval Edit Mode ───
@@ -5183,15 +5278,13 @@ function deleteEvalItemHandler(evalId, itemId) {
 function doDeleteEvalItem(evalId, itemId) {
   if (appState.editingEvalItemId === itemId) appState.editingEvalItemId = null;
 
-  // Remove DOM row
-  var el = document.querySelector('.eval-item[data-item-id="' + itemId + '"]');
-  if (el) el.remove();
-
   // Update local state
   if (appState.currentEvaluation) {
     appState.currentEvaluation.items = appState.currentEvaluation.items.filter(function(it) { return it.id !== itemId; });
   }
 
+  // Rebuild items card to update completed divider count
+  rebuildEvalItemsCard(evalId);
   updateEvalProgress();
   scheduleEvalAutosave();
 }
@@ -5199,6 +5292,8 @@ function doDeleteEvalItem(evalId, itemId) {
 // ─── Add Task Form ───
 
 function showAddEvalTaskForm(evalId) {
+  var row = document.getElementById('eval-add-task-row');
+  if (row) row.style.display = 'none';
   var form = document.getElementById('eval-add-task-form');
   if (form) form.style.display = '';
   var input = document.getElementById('eval-add-task-input');
@@ -5210,6 +5305,8 @@ function showAddEvalTaskForm(evalId) {
 function hideAddEvalTaskForm() {
   var form = document.getElementById('eval-add-task-form');
   if (form) form.style.display = 'none';
+  var row = document.getElementById('eval-add-task-row');
+  if (row) row.style.display = '';
 }
 
 function confirmAddEvalTask(evalId) {
@@ -5232,14 +5329,8 @@ function confirmAddEvalTask(evalId) {
     appState.currentEvaluation.items.push(newItem);
   }
 
-  // Append row to DOM
-  var itemsCard = document.querySelector('.eval-items-card');
-  if (itemsCard) {
-    var temp = document.createElement('div');
-    temp.innerHTML = buildEvalItemRow(evalId, newItem);
-    itemsCard.appendChild(temp.firstChild);
-  }
-
+  // Rebuild items card to show new item in correct section
+  rebuildEvalItemsCard(evalId);
   updateEvalProgress();
   hideAddEvalTaskForm();
   scheduleEvalAutosave();
@@ -5284,13 +5375,17 @@ function renderEvalFilesCard(evaluation) {
   var files = evaluation.files || [];
   var html = '<div class="eval-files-header">' +
     '<span class="eval-files-title">Files</span>' +
-    '<button class="btn-icon btn-sm" onclick="openDrivePicker(\'' + esc(evaluation.id) + '\')" title="Add file from Drive">' +
-      '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 14h-3v3h-2v-3H8v-2h3v-3h2v3h3v2zm-3-7V3.5L18.5 9H13z"/></svg>' +
+    '<button class="btn btn-ghost btn-sm" onclick="openDrivePicker(\'' + esc(evaluation.id) + '\')" title="Add file from Drive">' +
+      '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="margin-right:4px"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 14h-3v3h-2v-3H8v-2h3v-3h2v3h3v2zm-3-7V3.5L18.5 9H13z"/></svg>' +
+      'Add' +
     '</button>' +
   '</div>';
 
   if (files.length === 0) {
-    html += '<div class="eval-files-empty">No files attached</div>';
+    html += '<div class="eval-files-empty">' +
+      '<svg class="eval-files-empty-icon" width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>' +
+      '<span>No files attached yet</span>' +
+    '</div>';
   } else {
     html += '<div class="eval-files-list">';
     files.forEach(function(file) {
@@ -5308,7 +5403,7 @@ function renderEvalFilesCard(evaluation) {
   }
 
   // Add file by URL fallback section
-  html += '<div style="margin-top:12px; border-top:1px solid var(--md-outline-variant); padding-top:12px;">' +
+  html += '<div class="eval-files-url-section">' +
     '<button class="btn btn-ghost btn-sm" onclick="toggleEvalFileUrlForm(\'' + esc(evaluation.id) + '\')" style="width:100%;justify-content:center;">' +
       '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg>' +
       ' Add by URL' +
@@ -5318,6 +5413,14 @@ function renderEvalFilesCard(evaluation) {
       '<input type="text" class="eval-file-name-input" id="eval-file-name-input" placeholder="File name...">' +
       '<button class="btn btn-primary btn-sm" onclick="confirmAddEvalFileByUrl(\'' + esc(evaluation.id) + '\')">Add</button>' +
     '</div>' +
+  '</div>';
+
+  // Delete checklist (subtle placement in sidebar)
+  html += '<div class="eval-sidebar-delete">' +
+    '<button class="btn btn-ghost btn-sm" onclick="confirmDeleteEvaluation(\'' + esc(evaluation.id) + '\')">' +
+      '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="margin-right:4px"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>' +
+      'Delete Checklist' +
+    '</button>' +
   '</div>';
 
   container.innerHTML = html;
