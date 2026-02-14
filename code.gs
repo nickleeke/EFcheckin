@@ -731,6 +731,8 @@ function getEvalTaskSummary() {
   var overdueCount = 0;
   var dueThisWeekCount = 0;
   var activeEvals = [];
+  var overdueTasks = [];
+  var dueThisWeekTasks = [];
 
   for (var i = 1; i < evalData.length; i++) {
     var studentId = evalData[i][evalColIdx['studentId'] - 1];
@@ -741,6 +743,7 @@ function getEvalTaskSummary() {
     try { items = JSON.parse(itemsRaw || '[]'); } catch(e) { items = []; }
 
     var studentInfo = studentMap[studentId] || { firstName: 'Unknown', lastName: '' };
+    var studentFullName = studentInfo.firstName + ' ' + studentInfo.lastName;
 
     var evalDone = 0;
     var evalOverdue = 0;
@@ -751,11 +754,29 @@ function getEvalTaskSummary() {
       if (item.dueDate < todayStr) {
         overdueCount++;
         evalOverdue++;
+        overdueTasks.push({
+          itemId: item.id,
+          text: item.text,
+          dueDate: item.dueDate,
+          studentId: studentId,
+          evalId: evalId,
+          studentName: studentFullName,
+          evalType: evalType
+        });
         return;
       }
 
       if (item.dueDate >= todayStr && item.dueDate <= endDateStr) {
         dueThisWeekCount++;
+        dueThisWeekTasks.push({
+          itemId: item.id,
+          text: item.text,
+          dueDate: item.dueDate,
+          studentId: studentId,
+          evalId: evalId,
+          studentName: studentFullName,
+          evalType: evalType
+        });
         for (var t = 0; t < timelineDays.length; t++) {
           if (timelineDays[t].date === item.dueDate) {
             timelineDays[t].tasks.push({
@@ -763,7 +784,7 @@ function getEvalTaskSummary() {
               text: item.text,
               studentId: studentId,
               evalId: evalId,
-              studentName: studentInfo.firstName + ' ' + studentInfo.lastName,
+              studentName: studentFullName,
               evalType: evalType
             });
             break;
@@ -775,7 +796,7 @@ function getEvalTaskSummary() {
     activeEvals.push({
       evalId: evalId,
       studentId: studentId,
-      studentName: studentInfo.firstName + ' ' + studentInfo.lastName,
+      studentName: studentFullName,
       type: evalType,
       done: evalDone,
       total: items.length,
@@ -783,11 +804,18 @@ function getEvalTaskSummary() {
     });
   }
 
+  // Sort overdue by date ascending (oldest first)
+  overdueTasks.sort(function(a, b) { return a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0; });
+  // Sort due this week by date ascending
+  dueThisWeekTasks.sort(function(a, b) { return a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0; });
+
   var result = {
     dueThisWeekCount: dueThisWeekCount,
     overdueCount: overdueCount,
     timeline: timelineDays,
-    activeEvals: activeEvals
+    activeEvals: activeEvals,
+    overdueTasks: overdueTasks,
+    dueThisWeekTasks: dueThisWeekTasks
   };
 
   setCache_('eval_summary', result);
