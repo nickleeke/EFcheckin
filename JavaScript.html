@@ -666,7 +666,7 @@ function buildMetricCardsHtml_(summary) {
   // Due This Week card
   html += '<div class="eval-metric-card">' +
     '<div class="eval-metric-icon">' +
-      '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">' +
+      '<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">' +
         '<path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM9 10H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2z"/>' +
       '</svg>' +
     '</div>' +
@@ -680,7 +680,7 @@ function buildMetricCardsHtml_(summary) {
   var overdueClass = summary.overdueCount > 0 ? ' eval-metric-card-alert' : '';
   html += '<div class="eval-metric-card' + overdueClass + '">' +
     '<div class="eval-metric-icon' + (summary.overdueCount > 0 ? ' eval-metric-icon-alert' : '') + '">' +
-      '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">' +
+      '<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">' +
         '<path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>' +
       '</svg>' +
     '</div>' +
@@ -920,18 +920,85 @@ function toggleTimelineDay(dayIndex) {
 }
 
 function navigateToEvalTask(studentId) {
+  // Optimistic UI: show eval checklist view with skeleton immediately
+  var student = getStudentById(studentId);
+  var studentName = student ? (student.firstName + ' ' + student.lastName) : 'Student';
+
+  updateEvalBreadcrumb_('Eval');
+  var titleEl = document.getElementById('eval-checklist-title');
+  if (titleEl) titleEl.textContent = studentName;
+  var actionsEl = document.getElementById('eval-checklist-actions');
+  if (actionsEl) actionsEl.innerHTML = '';
+  var contentEl = document.getElementById('eval-checklist-content');
+  if (contentEl) contentEl.innerHTML = buildEvalChecklistSkeleton_();
+
+  showView('eval-checklist-view');
+
   google.script.run
     .withSuccessHandler(function(evaluation) {
       if (evaluation) {
         showEvalChecklistView(studentId, evaluation);
       } else {
         showToast('No active evaluation found for this student.');
+        goBackFromEvalChecklist();
       }
     })
     .withFailureHandler(function(err) {
       showToast('Error loading evaluation: ' + (err && err.message ? err.message : String(err)));
+      goBackFromEvalChecklist();
     })
     .getEvaluation(studentId);
+}
+
+function buildEvalChecklistSkeleton_() {
+  var html = '<div class="skeleton-fade-in"><div class="eval-checklist-layout"><div class="eval-checklist-main">';
+
+  // Summary card skeleton
+  html += '<div class="eval-summary-card">' +
+    '<div class="eval-summary-top">' +
+      '<div class="eval-summary-left">' +
+        '<div class="skeleton" style="width:140px;height:20px;border-radius:6px;margin-bottom:8px;"></div>' +
+        '<div class="skeleton" style="width:200px;height:14px;border-radius:4px;"></div>' +
+      '</div>' +
+      '<div class="eval-summary-right">' +
+        '<div class="skeleton" style="width:48px;height:36px;border-radius:8px;"></div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="eval-progress-bar"><div class="skeleton" style="width:100%;height:100%;border-radius:inherit;"></div></div>' +
+  '</div>';
+
+  // Column header skeleton
+  html += '<div class="eval-items-card"><div class="eval-items-header">' +
+    '<span>Task</span><span>Due Date</span><span>Completed</span><span>Actions</span>' +
+  '</div>';
+
+  // Item row skeletons
+  for (var i = 0; i < 6; i++) {
+    var w = (i % 3 === 0) ? '70%' : (i % 3 === 1) ? '55%' : '85%';
+    html += '<div class="eval-item" style="pointer-events:none;">' +
+      '<div class="eval-item-task"><label class="eval-item-label">' +
+        '<div class="skeleton" style="width:16px;height:16px;border-radius:3px;flex-shrink:0;"></div>' +
+        '<div class="skeleton" style="width:' + w + ';height:16px;border-radius:4px;margin-left:10px;"></div>' +
+      '</label></div>' +
+      '<div class="eval-item-due"><div class="skeleton" style="width:80px;height:16px;border-radius:4px;"></div></div>' +
+      '<div class="eval-item-completed"><div class="skeleton" style="width:60px;height:16px;border-radius:4px;"></div></div>' +
+      '<div class="eval-item-actions"><div class="skeleton" style="width:24px;height:24px;border-radius:4px;"></div></div>' +
+    '</div>';
+  }
+
+  html += '</div></div>';
+
+  // Files sidebar skeleton
+  html += '<div class="eval-checklist-sidebar">' +
+    '<div class="eval-files-card">' +
+      '<div class="skeleton" style="width:80px;height:18px;border-radius:4px;margin-bottom:12px;"></div>' +
+      '<div class="skeleton" style="width:100%;height:36px;border-radius:8px;margin-bottom:8px;"></div>' +
+      '<div class="skeleton" style="width:100%;height:36px;border-radius:8px;"></div>' +
+    '</div>' +
+  '</div>';
+
+  html += '</div></div>';
+  return html;
 }
 
 // ─── Side Panel (Quick View on Double-Click) ───
