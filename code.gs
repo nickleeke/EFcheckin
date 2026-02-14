@@ -1286,15 +1286,62 @@ function deleteEvaluationItem(evalId, itemId) {
   return { success: true, items: items };
 }
 
-// ───── Drive Picker & Eval Files ─────
+// ───── Drive File Browser & Eval Files ─────
 
-/** Trigger Drive scope for the Picker API — never called, but ensures the scope is added. */
+/** Trigger Drive scope — never called, but ensures the scope is added. */
 function triggerDriveScope_() { DriveApp.getRootFolder(); }
 
-function getDrivePickerConfig() {
-  return {
-    token: ScriptApp.getOAuthToken()
-  };
+/**
+ * Search the user's Google Drive for files matching a query string.
+ * Returns up to 20 results with id, name, mimeType, url, and iconUrl.
+ */
+function searchDriveFiles(query) {
+  var results = [];
+  var maxResults = 20;
+  try {
+    // Use Drive Advanced Service (v2) for ordering support
+    var params = {
+      maxResults: maxResults,
+      orderBy: 'modifiedDate desc',
+      q: 'trashed = false'
+    };
+    if (query && query.trim()) {
+      params.q = 'title contains \'' + query.replace(/'/g, "\\'") + '\' and trashed = false';
+    }
+    var resp = Drive.Files.list(params);
+    var items = resp.items || [];
+    for (var i = 0; i < items.length; i++) {
+      var f = items[i];
+      results.push({
+        id: f.id,
+        name: f.title,
+        mimeType: f.mimeType,
+        url: f.alternateLink || ''
+      });
+    }
+  } catch (e) {
+    // Fallback to DriveApp if Advanced Service not enabled
+    try {
+      var files;
+      if (query && query.trim()) {
+        files = DriveApp.searchFiles('title contains \'' + query.replace(/'/g, "\\'") + '\' and trashed = false');
+      } else {
+        files = DriveApp.searchFiles('trashed = false');
+      }
+      while (files.hasNext() && results.length < maxResults) {
+        var file = files.next();
+        results.push({
+          id: file.getId(),
+          name: file.getName(),
+          mimeType: file.getMimeType(),
+          url: file.getUrl()
+        });
+      }
+    } catch (e2) {
+      Logger.log('searchDriveFiles fallback error: ' + e2.message);
+    }
+  }
+  return results;
 }
 
 function addEvalFile(evalId, fileData) {

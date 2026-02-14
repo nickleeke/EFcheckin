@@ -19,8 +19,6 @@ var appState = {
   isSuperuser: false,
   evalChecklistStudentId: null,
   currentEvaluation: null,
-  drivePickerLoaded: false,
-  drivePickerConfig: null,
   evalSummary: null,
   timelineExpandedDay: null,
   editingEvalItemId: null,
@@ -4006,7 +4004,7 @@ function showEvalChecklistSkeleton() {
     '<span>Task</span>' +
     '<span>Due Date</span>' +
     '<span>Completed</span>' +
-    '<span style="text-align:right">Actions</span>' +
+    '<span>Actions</span>' +
   '</div>';
   for (var i = 0; i < 6; i++) {
     var w = i % 3 === 0 ? 'w-75' : (i % 3 === 1 ? 'w-50' : 'w-40');
@@ -4887,7 +4885,13 @@ function buildEvalItemRow(evalId, item) {
   var html = '<div class="' + classes + '" data-item-id="' + esc(item.id) + '">';
 
   // Task column
-  html += '<div class="eval-item-task"><label class="eval-item-label">' +
+  html += '<div class="eval-item-task">';
+  if (isOverdue) {
+    html += '<span class="eval-overdue-icon" title="Overdue">' +
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>' +
+    '</span>';
+  }
+  html += '<label class="eval-item-label">' +
     '<input type="checkbox" class="eval-item-checkbox"' + (item.checked ? ' checked' : '') +
       ' onchange="toggleEvalItem(\'' + esc(evalId) + '\', \'' + esc(item.id) + '\', this.checked)">';
   if (isEditing) {
@@ -4903,10 +4907,8 @@ function buildEvalItemRow(evalId, item) {
   html += '<span class="eval-item-mobile-label">Due Date</span>';
   if (isEditing) {
     html += '<input type="date" class="eval-item-due-date" id="eval-edit-due-' + esc(item.id) + '" value="' + esc(item.dueDate || '') + '">';
-  } else if (isOverdue) {
-    html += '<span class="eval-overdue-badge">Overdue</span> <span class="eval-due-text">' + esc(formatDateDisplay(item.dueDate)) + '</span>';
   } else if (item.dueDate) {
-    html += '<span class="eval-due-text">' + esc(formatDateDisplay(item.dueDate)) + '</span>';
+    html += '<span class="eval-due-text' + (isOverdue ? ' eval-due-text-overdue' : '') + '">' + esc(formatDateDisplay(item.dueDate)) + '</span>';
   }
   html += '</div>';
 
@@ -4990,7 +4992,7 @@ function renderEvalChecklist(evaluation) {
     '<span>Task</span>' +
     '<span>Due Date</span>' +
     '<span>Completed</span>' +
-    '<span style="text-align:right">Actions</span>' +
+    '<span>Actions</span>' +
   '</div>';
 
   if (incompleteItems.length === 0 && completedItems.length > 0) {
@@ -5189,7 +5191,7 @@ function rebuildEvalItemsCard(evalId) {
   var total = items.length;
 
   var html = '<div class="eval-items-header">' +
-    '<span>Task</span><span>Due Date</span><span>Completed</span><span style="text-align:right">Actions</span>' +
+    '<span>Task</span><span>Due Date</span><span>Completed</span><span>Actions</span>' +
   '</div>';
 
   if (incompleteItems.length === 0 && completedItems.length > 0) {
@@ -5555,62 +5557,131 @@ function confirmAddEvalFileByUrl(evalId) {
   if (form) form.style.display = 'none';
 }
 
-function loadDrivePickerApi(callback) {
-  if (appState.drivePickerLoaded) { callback(); return; }
-
-  var script = document.createElement('script');
-  script.src = 'https://apis.google.com/js/api.js';
-  script.onload = function() {
-    gapi.load('picker', function() {
-      appState.drivePickerLoaded = true;
-      callback();
-    });
-  };
-  script.onerror = function() {
-    showToast('Could not load Drive picker. Use "Add by URL" instead.');
-  };
-  document.head.appendChild(script);
+function openDrivePicker(evalId) {
+  showDriveFileBrowser_(evalId);
 }
 
-function openDrivePicker(evalId) {
-  // Always fetch a fresh token (tokens expire after ~1 hour)
+function showDriveFileBrowser_(evalId) {
+  // Remove existing modal if present
+  var existing = document.getElementById('drive-browser-overlay');
+  if (existing) existing.remove();
+
+  var overlay = document.createElement('div');
+  overlay.id = 'drive-browser-overlay';
+  overlay.className = 'confirm-overlay';
+  overlay.onclick = function(e) { if (e.target === overlay) closeDriveFileBrowser_(); };
+
+  var modal = document.createElement('div');
+  modal.className = 'confirm-dialog drive-browser-dialog';
+  modal.onclick = function(e) { e.stopPropagation(); };
+
+  modal.innerHTML =
+    '<div class="drive-browser-header">' +
+      '<h3 class="drive-browser-title">Add file from Drive</h3>' +
+      '<button class="btn-icon btn-sm" onclick="closeDriveFileBrowser_()" aria-label="Close">' +
+        '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>' +
+      '</button>' +
+    '</div>' +
+    '<div class="drive-browser-search">' +
+      '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" class="drive-browser-search-icon"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>' +
+      '<input type="text" id="drive-browser-search-input" class="drive-browser-search-input" placeholder="Search your Drive files..." autofocus>' +
+    '</div>' +
+    '<div id="drive-browser-results" class="drive-browser-results">' +
+      '<div class="drive-browser-loading">Searching your Drive...</div>' +
+    '</div>';
+
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+
+  // Store evalId for selection handler
+  overlay.dataset.evalId = evalId;
+
+  // Load initial results (recent files)
+  performDriveSearch_('');
+
+  // Wire up search input with debounce
+  var searchInput = document.getElementById('drive-browser-search-input');
+  var searchTimer = null;
+  if (searchInput) {
+    searchInput.addEventListener('input', function() {
+      clearTimeout(searchTimer);
+      var q = searchInput.value;
+      searchTimer = setTimeout(function() { performDriveSearch_(q); }, 400);
+    });
+    searchInput.focus();
+  }
+}
+
+function performDriveSearch_(query) {
+  var resultsEl = document.getElementById('drive-browser-results');
+  if (!resultsEl) return;
+  resultsEl.innerHTML = '<div class="drive-browser-loading">Searching...</div>';
+
   google.script.run
-    .withSuccessHandler(function(config) {
-      appState.drivePickerConfig = config;
-      loadDrivePickerApi(function() { showPicker_(evalId, config); });
+    .withSuccessHandler(function(files) {
+      renderDriveSearchResults_(files || []);
     })
     .withFailureHandler(function(err) {
-      showToast('Error loading file picker: ' + (err && err.message ? err.message : String(err)));
+      if (resultsEl) {
+        resultsEl.innerHTML = '<div class="drive-browser-empty">Error searching Drive: ' + esc(err && err.message ? err.message : String(err)) + '</div>';
+      }
     })
-    .getDrivePickerConfig();
+    .searchDriveFiles(query);
 }
 
-function showPicker_(evalId, config) {
-  try {
-    var docsView = new google.picker.DocsView()
-      .setIncludeFolders(true);
+// Holds search results for safe selection by index
+var _driveSearchResults = [];
 
-    var picker = new google.picker.PickerBuilder()
-      .addView(docsView)
-      .addView(google.picker.ViewId.RECENTLY_PICKED)
-      .setOAuthToken(config.token)
-      .setCallback(function(data) {
-        if (data.action === google.picker.Action.PICKED) {
-          var doc = data.docs[0];
-          var fileData = {
-            driveFileId: doc.id,
-            name: doc.name,
-            mimeType: doc.mimeType,
-            url: doc.url
-          };
-          addEvalFileHandler(evalId, fileData);
-        }
-      })
-      .build();
-    picker.setVisible(true);
-  } catch(e) {
-    showToast('Drive picker failed to open. Use "Add by URL" instead.');
+function renderDriveSearchResults_(files) {
+  var resultsEl = document.getElementById('drive-browser-results');
+  if (!resultsEl) return;
+
+  _driveSearchResults = files;
+
+  if (files.length === 0) {
+    resultsEl.innerHTML = '<div class="drive-browser-empty">No files found</div>';
+    return;
   }
+
+  var html = '';
+  files.forEach(function(file, idx) {
+    html += '<button class="drive-browser-item" data-idx="' + idx + '">' +
+      '<span class="drive-browser-item-icon">' + getFileTypeIcon(file.mimeType) + '</span>' +
+      '<span class="drive-browser-item-name">' + esc(file.name) + '</span>' +
+    '</button>';
+  });
+  resultsEl.innerHTML = html;
+
+  // Delegated click handler — avoids inline onclick escaping issues
+  resultsEl.onclick = function(e) {
+    var btn = e.target.closest('.drive-browser-item');
+    if (!btn) return;
+    var idx = parseInt(btn.dataset.idx, 10);
+    var file = _driveSearchResults[idx];
+    if (!file) return;
+    selectDriveFile_(file);
+  };
+}
+
+function selectDriveFile_(file) {
+  var overlay = document.getElementById('drive-browser-overlay');
+  var evalId = overlay ? overlay.dataset.evalId : '';
+  if (!evalId) return;
+
+  var fileData = {
+    driveFileId: file.id,
+    name: file.name,
+    mimeType: file.mimeType,
+    url: file.url
+  };
+
+  closeDriveFileBrowser_();
+  addEvalFileHandler(evalId, fileData);
+}
+
+function closeDriveFileBrowser_() {
+  var overlay = document.getElementById('drive-browser-overlay');
+  if (overlay) closeConfirmDialog(overlay);
 }
 
 function addEvalFileHandler(evalId, fileData) {

@@ -738,7 +738,8 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   margin: 0;
   padding-left: 44px; /* align with breadcrumb text (40px icon + 4px gap) */
 }
-#student-view .view-title {
+#student-view .view-title,
+#eval-checklist-view .view-title {
   padding-left: 0;
 }
 .view-title-row {
@@ -2703,7 +2704,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   .eval-items-header { display: none; }
   .eval-item { grid-template-columns: 1fr; gap: 8px; }
   .eval-item-mobile-label { display: block; }
-  .eval-item-actions { justify-content: flex-start; }
   .eval-item-due,
   .eval-item-completed { flex-direction: column; align-items: flex-start; }
   .profile-stat-card { flex: 1; }
@@ -3815,6 +3815,9 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   box-shadow: inset 3px 0 0 0 var(--md-primary);
 }
 .eval-item-task {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
 }
 .eval-item-label {
@@ -3828,22 +3831,26 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   display: flex;
   align-items: center;
   gap: 6px;
+  overflow: hidden;
 }
 .eval-due-text {
   font-size: 12px;
   color: var(--md-on-surface-variant);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .eval-item-completed {
   font-size: 12px;
   color: var(--md-on-surface-variant);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .eval-item-actions {
   display: flex;
   align-items: center;
   gap: 2px;
-  justify-content: flex-end;
 }
 .eval-item-delete-btn {
   color: var(--md-error);
@@ -3889,6 +3896,9 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   font-size: 14px;
   color: var(--md-on-surface);
   line-height: 20px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .eval-item-checked .eval-item-text {
   text-decoration: line-through;
@@ -4061,6 +4071,100 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   background: rgba(186, 26, 26, 0.08);
 }
 
+/* ─── Drive File Browser Modal ─── */
+.drive-browser-dialog {
+  width: 480px;
+  max-width: 90vw;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+.drive-browser-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 16px 12px;
+}
+.drive-browser-dialog h3.drive-browser-title {
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--md-on-surface);
+  margin: 0;
+}
+.drive-browser-search {
+  position: relative;
+  padding: 0 16px 12px;
+}
+.drive-browser-search-icon {
+  position: absolute;
+  left: 28px;
+  top: 50%;
+  transform: translateY(calc(-50% - 6px));
+  color: var(--md-on-surface-variant);
+  pointer-events: none;
+}
+.drive-browser-search-input {
+  width: 100%;
+  padding: 10px 12px 10px 40px;
+  font-size: 14px;
+  font-family: 'Roboto', sans-serif;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-sm);
+  background: var(--md-surface);
+  color: var(--md-on-surface);
+  outline: none;
+  transition: border-color var(--md-duration-short3) var(--md-easing-standard);
+  box-sizing: border-box;
+}
+.drive-browser-search-input:focus {
+  border-color: var(--md-primary);
+}
+.drive-browser-results {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 8px 8px;
+  min-height: 200px;
+  max-height: 400px;
+}
+.drive-browser-loading,
+.drive-browser-empty {
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--md-on-surface-variant);
+  font-size: 14px;
+}
+.drive-browser-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  background: none;
+  border-radius: var(--md-shape-sm);
+  cursor: pointer;
+  text-align: left;
+  color: var(--md-on-surface);
+  font-size: 14px;
+  font-family: 'Roboto', sans-serif;
+  transition: background var(--md-duration-short3) var(--md-easing-standard);
+}
+.drive-browser-item:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+.drive-browser-item-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+.drive-browser-item-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
 /* ─── Editable Eval Items ─── */
 .eval-item-edit-input {
   font-size: 14px;
@@ -4098,30 +4202,21 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   cursor: pointer;
 }
 
-/* ─── Overdue Badges ─── */
-.eval-overdue-badge {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--md-on-error-container);
-  background: var(--md-error-container);
-  padding: 2px 8px;
-  border-radius: var(--md-shape-full);
-  white-space: nowrap;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.eval-overdue-badge::before {
-  content: '';
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  background: currentColor;
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z'/%3E%3C/svg%3E") no-repeat center;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z'/%3E%3C/svg%3E") no-repeat center;
-  -webkit-mask-size: contain;
-  mask-size: contain;
+/* ─── Overdue Indicators ─── */
+.eval-overdue-icon {
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  color: var(--md-error);
+  pointer-events: none;
+  cursor: default;
+  position: relative;
+}
+.eval-overdue-icon[title] {
+  pointer-events: auto;
+}
+.eval-due-text-overdue {
+  color: var(--md-error);
 }
 .eval-item-overdue {
   background: rgba(186, 26, 26, 0.04);
