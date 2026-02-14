@@ -239,7 +239,6 @@ body {
   font-weight: 500;
   letter-spacing: 0.5px;
   color: var(--md-on-surface-variant);
-  opacity: 0.7;
 }
 
 /* ─── Top App Bar (M3 Small — Center-aligned) ─── */
@@ -1562,7 +1561,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   background: #D6F5D6;
   border-color: #A5D6A7;
 }
-.profile-stat-card.gpa-good-standing .profile-stat-label { color: #2E7D32; }
+.profile-stat-card.gpa-good-standing .profile-stat-label { color: #1B5E20; }
 .profile-stat-card.gpa-good-standing .profile-stat-number { color: #1B5E20; }
 .profile-stat-card.gpa-caution {
   background: #FFF3CD;
@@ -3387,6 +3386,93 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 
 .eval-metric-value-alert {
   color: var(--md-error);
+}
+
+.eval-metric-card-wrapper {
+  display: flex;
+  flex-direction: column;
+}
+
+.eval-metric-card-clickable {
+  cursor: pointer;
+}
+.eval-metric-card-clickable:hover {
+  box-shadow: var(--md-elevation-1);
+}
+
+.eval-metric-chevron {
+  margin-left: auto;
+  color: var(--md-on-surface-variant);
+  flex-shrink: 0;
+  transition: transform var(--md-duration-short3) var(--md-easing-standard);
+}
+.eval-metric-card[aria-expanded="true"] .eval-metric-chevron {
+  transform: rotate(180deg);
+}
+.eval-metric-card-alert .eval-metric-chevron {
+  color: var(--md-error);
+}
+
+.eval-metric-dropdown {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height var(--md-duration-medium2) var(--md-easing-standard);
+}
+.eval-metric-dropdown-open {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.eval-metric-dropdown-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 16px 10px 20px;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  transition: background var(--md-duration-short3) var(--md-easing-standard),
+              border-color var(--md-duration-short3) var(--md-easing-standard);
+}
+.eval-metric-dropdown-item:hover {
+  background: var(--md-surface-container);
+  border-left-color: var(--md-primary);
+}
+.eval-metric-dropdown-item:focus-visible {
+  outline: 2px solid var(--md-primary);
+  outline-offset: -2px;
+  border-radius: var(--md-shape-xs);
+}
+.eval-metric-dropdown-item-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.eval-metric-dropdown-item-text {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--md-on-surface);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.eval-metric-dropdown-item-date {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--md-on-surface-variant);
+  flex-shrink: 0;
+}
+.eval-metric-dropdown-item-date-overdue {
+  color: var(--md-error);
+}
+.eval-metric-dropdown-item-student {
+  font-size: 11px;
+  color: var(--md-on-surface-variant);
+}
+.eval-metric-dropdown-empty {
+  padding: 12px 16px;
+  font-size: 13px;
+  color: var(--md-on-surface-variant);
 }
 
 /* ─── Eval Timeline Strip ─── */
