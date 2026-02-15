@@ -9,7 +9,6 @@ A Google Apps Script web application for Richfield Public Schools educators to m
 - **Backend:** Google Apps Script (`code.gs`, ~2,400 lines)
 - **Frontend:** Vanilla JavaScript (`JavaScript.html`, ~4,800 lines)
 - **Styling:** Vanilla CSS implementing Material Design 3 (`Stylesheet.html`, ~3,300 lines)
-- **Tests:** GAS-compatible function-based test suite (`Tests.gs`, ~850 lines)
 - **Data:** Google Sheets (per-user, auto-provisioned in Drive)
 - **Auth:** Google Session API (`Session.getActiveUser()`)
 - **Hosting:** Google Apps Script web app deployment
@@ -19,7 +18,6 @@ A Google Apps Script web application for Richfield Public Schools educators to m
 
 ```
 code.gs            — Backend: CRUD, auth, caching, team management, progress reports
-Tests.gs           — GAS-compatible test suite (function-based assertions)
 Index.html         — HTML shell: nav, views, side panel, toast
 JavaScript.html    — Frontend: state, rendering, API calls, forms
 Stylesheet.html    — CSS: MD3 design tokens, all component styles
@@ -299,15 +297,6 @@ For sheet upsert operations (read-check-write patterns), wrap in `LockService.ge
 - `google.script.run` is the async bridge between frontend and backend
 - XSS prevention via `esc()` function for all user-generated content in HTML
 - **GAS iframe quirk:** `<button>` elements require `appearance: none`. The global reset (`button { appearance: none; -webkit-appearance: none; }`) handles this — do not remove it.
-
-### HtmlService Gotchas
-
-### Testing (Tests.gs)
-
-- **No test framework:** Uses plain GAS functions with `assert_()`, `assertEqual_()`, `assertContains_()`, `assertNotNull_()` helpers.
-- **Runner pattern:** `runAllProgressReportTests()` uses an explicit function map (not `this[name]()` — `this` inside `forEach` doesn't reference global scope in GAS). Always add new test functions to both the `tests` array and the `testFns` map.
-- **Data cleanup:** Tests that write to sheets must use try-finally blocks calling `deleteProgressEntry_(id)` to clean up, even when assertions fail.
-- **Naming convention:** `test_category_expectedBehavior` (e.g., `test_gpa_calculatesCorrectly`).
 
 ### HtmlService Gotchas
 
