@@ -2819,6 +2819,11 @@ function editStudent(studentId) {
 }
 
 function showStudentProfile(studentId) {
+  // Clean up any in-progress autosave from a previous student
+  if (_progressAutosaveTimer) { clearTimeout(_progressAutosaveTimer); _progressAutosaveTimer = null; }
+  _progressAutosaveInFlight = false;
+  _progressAutosaveDirty = false;
+
   appState.currentStudentId = studentId;
   trackRecentStudent(studentId);
   document.getElementById('student-view-breadcrumb').textContent = 'Student Profile';
@@ -3343,6 +3348,10 @@ function renderProgressSection(studentId, goals, quarter, allEntries) {
 }
 
 function switchProgressQuarter(studentId, quarter) {
+  // Cancel any pending autosave from the previous quarter
+  if (_progressAutosaveTimer) { clearTimeout(_progressAutosaveTimer); _progressAutosaveTimer = null; }
+  _progressAutosaveDirty = false;
+
   appState.currentProgressQuarter = quarter;
   var goals = [];
   var student = getStudentById(studentId);
@@ -3357,6 +3366,7 @@ function switchProgressQuarter(studentId, quarter) {
 function selectProgressRating(btn, studentId, goalId, objId) {
   // Deselect siblings
   var group = btn.parentElement;
+  if (!group) return;
   var siblings = group.querySelectorAll('.progress-rating-btn');
   siblings.forEach(function(s) {
     s.classList.remove('progress-rating-selected', 'progress-rating-red', 'progress-rating-yellow', 'progress-rating-green');
@@ -3372,6 +3382,7 @@ function selectProgressRating(btn, studentId, goalId, objId) {
 
 function collectProgressData(studentId) {
   var quarter = appState.currentProgressQuarter;
+  if (!quarter) return [];
   var entries = [];
   var rows = document.querySelectorAll('.progress-objective-row');
 
@@ -3444,15 +3455,17 @@ function performProgressAutosave(studentId) {
           } else {
             updateAutosaveIndicator('idle', 'progress-autosave-status');
           }
-          // Refresh local entries cache
-          google.script.run
-            .withSuccessHandler(function(fresh) {
-              appState.progressEntries = fresh || [];
-            })
-            .getAllProgressForStudent(studentId);
+          // Only refresh cache and reschedule if still viewing the same student
+          if (studentId === appState.currentStudentId) {
+            google.script.run
+              .withSuccessHandler(function(fresh) {
+                appState.progressEntries = fresh || [];
+              })
+              .getAllProgressForStudent(studentId);
 
-          if (_progressAutosaveDirty) {
-            scheduleProgressAutosave(studentId);
+            if (_progressAutosaveDirty) {
+              scheduleProgressAutosave(studentId);
+            }
           }
         }
       })
@@ -3462,7 +3475,7 @@ function performProgressAutosave(studentId) {
         if (saved === total) {
           _progressAutosaveInFlight = false;
           updateAutosaveIndicator('error', 'progress-autosave-status');
-          if (_progressAutosaveDirty) {
+          if (_progressAutosaveDirty && studentId === appState.currentStudentId) {
             scheduleProgressAutosave(studentId);
           }
         }
@@ -3562,23 +3575,21 @@ function generateBatchReports() {
         return;
       }
 
-      // Build combined HTML with page breaks
+      // Extract styles from first report, then combine body content with page breaks
+      var reportStyles = '';
+      var firstStyleMatch = reports[0].html.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+      if (firstStyleMatch) reportStyles = firstStyleMatch[1];
+
       var combinedHtml = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Batch Progress Reports</title>';
-      combinedHtml += '<style>@media print { .page-break { page-break-before: always; } }</style>';
-      combinedHtml += '</head><body>';
+      combinedHtml += '<style>' + reportStyles;
+      combinedHtml += ' @media print { .page-break { page-break-before: always; } }';
+      combinedHtml += '</style></head><body>';
 
       reports.forEach(function(r, idx) {
         if (idx > 0) combinedHtml += '<div class="page-break"></div>';
         // Extract body content from each report's HTML
         var bodyMatch = r.html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
-        var bodyContent = bodyMatch ? bodyMatch[1] : r.html;
-        // Extract styles from first report only
-        if (idx === 0) {
-          var styleMatch = r.html.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
-          if (styleMatch) {
-            combinedHtml = combinedHtml.replace('</style>', styleMatch[1] + '</style>');
-          }
-        }
+        var bodyContent = bodyMatch ? bodyMatch[1] : r.html.replace(/<\/?(?:html|head|style|meta|title)[^>]*>/gi, '');
         combinedHtml += '<div class="student-report">' + bodyContent + '</div>';
       });
 

@@ -6,9 +6,10 @@ A Google Apps Script web application for Richfield Public Schools educators to m
 
 ## Tech Stack
 
-- **Backend:** Google Apps Script (`code.gs`, ~2,200 lines)
-- **Frontend:** Vanilla JavaScript (`JavaScript.html`, ~4,600 lines)
-- **Styling:** Vanilla CSS implementing Material Design 3 (`Stylesheet.html`, ~3,100 lines)
+- **Backend:** Google Apps Script (`code.gs`, ~2,400 lines)
+- **Frontend:** Vanilla JavaScript (`JavaScript.html`, ~4,800 lines)
+- **Styling:** Vanilla CSS implementing Material Design 3 (`Stylesheet.html`, ~3,300 lines)
+- **Tests:** GAS-compatible function-based test suite (`Tests.gs`, ~850 lines)
 - **Data:** Google Sheets (per-user, auto-provisioned in Drive)
 - **Auth:** Google Session API (`Session.getActiveUser()`)
 - **Hosting:** Google Apps Script web app deployment
@@ -17,7 +18,8 @@ A Google Apps Script web application for Richfield Public Schools educators to m
 ### File Structure
 
 ```
-code.gs            — Backend: CRUD, auth, caching, team management
+code.gs            — Backend: CRUD, auth, caching, team management, progress reports
+Tests.gs           — GAS-compatible test suite (function-based assertions)
 Index.html         — HTML shell: nav, views, side panel, toast
 JavaScript.html    — Frontend: state, rendering, API calls, forms
 Stylesheet.html    — CSS: MD3 design tokens, all component styles
@@ -47,6 +49,8 @@ Each user gets their own Google Sheet stored in UserProperties. The web app must
 
 **Evaluations sheet:** id, studentId, type, itemsJson, createdAt, updatedAt, filesJson, meetingDate
 
+**ProgressReporting sheet:** id, studentId, goalId, objectiveId, quarter, progressRating, anecdotalNotes, dateEntered, enteredBy, createdAt, lastModified
+
 ### Roles
 
 - `caseload-manager` — Full access, can add/remove team members
@@ -67,11 +71,11 @@ Definitions: `EVAL_TYPES` array + `EVAL_TYPE_ALIASES` map (frontend), `VALID_EVA
 
 ### Caching
 
-Read-through cache in UserProperties with 2-minute TTL. Invalidated on writes. Cache keys: `cache_students`, `cache_dashboard`.
+Read-through cache in UserProperties with 2-minute TTL. Invalidated on writes. Cache keys: `cache_students`, `cache_dashboard`, `cache_progress`.
 
 ## Key Patterns
 
-- **Autosave:** Debounced (2s) with in-flight guard and dirty flag. Used for check-ins and goals.
+- **Autosave:** Debounced (2s) with in-flight guard and dirty flag. Used for check-ins, goals, and progress entries. Timer must be cleaned up on navigation (see Autosave Safety below).
 - **Optimistic UI:** Local state updated immediately, server call follows.
 - **View stack:** Single HTML container with views toggled via `.active` CSS class. `showView()` manages Shared Axis X transitions using `_currentViewId` and `VIEW_ORDER`.
 - **Confirmation dialogs:** Created dynamically via `showConfirmDialog()` helper.
@@ -90,6 +94,14 @@ Read-through cache in UserProperties with 2-minute TTL. Invalidated on writes. C
 | `batchSetValues_(sheet, rowIndex, colIdx, fields)` | Update multiple cells in one row |
 | `normalizeRole_(role)` | Normalize legacy 'owner' to 'caseload-manager' |
 | `appendStudentNote(studentId, noteText)` | Append timestamped note, invalidate cache |
+| `saveProgressEntry(data)` | Upsert progress for goal+objective+quarter with LockService |
+| `getProgressEntries(studentId, quarter)` | Fetch progress entries for one student+quarter |
+| `getAllProgressForStudent(studentId)` | Fetch all progress across all quarters |
+| `assembleReportData_(student, quarter, allEntries)` | Pure data assembly for report with goalArea grouping |
+| `generateProgressReportHtml_(student, quarter, allEntries, summary)` | Full printable HTML report with inline CSS |
+| `generateProgressReport(studentId, quarter, summary)` | Public endpoint: single student report |
+| `generateBatchReports(quarter, summaries)` | Public endpoint: reports for entire caseload |
+| `getCurrentQuarter()` | Returns Q1-Q4 based on current date |
 
 ### Frontend — General Utilities (JavaScript.html)
 
@@ -262,11 +274,23 @@ When adding a new button class, add it to this selector in `Stylesheet.html`.
 - **Respect `prefers-reduced-motion`:** Global `@media` rule reduces all durations to `0.01ms`.
 - **Motion tokens:** Use `--md-duration-*` and `--md-easing-*` variables. Never hardcode durations.
 
+### Autosave Safety
+
+When adding new autosave-enabled features (like progress entry):
+- **Clean up timers on navigation:** Clear the timer, reset in-flight and dirty flags at the start of the parent view function (e.g., `showStudentProfile()`). Otherwise the timer fires for the wrong student/context.
+- **Guard completion handlers:** In async completion callbacks, verify the user is still viewing the same student (`studentId === appState.currentStudentId`) before refreshing state or rescheduling.
+- **Cancel on context switch:** Clear the timer when the user switches sub-contexts (e.g., switching quarters within the same student view).
+
+### Concurrent Write Safety
+
+For sheet upsert operations (read-check-write patterns), wrap in `LockService.getUserLock()` with `waitLock()` and `releaseLock()` in a try-finally block. Without this, rapid concurrent saves can create duplicate rows.
+
 ### Backend
 
 - **Summary endpoints** should return all data the frontend needs for visibility decisions, not just aggregate counts.
 - Private functions use trailing underscore convention (`getSS_()`, `findRowById_()`).
 - `invalidateCache_()` must be called after any write operation.
+- **Validate inputs at public endpoints:** Check `VALID_QUARTERS`, `VALID_PROGRESS_RATINGS`, student existence, and anecdotal note length before writing.
 
 ## Development Notes
 
@@ -275,6 +299,15 @@ When adding a new button class, add it to this selector in `Stylesheet.html`.
 - `google.script.run` is the async bridge between frontend and backend
 - XSS prevention via `esc()` function for all user-generated content in HTML
 - **GAS iframe quirk:** `<button>` elements require `appearance: none`. The global reset (`button { appearance: none; -webkit-appearance: none; }`) handles this — do not remove it.
+
+### HtmlService Gotchas
+
+### Testing (Tests.gs)
+
+- **No test framework:** Uses plain GAS functions with `assert_()`, `assertEqual_()`, `assertContains_()`, `assertNotNull_()` helpers.
+- **Runner pattern:** `runAllProgressReportTests()` uses an explicit function map (not `this[name]()` — `this` inside `forEach` doesn't reference global scope in GAS). Always add new test functions to both the `tests` array and the `testFns` map.
+- **Data cleanup:** Tests that write to sheets must use try-finally blocks calling `deleteProgressEntry_(id)` to clean up, even when assertions fail.
+- **Naming convention:** `test_category_expectedBehavior` (e.g., `test_gpa_calculatesCorrectly`).
 
 ### HtmlService Gotchas
 
