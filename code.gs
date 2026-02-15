@@ -1588,6 +1588,15 @@ function saveProgressEntry(data) {
   }
 
   initializeSheetsIfNeeded_();
+
+  // Validate student exists
+  var students = getStudents();
+  var studentExists = false;
+  for (var si = 0; si < students.length; si++) {
+    if (students[si].id === data.studentId) { studentExists = true; break; }
+  }
+  if (!studentExists) return { success: false, error: 'Student not found.' };
+
   var ss = getSS_();
   var sheet = ss.getSheetByName(SHEET_PROGRESS);
   if (!sheet) {
@@ -1598,41 +1607,50 @@ function saveProgressEntry(data) {
   var email = getCurrentUserEmail_();
   var now = new Date().toISOString();
 
-  // Check for existing entry (upsert by studentId+goalId+objectiveId+quarter)
-  var allData = sheet.getDataRange().getValues();
-  var headers = allData[0];
-  var colIdx = buildColIdx_(headers);
-  var existingRow = null;
-  var existingId = null;
-
-  for (var i = 1; i < allData.length; i++) {
-    var row = allData[i];
-    if (row[colIdx.studentId - 1] === data.studentId &&
-        row[colIdx.goalId - 1] === data.goalId &&
-        row[colIdx.objectiveId - 1] === data.objectiveId &&
-        row[colIdx.quarter - 1] === quarter) {
-      existingRow = i + 1; // 1-based sheet row
-      existingId = row[colIdx.id - 1];
-      break;
-    }
+  // Use LockService to prevent duplicate entries from concurrent saves
+  var lock = LockService.getUserLock();
+  try {
+    lock.waitLock(10000); // Wait up to 10 seconds
+  } catch(e) {
+    return { success: false, error: 'Could not acquire lock. Please try again.' };
   }
 
-  if (existingRow) {
-    // Update existing entry
-    batchSetValues_(sheet, existingRow, colIdx, {
-      progressRating: rating,
-      anecdotalNotes: notes.trim(),
-      dateEntered: now.split('T')[0],
-      enteredBy: email,
-      lastModified: now
-    });
-    invalidateCache_();
-    return { success: true, id: existingId, updated: true };
-  } else {
-    // Create new entry
-    var id = Utilities.getUuid();
-    sheet.appendRow([
-      id,
+  try {
+    // Check for existing entry (upsert by studentId+goalId+objectiveId+quarter)
+    var allData = sheet.getDataRange().getValues();
+    var headers = allData[0];
+    var colIdx = buildColIdx_(headers);
+    var existingRow = null;
+    var existingId = null;
+
+    for (var i = 1; i < allData.length; i++) {
+      var row = allData[i];
+      if (row[colIdx.studentId - 1] === data.studentId &&
+          row[colIdx.goalId - 1] === data.goalId &&
+          row[colIdx.objectiveId - 1] === data.objectiveId &&
+          row[colIdx.quarter - 1] === quarter) {
+        existingRow = i + 1; // 1-based sheet row
+        existingId = row[colIdx.id - 1];
+        break;
+      }
+    }
+
+    if (existingRow) {
+      // Update existing entry
+      batchSetValues_(sheet, existingRow, colIdx, {
+        progressRating: rating,
+        anecdotalNotes: notes.trim(),
+        dateEntered: now.split('T')[0],
+        enteredBy: email,
+        lastModified: now
+      });
+      invalidateCache_();
+      return { success: true, id: existingId, updated: true };
+    } else {
+      // Create new entry
+      var id = Utilities.getUuid();
+      sheet.appendRow([
+        id,
       data.studentId,
       data.goalId,
       data.objectiveId,
@@ -1644,8 +1662,11 @@ function saveProgressEntry(data) {
       now,
       now
     ]);
-    invalidateCache_();
-    return { success: true, id: id, updated: false };
+      invalidateCache_();
+      return { success: true, id: id, updated: false };
+    }
+  } finally {
+    lock.releaseLock();
   }
 }
 
@@ -1842,8 +1863,12 @@ function assembleReportData_(student, quarter, allEntries) {
         anyNoProgress = true;
       }
     });
-    if (allAdequateOrMet) goalsWithAdequateOrMet++;
-    if (anyNoProgress) goalsWithNoProgress++;
+    // Mutually exclusive: a goal is either on track or needs attention, not both
+    if (allAdequateOrMet) {
+      goalsWithAdequateOrMet++;
+    } else if (anyNoProgress) {
+      goalsWithNoProgress++;
+    }
   });
 
   return {
@@ -2096,6 +2121,10 @@ function generateProgressReportHtml_(student, quarter, allEntries, overallSummar
 /** Public endpoint: generate a progress report for one student.
  *  Called from the frontend. */
 function generateProgressReport(studentId, quarter, overallSummary) {
+  if (VALID_QUARTERS.indexOf(String(quarter)) === -1) {
+    return { success: false, error: 'Invalid quarter.' };
+  }
+
   initializeSheetsIfNeeded_();
   var students = getStudents();
   var student = null;
@@ -2127,27 +2156,35 @@ function generateProgressReport(studentId, quarter, overallSummary) {
 
 /** Public endpoint: batch generate reports for entire caseload. */
 function generateBatchReports(quarter, overallSummaries) {
-  initializeSheetsIfNeeded_();
-  var dashData = getDashboardData();
-  var summaries = overallSummaries || {};
-  var results = [];
+  if (VALID_QUARTERS.indexOf(quarter) === -1) {
+    return { success: false, error: 'Invalid quarter: ' + quarter };
+  }
 
-  dashData.forEach(function(student) {
-    var allEntries = getAllProgressForStudent(student.id);
-    var summary = summaries[student.id] || '';
+  try {
+    initializeSheetsIfNeeded_();
+    var dashData = getDashboardData();
+    var summaries = overallSummaries || {};
+    var results = [];
 
-    // Ensure goalsJson is available
-    if (!student.goalsJson) student.goalsJson = '[]';
+    dashData.forEach(function(student) {
+      var allEntries = getAllProgressForStudent(student.id);
+      var summary = summaries[student.id] || '';
 
-    var html = generateProgressReportHtml_(student, quarter, allEntries, summary);
-    results.push({
-      studentId: student.id,
-      studentName: (student.firstName || '') + ' ' + (student.lastName || ''),
-      html: html
+      // Ensure goalsJson is available
+      if (!student.goalsJson) student.goalsJson = '[]';
+
+      var html = generateProgressReportHtml_(student, quarter, allEntries, summary);
+      results.push({
+        studentId: student.id,
+        studentName: (student.firstName || '') + ' ' + (student.lastName || ''),
+        html: html
+      });
     });
-  });
 
-  return { success: true, reports: results };
+    return { success: true, reports: results };
+  } catch (e) {
+    return { success: false, error: 'Failed to generate batch reports: ' + e.message };
+  }
 }
 
 // ───── Helpers ─────
