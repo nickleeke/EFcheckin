@@ -35,6 +35,8 @@ var _goalsAutosaveDirty = false;
 var _evalAutosaveTimer = null;
 var _evalAutosaveInFlight = false;
 var _evalAutosaveDirty = false;
+var _evalItemFilter = 'all'; // 'all' | 'remaining' | 'overdue' | 'completed'
+var _evalFocusedIndex = -1;
 
 var onboardingState = {
   step: 1,
@@ -87,6 +89,117 @@ function buildEvalTypeDropdown_(evalId, currentType) {
     html += '<option value="' + esc(t.value) + '"' + (resolved === t.value ? ' selected' : '') + '>' + esc(t.label) + '</option>';
   });
   return html + '</select>';
+}
+
+// ─── Eval Navigation (Prev/Next Student) ───
+function buildEvalNavRow_(currentStudentId) {
+  var activeEvals = appState.evalSummary ? appState.evalSummary.activeEvals : [];
+  if (activeEvals.length <= 1) return '';
+  var currentIdx = -1;
+  for (var i = 0; i < activeEvals.length; i++) {
+    if (activeEvals[i].studentId === currentStudentId) { currentIdx = i; break; }
+  }
+  if (currentIdx === -1) return '';
+  var prevEval = currentIdx > 0 ? activeEvals[currentIdx - 1] : null;
+  var nextEval = currentIdx < activeEvals.length - 1 ? activeEvals[currentIdx + 1] : null;
+
+  var html = '<div class="eval-nav-row">';
+  html += '<button class="eval-nav-btn"' + (prevEval ? ' onclick="navigateToEvalStudent_(\'' + esc(prevEval.studentId) + '\')"' : ' disabled') + '>' +
+    '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>' +
+    (prevEval ? esc(prevEval.studentName) : 'Prev') +
+  '</button>';
+  html += '<span class="eval-nav-counter">' + (currentIdx + 1) + ' of ' + activeEvals.length + '</span>';
+  html += '<button class="eval-nav-btn"' + (nextEval ? ' onclick="navigateToEvalStudent_(\'' + esc(nextEval.studentId) + '\')"' : ' disabled') + '>' +
+    (nextEval ? esc(nextEval.studentName) : 'Next') +
+    '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>' +
+  '</button>';
+  html += '</div>';
+  return html;
+}
+
+function navigateToEvalStudent_(studentId) {
+  navigateToEvalTask(studentId);
+}
+
+// ─── Eval Item Helpers ───
+function isEvalItemOverdue_(item) {
+  if (item.checked || !item.dueDate) return false;
+  return new Date() > new Date(item.dueDate + 'T23:59:59');
+}
+
+function isEvalItemDueSoon_(item) {
+  if (item.checked || !item.dueDate) return false;
+  var now = new Date();
+  var due = new Date(item.dueDate + 'T23:59:59');
+  if (now > due) return false; // overdue, not due-soon
+  var diffMs = due.getTime() - now.getTime();
+  return diffMs <= 3 * 24 * 60 * 60 * 1000; // within 72 hours
+}
+
+function sortEvalItems_(items) {
+  return items.slice().sort(function(a, b) {
+    var aOverdue = isEvalItemOverdue_(a);
+    var bOverdue = isEvalItemOverdue_(b);
+    if (aOverdue !== bOverdue) return aOverdue ? -1 : 1;
+    var aDueSoon = isEvalItemDueSoon_(a);
+    var bDueSoon = isEvalItemDueSoon_(b);
+    if (aDueSoon !== bDueSoon) return aDueSoon ? -1 : 1;
+    // Items with due dates before those without
+    if (a.dueDate && !b.dueDate) return -1;
+    if (!a.dueDate && b.dueDate) return 1;
+    if (a.dueDate && b.dueDate) return a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0;
+    return 0;
+  });
+}
+
+function getEvalFilterCounts_(items) {
+  var now = new Date();
+  var counts = { all: items.length, remaining: 0, overdue: 0, completed: 0 };
+  items.forEach(function(it) {
+    if (it.checked) { counts.completed++; }
+    else {
+      counts.remaining++;
+      if (it.dueDate && now > new Date(it.dueDate + 'T23:59:59')) counts.overdue++;
+    }
+  });
+  return counts;
+}
+
+function applyEvalFilter_(items, filter) {
+  if (filter === 'all') return items;
+  var now = new Date();
+  return items.filter(function(it) {
+    if (filter === 'remaining') return !it.checked;
+    if (filter === 'completed') return it.checked;
+    if (filter === 'overdue') return !it.checked && it.dueDate && now > new Date(it.dueDate + 'T23:59:59');
+    return true;
+  });
+}
+
+function setEvalItemFilter(filter) {
+  _evalItemFilter = filter;
+  if (appState.currentEvaluation) {
+    rebuildEvalItemsCard(appState.currentEvaluation.id);
+  }
+}
+
+function buildEvalFilterChips_(items) {
+  var counts = getEvalFilterCounts_(items);
+  var filters = [
+    { key: 'all', label: 'All (' + counts.all + ')' },
+    { key: 'remaining', label: 'Remaining (' + counts.remaining + ')' },
+    { key: 'overdue', label: 'Overdue (' + counts.overdue + ')' },
+    { key: 'completed', label: 'Completed (' + counts.completed + ')' }
+  ];
+  var html = '<div class="eval-filter-bar">';
+  filters.forEach(function(f) {
+    var active = _evalItemFilter === f.key;
+    html += '<button class="eval-filter-chip' + (active ? ' eval-filter-chip-active' : '') + '" ' +
+      'aria-pressed="' + active + '" onclick="setEvalItemFilter(\'' + f.key + '\')">' +
+      f.label + '</button>';
+  });
+  html += '</div>';
+  return html;
 }
 
 // ─── Helpers ───
@@ -387,15 +500,53 @@ document.addEventListener('mouseout', function(e) {
 // Close panels on Escape key
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') {
+    // In eval edit mode, let it exit edit first
+    if (_currentViewId === 'eval-checklist-view' && appState.editingEvalItemId) {
+      exitEvalEditMode();
+      return;
+    }
     closeNavDrawer();
     closeSidePanel();
     hideNavTooltip_();
     hideNavFlyout_();
-    // Also close any confirmation dialogs
     var overlay = document.querySelector('.confirm-overlay');
     if (overlay) closeConfirmDialog(overlay);
   }
+
+  // Eval checklist keyboard navigation
+  if (_currentViewId !== 'eval-checklist-view') return;
+  var tag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+
+  var evalItems = document.querySelectorAll('#eval-items-list .eval-item');
+  if (!evalItems.length) return;
+
+  if (e.key === 'j' || e.key === 'ArrowDown') {
+    e.preventDefault();
+    _evalFocusedIndex = Math.min(_evalFocusedIndex + 1, evalItems.length - 1);
+    updateEvalFocus_(evalItems);
+  } else if (e.key === 'k' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    _evalFocusedIndex = Math.max(_evalFocusedIndex - 1, 0);
+    updateEvalFocus_(evalItems);
+  } else if (e.key === ' ' && _evalFocusedIndex >= 0) {
+    e.preventDefault();
+    var cb = evalItems[_evalFocusedIndex].querySelector('.eval-item-checkbox');
+    if (cb) { cb.checked = !cb.checked; cb.dispatchEvent(new Event('change')); }
+  } else if (e.key === 'e' && _evalFocusedIndex >= 0) {
+    e.preventDefault();
+    var itemId = evalItems[_evalFocusedIndex].getAttribute('data-item-id');
+    if (itemId) enterEvalEditMode(itemId);
+  }
 });
+
+function updateEvalFocus_(evalItems) {
+  document.querySelectorAll('.eval-item-focused').forEach(function(el) { el.classList.remove('eval-item-focused'); });
+  if (_evalFocusedIndex >= 0 && _evalFocusedIndex < evalItems.length) {
+    evalItems[_evalFocusedIndex].classList.add('eval-item-focused');
+    evalItems[_evalFocusedIndex].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
 
 function closeConfirmDialog(overlayEl) {
   if (!overlayEl || overlayEl.classList.contains('dialog-closing')) return;
@@ -746,7 +897,7 @@ function buildTimelineHtml_(summary) {
 
       expandedDay.tasks.forEach(function(task) {
         var typeLabel = getEvalTypeLabel(task.evalType);
-        html += '<div class="eval-timeline-task" onclick="navigateToEvalTask(\'' + esc(task.studentId) + '\')">' +
+        html += '<div class="eval-timeline-task" role="button" tabindex="0" onclick="navigateToEvalTask(\'' + esc(task.studentId) + '\', \'' + esc(task.itemId || '') + '\')" onkeydown="if(event.key===\'Enter\')navigateToEvalTask(\'' + esc(task.studentId) + '\', \'' + esc(task.itemId || '') + '\')">' +
           '<span class="eval-timeline-task-dot"></span>' +
           '<div class="eval-timeline-task-info">' +
             '<span class="eval-timeline-task-text">' + esc(task.text) + '</span>' +
@@ -773,7 +924,7 @@ function buildEvalCarouselHtml_(activeEvals) {
   activeEvals.forEach(function(ev) {
     var pct = ev.total > 0 ? Math.round(ev.done / ev.total * 100) : 0;
     var alertClass = ev.overdueCount > 0 ? ' eval-carousel-card-alert' : '';
-    html += '<div class="eval-carousel-card' + alertClass + '" onclick="navigateToEvalTask(\'' + esc(ev.studentId) + '\')">' +
+    html += '<div class="eval-carousel-card' + alertClass + '" role="button" tabindex="0" onclick="navigateToEvalTask(\'' + esc(ev.studentId) + '\')" onkeydown="if(event.key===\'Enter\')navigateToEvalTask(\'' + esc(ev.studentId) + '\')" aria-label="' + esc(ev.studentName) + ', ' + esc(getEvalTypeLabel(ev.type)) + ', ' + pct + '% complete' + (ev.overdueCount > 0 ? ', ' + ev.overdueCount + ' overdue' : '') + '">' +
       '<div class="eval-carousel-card-name">' + esc(ev.studentName) + '</div>' +
       '<div class="eval-carousel-card-type">' + esc(getEvalTypeLabel(ev.type)) + '</div>' +
       '<div class="eval-carousel-card-progress">' +
@@ -919,11 +1070,11 @@ function toggleTimelineDay(dayIndex) {
   }
 }
 
-function navigateToEvalTask(studentId) {
+function navigateToEvalTask(studentId, scrollToItemId) {
   google.script.run
     .withSuccessHandler(function(evaluation) {
       if (evaluation) {
-        showEvalChecklistView(studentId, evaluation);
+        showEvalChecklistView(studentId, evaluation, scrollToItemId);
       } else {
         showToast('No active evaluation found for this student.');
       }
@@ -4035,17 +4186,26 @@ function showEvalChecklistSkeleton() {
 }
 
 var _toastTimer = null;
-function showToast(message) {
+function showToast(message, actionLabel, actionFn) {
   var toast = document.getElementById('toast');
   if (_toastTimer) clearTimeout(_toastTimer);
-  toast.textContent = message;
+  if (actionLabel && actionFn) {
+    toast.innerHTML = '<span class="toast-with-action"><span>' + esc(message) + '</span>' +
+      '<button class="toast-action-btn" onclick="event.stopPropagation();">' + esc(actionLabel) + '</button></span>';
+    var btn = toast.querySelector('.toast-action-btn');
+    if (btn) btn.addEventListener('click', function() { actionFn(); hideToast(); });
+  } else {
+    toast.textContent = message;
+  }
   toast.classList.remove('toast-hiding');
   toast.classList.add('show');
-  _toastTimer = setTimeout(function() {
-    toast.classList.add('toast-hiding');
-    toast.classList.remove('show');
-    _toastTimer = null;
-  }, 3000);
+  _toastTimer = setTimeout(function() { hideToast(); }, actionLabel ? 5000 : 3000);
+}
+function hideToast() {
+  var toast = document.getElementById('toast');
+  if (_toastTimer) { clearTimeout(_toastTimer); _toastTimer = null; }
+  toast.classList.add('toast-hiding');
+  toast.classList.remove('show');
 }
 
 function animateContentIn(container) {
@@ -4848,9 +5008,10 @@ function handleViewEvalChecklist() {
   showEvalChecklistView(studentId, appState.currentEvaluation);
 }
 
-function showEvalChecklistView(studentId, evaluation) {
+function showEvalChecklistView(studentId, evaluation, scrollToItemId) {
   resetEvalAutosave();
   appState.editingEvalItemId = null;
+  _evalFocusedIndex = -1;
   appState.evalChecklistStudentId = studentId;
   appState.currentEvaluation = evaluation;
 
@@ -4862,11 +5023,30 @@ function showEvalChecklistView(studentId, evaluation) {
 
   document.getElementById('eval-checklist-title').textContent = studentName;
 
+  // Build prev/next navigation
+  var navHtml = buildEvalNavRow_(studentId);
   document.getElementById('eval-checklist-actions').innerHTML =
     '<a href="https://15.spedforms.org/students2020.php?login=1" target="_blank" class="btn btn-secondary">Open SpEdForms</a>';
 
   renderEvalChecklist(evaluation);
+
+  // Insert prev/next nav before the layout
+  var contentEl = document.getElementById('eval-checklist-content');
+  if (contentEl && navHtml) contentEl.insertAdjacentHTML('afterbegin', navHtml);
+
   showView('eval-checklist-view');
+
+  // Auto-scroll to specific item if provided
+  if (scrollToItemId) {
+    setTimeout(function() {
+      var targetEl = document.querySelector('.eval-item[data-item-id="' + scrollToItemId + '"]');
+      if (targetEl) {
+        targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        targetEl.classList.add('eval-item-highlight');
+        setTimeout(function() { targetEl.classList.remove('eval-item-highlight'); }, 2500);
+      }
+    }, 300);
+  }
 }
 
 function buildEvalItemRow(evalId, item) {
@@ -4877,10 +5057,10 @@ function buildEvalItemRow(evalId, item) {
     var d = new Date(item.completedAt);
     completedDate = (d.getMonth() + 1) + '/' + d.getDate() + '/' + d.getFullYear();
   }
-  var now = new Date();
-  var isOverdue = !item.checked && item.dueDate && now > new Date(item.dueDate + 'T23:59:59');
+  var isOverdue = isEvalItemOverdue_(item);
+  var isDueSoon = isEvalItemDueSoon_(item);
 
-  var classes = 'eval-item' + checkedClass + (isOverdue ? ' eval-item-overdue' : '') + (isEditing ? ' eval-item-editing' : '');
+  var classes = 'eval-item' + checkedClass + (isOverdue ? ' eval-item-overdue' : '') + (isDueSoon ? ' eval-item-due-soon' : '') + (isEditing ? ' eval-item-editing' : '');
 
   var html = '<div class="' + classes + '" data-item-id="' + esc(item.id) + '">';
 
@@ -4889,6 +5069,10 @@ function buildEvalItemRow(evalId, item) {
   if (isOverdue) {
     html += '<span class="eval-overdue-icon" title="Overdue">' +
       '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>' +
+    '</span>';
+  } else if (isDueSoon) {
+    html += '<span class="eval-due-soon-icon" title="Due soon">' +
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>' +
     '</span>';
   }
   html += '<label class="eval-item-label">' +
@@ -4908,7 +5092,8 @@ function buildEvalItemRow(evalId, item) {
   if (isEditing) {
     html += '<input type="date" class="eval-item-due-date" id="eval-edit-due-' + esc(item.id) + '" value="' + esc(item.dueDate || '') + '">';
   } else if (item.dueDate) {
-    html += '<span class="eval-due-text' + (isOverdue ? ' eval-due-text-overdue' : '') + '">' + esc(formatDateDisplay(item.dueDate)) + '</span>';
+    var dueTextClass = isOverdue ? ' eval-due-text-overdue' : (isDueSoon ? ' eval-due-text-soon' : '');
+    html += '<span class="eval-due-text' + dueTextClass + '">' + esc(formatDateDisplay(item.dueDate)) + '</span>';
   }
   html += '</div>';
 
@@ -4938,17 +5123,30 @@ function buildEvalItemRow(evalId, item) {
   return html;
 }
 
+function buildProgressRingSvg_(pct) {
+  var r = 24, cx = 28, cy = 28, stroke = 4;
+  var circumference = 2 * Math.PI * r;
+  var offset = circumference - (pct / 100) * circumference;
+  var fillColor = pct >= 100 ? '#1B5E20' : 'var(--md-primary)';
+  return '<svg class="eval-progress-ring" width="56" height="56" viewBox="0 0 56 56">' +
+    '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="var(--md-surface-container-high)" stroke-width="' + stroke + '"/>' +
+    '<circle class="eval-progress-ring-fill" cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + fillColor + '" stroke-width="' + stroke + '" ' +
+      'stroke-linecap="round" stroke-dasharray="' + circumference.toFixed(2) + '" stroke-dashoffset="' + offset.toFixed(2) + '" ' +
+      'transform="rotate(-90 ' + cx + ' ' + cy + ')" style="transition: stroke-dashoffset var(--md-duration-medium2) var(--md-easing-emphasized-decelerate), stroke var(--md-duration-medium1) var(--md-easing-standard)"/>' +
+    '<text x="' + cx + '" y="' + cy + '" text-anchor="middle" dominant-baseline="central" class="eval-progress-ring-text">' + pct + '%</text>' +
+  '</svg>';
+}
+
 function renderEvalChecklist(evaluation) {
+  _evalItemFilter = 'all'; // reset filter on full render
   var container = document.getElementById('eval-checklist-content');
   var items = evaluation.items || [];
   var done = items.filter(function(it) { return it.checked; }).length;
   var total = items.length;
   var pct = total > 0 ? Math.round(done / total * 100) : 0;
-  var now = new Date();
 
   var overdueCount = items.filter(function(it) {
-    if (it.checked || !it.dueDate) return false;
-    return new Date() > new Date(it.dueDate + 'T23:59:59');
+    return isEvalItemOverdue_(it);
   }).length;
 
   var html = '';
@@ -4957,7 +5155,7 @@ function renderEvalChecklist(evaluation) {
   html += '<div class="eval-checklist-layout">';
   html += '<div class="eval-checklist-main">';
 
-  // Summary card
+  // Summary card with circular progress ring
   html += '<div class="eval-summary-card">';
   html += '<div class="eval-summary-top">';
   html += '<div class="eval-summary-left">' +
@@ -4966,12 +5164,11 @@ function renderEvalChecklist(evaluation) {
       (overdueCount > 0 ? ' <span class="eval-overdue-count" id="eval-overdue-count">' + overdueCount + ' overdue</span>' : '<span class="eval-overdue-count" id="eval-overdue-count" style="display:none"></span>') +
     '</div>' +
   '</div>';
-  html += '<div class="eval-summary-right">' +
-    '<span class="eval-summary-percent" id="eval-summary-percent">' + pct + '%</span>' +
-    '<span class="eval-summary-pct-label">complete</span>' +
+  html += '<div class="eval-summary-right" id="eval-summary-right">' +
+    buildProgressRingSvg_(pct) +
   '</div>';
   html += '</div>'; // end .eval-summary-top
-  html += '<div class="eval-progress-bar"><div class="eval-progress-fill" id="eval-progress-fill" style="width:' + pct + '%"></div></div>';
+  html += '<div class="eval-progress-bar" role="progressbar" aria-valuenow="' + pct + '" aria-valuemin="0" aria-valuemax="100" aria-label="Evaluation progress"><div class="eval-progress-fill" id="eval-progress-fill" style="width:' + pct + '%"></div></div>';
   var meetingVal = evaluation.meetingDate || '';
   html += '<div class="eval-summary-footer">' +
     '<span id="eval-autosave-status"></span>' +
@@ -4982,8 +5179,11 @@ function renderEvalChecklist(evaluation) {
   '</div>';
   html += '</div>'; // end .eval-summary-card
 
-  // Column headers + items (split incomplete/completed)
-  var incompleteItems = items.filter(function(it) { return !it.checked; });
+  // Filter chips
+  html += buildEvalFilterChips_(items);
+
+  // Column headers + items (split incomplete/completed, sorted)
+  var incompleteItems = sortEvalItems_(items.filter(function(it) { return !it.checked; }));
   var completedItems = items.filter(function(it) { return it.checked; });
 
   html += '<div class="eval-items-card">';
@@ -5008,7 +5208,7 @@ function renderEvalChecklist(evaluation) {
 
   if (completedItems.length > 0 && incompleteItems.length > 0) {
     var defaultCollapsed = (completedItems.length / total) > 0.5;
-    html += '<div class="eval-completed-divider" onclick="toggleCompletedSection()" id="eval-completed-divider">' +
+    html += '<div class="eval-completed-divider" role="button" tabindex="0" onclick="toggleCompletedSection()" onkeydown="if(event.key===\'Enter\')toggleCompletedSection()" aria-expanded="' + (!defaultCollapsed) + '" aria-controls="eval-completed-items" id="eval-completed-divider">' +
       '<svg class="eval-completed-divider-icon' + (defaultCollapsed ? ' collapsed' : '') + '" id="eval-completed-chevron" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>' +
       '<span class="eval-completed-divider-text">' + completedItems.length + ' completed</span>' +
     '</div>';
@@ -5066,6 +5266,15 @@ function toggleEvalItem(evalId, itemId, checked) {
   rebuildEvalItemsCard(evalId);
   updateEvalProgress();
   scheduleEvalAutosave();
+
+  // Show undo toast when marking complete
+  if (checked) {
+    var capturedEvalId = evalId;
+    var capturedItemId = itemId;
+    showToast('Task marked complete', 'Undo', function() {
+      toggleEvalItem(capturedEvalId, capturedItemId, false);
+    });
+  }
 }
 
 function updateEvalProgress() {
@@ -5077,7 +5286,6 @@ function updateEvalProgress() {
   var progressEl = document.getElementById('eval-summary-progress');
   if (progressEl) {
     var text = done + ' of ' + total + ' tasks completed';
-    // Keep the overdue span
     var overdueEl = document.getElementById('eval-overdue-count');
     if (overdueEl) {
       progressEl.textContent = text + ' ';
@@ -5090,14 +5298,17 @@ function updateEvalProgress() {
   var fillEl = document.getElementById('eval-progress-fill');
   if (fillEl) fillEl.style.width = pct + '%';
 
-  var percentEl = document.getElementById('eval-summary-percent');
-  if (percentEl) percentEl.textContent = pct + '%';
+  // Update progress ring
+  var ringRight = document.getElementById('eval-summary-right');
+  if (ringRight) ringRight.innerHTML = buildProgressRingSvg_(pct);
+
+  // Update progress bar ARIA
+  var barEl = document.querySelector('.eval-progress-bar');
+  if (barEl) barEl.setAttribute('aria-valuenow', pct);
 
   // Update overdue count
-  var now = new Date();
   var overdueCount = items.filter(function(it) {
-    if (it.checked || !it.dueDate) return false;
-    return now > new Date(it.dueDate + 'T23:59:59');
+    return isEvalItemOverdue_(it);
   }).length;
 
   var overdueCountEl = document.getElementById('eval-overdue-count');
@@ -5174,9 +5385,11 @@ function toggleEvalSectionCollapse() {
 function toggleCompletedSection() {
   var items = document.getElementById('eval-completed-items');
   var chevron = document.getElementById('eval-completed-chevron');
+  var divider = document.getElementById('eval-completed-divider');
   if (!items) return;
-  items.classList.toggle('collapsed');
+  var isCollapsed = items.classList.toggle('collapsed');
   if (chevron) chevron.classList.toggle('collapsed');
+  if (divider) divider.setAttribute('aria-expanded', String(!isCollapsed));
 }
 
 function rebuildEvalItemsCard(evalId) {
@@ -5185,14 +5398,33 @@ function rebuildEvalItemsCard(evalId) {
   var listEl = document.getElementById('eval-items-list');
   if (!listEl) return;
 
-  var items = eval_.items;
-  var incompleteItems = items.filter(function(it) { return !it.checked; });
-  var completedItems = items.filter(function(it) { return it.checked; });
-  var total = items.length;
+  var allItems = eval_.items;
+  var filtered = applyEvalFilter_(allItems, _evalItemFilter);
+  var incompleteItems = sortEvalItems_(filtered.filter(function(it) { return !it.checked; }));
+  var completedItems = filtered.filter(function(it) { return it.checked; });
+
+  // Update filter chips
+  var filterBar = document.querySelector('.eval-filter-bar');
+  if (filterBar) filterBar.outerHTML = buildEvalFilterChips_(allItems);
 
   var html = '<div class="eval-items-header">' +
     '<span>Task</span><span>Due Date</span><span>Completed</span><span>Actions</span>' +
   '</div>';
+
+  // In filtered modes, show all items inline (no incomplete/completed split)
+  if (_evalItemFilter !== 'all') {
+    var displayItems = sortEvalItems_(filtered);
+    if (displayItems.length === 0) {
+      html += '<div class="eval-all-complete">' +
+        '<div class="eval-all-complete-text" style="padding:24px">No ' + _evalItemFilter + ' tasks</div>' +
+      '</div>';
+    }
+    displayItems.forEach(function(item) {
+      html += buildEvalItemRow(evalId, item);
+    });
+    listEl.innerHTML = html;
+    return;
+  }
 
   if (incompleteItems.length === 0 && completedItems.length > 0) {
     html += '<div class="eval-all-complete">' +
@@ -5210,7 +5442,7 @@ function rebuildEvalItemsCard(evalId) {
     var prevEl = document.getElementById('eval-completed-items');
     if (prevEl) wasCollapsed = prevEl.classList.contains('collapsed');
 
-    html += '<div class="eval-completed-divider" onclick="toggleCompletedSection()" id="eval-completed-divider">' +
+    html += '<div class="eval-completed-divider" role="button" tabindex="0" onclick="toggleCompletedSection()" onkeydown="if(event.key===\'Enter\')toggleCompletedSection()" aria-expanded="' + (!wasCollapsed) + '" aria-controls="eval-completed-items" id="eval-completed-divider">' +
       '<svg class="eval-completed-divider-icon' + (wasCollapsed ? ' collapsed' : '') + '" id="eval-completed-chevron" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>' +
       '<span class="eval-completed-divider-text">' + completedItems.length + ' completed</span>' +
     '</div>';
