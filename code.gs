@@ -13,6 +13,7 @@ const SHEET_STUDENTS = 'Students';
 const SHEET_CHECKINS = 'CheckIns';
 const SHEET_COTEACHERS = 'CoTeachers';
 const SHEET_EVALUATIONS = 'Evaluations';
+const SHEET_PROGRESS = 'ProgressReporting';
 
 const GPA_MAP = {
   'A':4.0, 'A-':3.7,
@@ -181,12 +182,20 @@ var CHECKIN_HEADERS = [
   'focusGoalRating','effortRating',
   'whatWentWell','barrier',
   'microGoal','microGoalCategory',
-  'teacherNotes','academicDataJson','createdAt'
+  'teacherNotes','academicDataJson','createdAt','goalMet'
 ];
 var COTEACHER_HEADERS = ['email', 'role', 'addedAt'];
 var EVALUATION_HEADERS = ['id', 'studentId', 'type', 'itemsJson', 'createdAt', 'updatedAt', 'filesJson', 'meetingDate'];
 var VALID_EVAL_TYPES = ['annual-iep', '3-year-reeval', 'initial-eval', 'eval', 'reeval'];
 var EVAL_INITIAL_TYPES_ = ['initial-eval', 'eval'];
+
+var PROGRESS_HEADERS = [
+  'id', 'studentId', 'goalId', 'objectiveId', 'quarter',
+  'progressRating', 'anecdotalNotes', 'dateEntered',
+  'enteredBy', 'createdAt', 'lastModified'
+];
+var VALID_PROGRESS_RATINGS = ['No Progress', 'Adequate Progress', 'Objective Met'];
+var VALID_QUARTERS = ['Q1', 'Q2', 'Q3', 'Q4'];
 
 function initializeSheets() {
   const ss = getSS_();
@@ -218,6 +227,10 @@ function initializeSheets() {
   let evalSheet = ss.getSheetByName(SHEET_EVALUATIONS);
   if (!evalSheet) evalSheet = ss.insertSheet(SHEET_EVALUATIONS);
   ensureHeaders_(evalSheet, EVALUATION_HEADERS);
+
+  let progressSheet = ss.getSheetByName(SHEET_PROGRESS);
+  if (!progressSheet) progressSheet = ss.insertSheet(SHEET_PROGRESS);
+  ensureHeaders_(progressSheet, PROGRESS_HEADERS);
 
   return { success: true, feedbackLinks: getFeedbackLinks() };
 }
@@ -398,6 +411,29 @@ function saveStudentContacts(studentId, contactsJson) {
   return { success: false, error: 'Student not found' };
 }
 
+function appendStudentNote(studentId, noteText) {
+  if (!noteText || !String(noteText).trim()) {
+    return { success: false, error: 'Note text cannot be empty' };
+  }
+  initializeSheetsIfNeeded_();
+  const ss = getSS_();
+  const sheet = ss.getSheetByName(SHEET_STUDENTS);
+  var found = findRowById_(sheet, studentId);
+  if (!found) return { success: false, error: 'Student not found' };
+
+  var currentNotes = sheet.getRange(found.rowIndex, found.colIdx['notes']).getValue() || '';
+  var timestamp = new Date().toLocaleString();
+  var separator = currentNotes ? '\n---\n' : '';
+  var newNotes = currentNotes + separator + '[' + timestamp + '] ' + noteText;
+
+  batchSetValues_(sheet, found.rowIndex, found.colIdx, {
+    notes: newNotes,
+    updatedAt: new Date().toISOString()
+  });
+  invalidateCache_();
+  return { success: true, notes: newNotes };
+}
+
 function deleteStudent(studentId) {
   const ss = getSS_();
   const studentsSheet = ss.getSheetByName(SHEET_STUDENTS);
@@ -449,7 +485,8 @@ function saveCheckIn(data) {
         microGoal: data.microGoal || '',
         microGoalCategory: data.microGoalCategory || '',
         teacherNotes: data.teacherNotes || '',
-        academicDataJson: academicJson
+        academicDataJson: academicJson,
+        goalMet: data.goalMet || ''
       });
       invalidateCache_();
       return { success: true, id: data.id };
@@ -464,7 +501,8 @@ function saveCheckIn(data) {
     data.effortRating||'',
     data.whatWentWell||'', data.barrier||'',
     data.microGoal||'', data.microGoalCategory||'',
-    data.teacherNotes||'', academicJson, now
+    data.teacherNotes||'', academicJson, now,
+    data.goalMet||''
   ]);
   invalidateCache_();
   return { success: true, id: id };
@@ -598,6 +636,30 @@ function getDashboardData() {
       }
     }
 
+    // Days since last check-in
+    let daysSinceCheckIn = null;
+    if (latest && latest.weekOf) {
+      const lastParts = latest.weekOf.split('-');
+      const lastDate = new Date(Number(lastParts[0]), Number(lastParts[1]) - 1, Number(lastParts[2]));
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      daysSinceCheckIn = Math.floor((today - lastDate) / 86400000);
+    }
+
+    // EF history (last 6 weeks, oldest first)
+    const efHistory = [];
+    const historySlice = checkIns.slice(0, 6).reverse();
+    historySlice.forEach(function(ci) {
+      const rs = [
+        Number(ci.planningRating), Number(ci.followThroughRating),
+        Number(ci.regulationRating), Number(ci.focusGoalRating),
+        Number(ci.effortRating)
+      ].filter(function(r) { return !isNaN(r) && r > 0; });
+      if (rs.length > 0) {
+        efHistory.push(rs.reduce(function(a, b) { return a + b; }, 0) / rs.length);
+      }
+    });
+
     // Academic from latest
     let gpa = null;
     let totalMissing = 0;
@@ -636,7 +698,9 @@ function getDashboardData() {
       gpa: gpa,
       totalMissing: totalMissing,
       academicData: academicData,
-      evalType: evalTypeMap[s.id] || null
+      evalType: evalTypeMap[s.id] || null,
+      daysSinceCheckIn: daysSinceCheckIn,
+      efHistory: efHistory
     };
   });
 
@@ -679,6 +743,7 @@ function invalidateCache_() {
     props.deleteProperty(CACHE_PREFIX + 'students');
     props.deleteProperty(CACHE_PREFIX + 'dashboard');
     props.deleteProperty(CACHE_PREFIX + 'eval_summary');
+    props.deleteProperty(CACHE_PREFIX + 'progress');
   } catch(e) {}
 }
 
@@ -731,6 +796,8 @@ function getEvalTaskSummary() {
   var overdueCount = 0;
   var dueThisWeekCount = 0;
   var activeEvals = [];
+  var overdueTasks = [];
+  var dueThisWeekTasks = [];
 
   for (var i = 1; i < evalData.length; i++) {
     var studentId = evalData[i][evalColIdx['studentId'] - 1];
@@ -741,6 +808,7 @@ function getEvalTaskSummary() {
     try { items = JSON.parse(itemsRaw || '[]'); } catch(e) { items = []; }
 
     var studentInfo = studentMap[studentId] || { firstName: 'Unknown', lastName: '' };
+    var studentFullName = studentInfo.firstName + ' ' + studentInfo.lastName;
 
     var evalDone = 0;
     var evalOverdue = 0;
@@ -751,11 +819,29 @@ function getEvalTaskSummary() {
       if (item.dueDate < todayStr) {
         overdueCount++;
         evalOverdue++;
+        overdueTasks.push({
+          itemId: item.id,
+          text: item.text,
+          dueDate: item.dueDate,
+          studentId: studentId,
+          evalId: evalId,
+          studentName: studentFullName,
+          evalType: evalType
+        });
         return;
       }
 
       if (item.dueDate >= todayStr && item.dueDate <= endDateStr) {
         dueThisWeekCount++;
+        dueThisWeekTasks.push({
+          itemId: item.id,
+          text: item.text,
+          dueDate: item.dueDate,
+          studentId: studentId,
+          evalId: evalId,
+          studentName: studentFullName,
+          evalType: evalType
+        });
         for (var t = 0; t < timelineDays.length; t++) {
           if (timelineDays[t].date === item.dueDate) {
             timelineDays[t].tasks.push({
@@ -763,7 +849,7 @@ function getEvalTaskSummary() {
               text: item.text,
               studentId: studentId,
               evalId: evalId,
-              studentName: studentInfo.firstName + ' ' + studentInfo.lastName,
+              studentName: studentFullName,
               evalType: evalType
             });
             break;
@@ -775,7 +861,7 @@ function getEvalTaskSummary() {
     activeEvals.push({
       evalId: evalId,
       studentId: studentId,
-      studentName: studentInfo.firstName + ' ' + studentInfo.lastName,
+      studentName: studentFullName,
       type: evalType,
       done: evalDone,
       total: items.length,
@@ -783,11 +869,18 @@ function getEvalTaskSummary() {
     });
   }
 
+  // Sort overdue by date ascending (oldest first)
+  overdueTasks.sort(function(a, b) { return a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0; });
+  // Sort due this week by date ascending
+  dueThisWeekTasks.sort(function(a, b) { return a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0; });
+
   var result = {
     dueThisWeekCount: dueThisWeekCount,
     overdueCount: overdueCount,
     timeline: timelineDays,
-    activeEvals: activeEvals
+    activeEvals: activeEvals,
+    overdueTasks: overdueTasks,
+    dueThisWeekTasks: dueThisWeekTasks
   };
 
   setCache_('eval_summary', result);
@@ -1440,6 +1533,658 @@ function getReEvalTemplateItems_() {
   return items.map(function(text, idx) {
     return { id: 'item-' + (idx + 1), text: text, checked: false, completedAt: null, dueDate: null };
   });
+}
+
+// ───── Progress Reporting ─────
+
+/** Determine the current school-year quarter based on today's date.
+ *  Q1 = Sep–Nov, Q2 = Dec–Feb, Q3 = Mar–May, Q4 = Jun–Aug */
+function getCurrentQuarter() {
+  var month = new Date().getMonth(); // 0-indexed
+  if (month >= 8 && month <= 10) return 'Q1';   // Sep-Nov
+  if (month === 11 || month <= 1) return 'Q2';  // Dec-Feb
+  if (month >= 2 && month <= 4) return 'Q3';    // Mar-May
+  return 'Q4';                                   // Jun-Aug
+}
+
+/** Human-readable quarter label with season and approximate school year. */
+function getQuarterLabel(quarter) {
+  var now = new Date();
+  var year = now.getFullYear();
+  var month = now.getMonth();
+  // School year straddles calendar years: 2025-26
+  var startYear = month >= 8 ? year : year - 1;
+  var endYear = startYear + 1;
+  var yearStr = String(startYear) + '-' + String(endYear).slice(-2);
+
+  var seasons = { Q1: 'Fall', Q2: 'Winter', Q3: 'Spring', Q4: 'Summer' };
+  var season = seasons[quarter] || '';
+  return quarter + ' \u2014 ' + season + ' ' + yearStr;
+}
+
+/** Save or update a progress entry for a specific goal+objective+quarter. */
+function saveProgressEntry(data) {
+  // Validate required fields
+  if (!data || !data.studentId) return { success: false, error: 'studentId is required.' };
+  if (!data.goalId) return { success: false, error: 'goalId is required.' };
+  if (!data.objectiveId) return { success: false, error: 'objectiveId is required.' };
+
+  // Validate quarter
+  var quarter = String(data.quarter || '');
+  if (VALID_QUARTERS.indexOf(quarter) === -1) {
+    return { success: false, error: 'Invalid quarter. Must be one of: ' + VALID_QUARTERS.join(', ') };
+  }
+
+  // Validate progressRating
+  var rating = String(data.progressRating || '');
+  if (VALID_PROGRESS_RATINGS.indexOf(rating) === -1) {
+    return { success: false, error: 'Invalid progress rating. Must be one of: ' + VALID_PROGRESS_RATINGS.join(', ') };
+  }
+
+  // Validate anecdotalNotes
+  var notes = String(data.anecdotalNotes || '');
+  if (!notes || notes.trim().length < 10) {
+    return { success: false, error: 'Anecdotal notes are required (minimum 10 characters).' };
+  }
+
+  initializeSheetsIfNeeded_();
+
+  // Validate student exists
+  var students = getStudents();
+  var studentExists = false;
+  for (var si = 0; si < students.length; si++) {
+    if (students[si].id === data.studentId) { studentExists = true; break; }
+  }
+  if (!studentExists) return { success: false, error: 'Student not found.' };
+
+  var ss = getSS_();
+  var sheet = ss.getSheetByName(SHEET_PROGRESS);
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_PROGRESS);
+    ensureHeaders_(sheet, PROGRESS_HEADERS);
+  }
+
+  var email = getCurrentUserEmail_();
+  var now = new Date().toISOString();
+
+  // Use LockService to prevent duplicate entries from concurrent saves
+  var lock = LockService.getUserLock();
+  try {
+    lock.waitLock(10000); // Wait up to 10 seconds
+  } catch(e) {
+    return { success: false, error: 'Could not acquire lock. Please try again.' };
+  }
+
+  try {
+    // Check for existing entry (upsert by studentId+goalId+objectiveId+quarter)
+    var allData = sheet.getDataRange().getValues();
+    var headers = allData[0];
+    var colIdx = buildColIdx_(headers);
+    var existingRow = null;
+    var existingId = null;
+
+    for (var i = 1; i < allData.length; i++) {
+      var row = allData[i];
+      if (row[colIdx.studentId - 1] === data.studentId &&
+          row[colIdx.goalId - 1] === data.goalId &&
+          row[colIdx.objectiveId - 1] === data.objectiveId &&
+          row[colIdx.quarter - 1] === quarter) {
+        existingRow = i + 1; // 1-based sheet row
+        existingId = row[colIdx.id - 1];
+        break;
+      }
+    }
+
+    if (existingRow) {
+      // Update existing entry
+      batchSetValues_(sheet, existingRow, colIdx, {
+        progressRating: rating,
+        anecdotalNotes: notes.trim(),
+        dateEntered: now.split('T')[0],
+        enteredBy: email,
+        lastModified: now
+      });
+      invalidateCache_();
+      return { success: true, id: existingId, updated: true };
+    } else {
+      // Create new entry
+      var id = Utilities.getUuid();
+      sheet.appendRow([
+        id,
+      data.studentId,
+      data.goalId,
+      data.objectiveId,
+      quarter,
+      rating,
+      notes.trim(),
+      now.split('T')[0],
+      email,
+      now,
+      now
+    ]);
+      invalidateCache_();
+      return { success: true, id: id, updated: false };
+    }
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Get all progress entries for a student in a specific quarter. */
+function getProgressEntries(studentId, quarter) {
+  initializeSheetsIfNeeded_();
+  var ss = getSS_();
+  var sheet = ss.getSheetByName(SHEET_PROGRESS);
+  if (!sheet) return [];
+
+  var allData = sheet.getDataRange().getValues();
+  if (allData.length <= 1) return [];
+
+  var headers = allData[0];
+  var results = [];
+  for (var i = 1; i < allData.length; i++) {
+    var row = {};
+    headers.forEach(function(h, idx) { row[h] = allData[i][idx]; });
+    if (row.studentId === studentId && row.quarter === quarter) {
+      results.push(row);
+    }
+  }
+  return results;
+}
+
+/** Get all progress entries across all quarters for a student. */
+function getAllProgressForStudent(studentId) {
+  initializeSheetsIfNeeded_();
+  var ss = getSS_();
+  var sheet = ss.getSheetByName(SHEET_PROGRESS);
+  if (!sheet) return [];
+
+  var allData = sheet.getDataRange().getValues();
+  if (allData.length <= 1) return [];
+
+  var headers = allData[0];
+  var results = [];
+  for (var i = 1; i < allData.length; i++) {
+    var row = {};
+    headers.forEach(function(h, idx) { row[h] = allData[i][idx]; });
+    if (row.studentId === studentId) {
+      results.push(row);
+    }
+  }
+  return results;
+}
+
+/** Delete a progress entry by ID (used by tests for cleanup). */
+function deleteProgressEntry_(entryId) {
+  var ss = getSS_();
+  var sheet = ss.getSheetByName(SHEET_PROGRESS);
+  if (!sheet) return;
+  var found = findRowById_(sheet, entryId);
+  if (found) {
+    sheet.deleteRow(found.rowIndex);
+    invalidateCache_();
+  }
+}
+
+/** Calculate GPA from academicData array for report purposes.
+ *  Returns { raw: number, rounded: string, excludedCount: number } or null if no gradeable classes. */
+function calculateGpaForReport_(academicData) {
+  if (!academicData || academicData.length === 0) return null;
+
+  var gpaValues = [];
+  var excluded = 0;
+  academicData.forEach(function(c) {
+    if (c.grade && GPA_MAP.hasOwnProperty(c.grade)) {
+      gpaValues.push(GPA_MAP[c.grade]);
+    } else {
+      excluded++;
+    }
+  });
+
+  if (gpaValues.length === 0) return null;
+
+  var raw = gpaValues.reduce(function(a, b) { return a + b; }, 0) / gpaValues.length;
+  return {
+    raw: raw,
+    rounded: raw.toFixed(2),
+    excludedCount: excluded
+  };
+}
+
+/** Extract and sort grades for report display.
+ *  Returns array of { className, grade, missing } sorted by className. */
+function getGradesForReport_(student) {
+  var data = student.academicData || [];
+  var grades = data.map(function(c) {
+    return {
+      className: c.className || '',
+      grade: c.grade || '',
+      missing: Number(c.missing) || 0
+    };
+  });
+  grades.sort(function(a, b) {
+    return a.className.localeCompare(b.className);
+  });
+  return grades;
+}
+
+/** Assemble all data needed for a progress report.
+ *  Pure data function — no HTML generation.
+ *  @param {Object} student — student record from dashboard data
+ *  @param {string} quarter — e.g. 'Q2'
+ *  @param {Array} allEntries — progress entries (can span multiple quarters for history)
+ *  @returns {Object} report data object */
+function assembleReportData_(student, quarter, allEntries) {
+  // Parse goals
+  var goals = [];
+  try { goals = JSON.parse(student.goalsJson || '[]'); }
+  catch(e) { goals = []; }
+
+  // Build a lookup: goalId+objectiveId+quarter → entry
+  var entryMap = {};
+  (allEntries || []).forEach(function(e) {
+    var key = e.goalId + '|' + e.objectiveId + '|' + e.quarter;
+    entryMap[key] = e;
+  });
+
+  // Determine prior quarters (before current)
+  var qOrder = ['Q1', 'Q2', 'Q3', 'Q4'];
+  var currentIdx = qOrder.indexOf(quarter);
+  var priorQuarters = currentIdx > 0 ? qOrder.slice(0, currentIdx) : [];
+
+  // Group goals by goalArea
+  var areaMap = {};
+  var areaOrder = [];
+  goals.forEach(function(goal) {
+    var area = goal.goalArea || 'General';
+    if (!areaMap[area]) {
+      areaMap[area] = [];
+      areaOrder.push(area);
+    }
+
+    var objectives = (goal.objectives || []).map(function(obj) {
+      // Current quarter progress
+      var currentKey = goal.id + '|' + obj.id + '|' + quarter;
+      var currentEntry = entryMap[currentKey];
+      var currentProgress = currentEntry
+        ? { rating: currentEntry.progressRating, notes: currentEntry.anecdotalNotes }
+        : { rating: 'Not yet reported', notes: '' };
+
+      // Prior quarter history
+      var history = [];
+      priorQuarters.forEach(function(pq) {
+        var pKey = goal.id + '|' + obj.id + '|' + pq;
+        var pEntry = entryMap[pKey];
+        if (pEntry) {
+          history.push({ quarter: pq, rating: pEntry.progressRating, notes: pEntry.anecdotalNotes });
+        }
+      });
+
+      return {
+        id: obj.id,
+        text: obj.text,
+        currentProgress: currentProgress,
+        progressHistory: history
+      };
+    });
+
+    areaMap[area].push({
+      id: goal.id,
+      text: goal.text,
+      objectives: objectives
+    });
+  });
+
+  var goalGroups = areaOrder.map(function(area) {
+    return { goalArea: area, goals: areaMap[area] };
+  });
+
+  // Grades
+  var grades = getGradesForReport_(student);
+  var gpaResult = calculateGpaForReport_(student.academicData);
+
+  // Summary counts
+  var totalGoals = goals.length;
+  var goalsWithAdequateOrMet = 0;
+  var goalsWithNoProgress = 0;
+
+  goals.forEach(function(goal) {
+    var objs = goal.objectives || [];
+    if (objs.length === 0) return;
+    var allAdequateOrMet = true;
+    var anyNoProgress = false;
+    objs.forEach(function(obj) {
+      var key = goal.id + '|' + obj.id + '|' + quarter;
+      var entry = entryMap[key];
+      if (!entry || entry.progressRating === 'No Progress') {
+        allAdequateOrMet = false;
+      }
+      if (!entry || entry.progressRating === 'No Progress') {
+        anyNoProgress = true;
+      }
+    });
+    // Mutually exclusive: a goal is either on track or needs attention, not both
+    if (allAdequateOrMet) {
+      goalsWithAdequateOrMet++;
+    } else if (anyNoProgress) {
+      goalsWithNoProgress++;
+    }
+  });
+
+  return {
+    summary: {
+      studentName: (student.firstName || '') + ' ' + (student.lastName || ''),
+      gradeLevel: student.grade || '',
+      caseManager: student.caseManagerEmail || '',
+      reportingPeriod: getQuarterLabel(quarter),
+      totalGoals: totalGoals,
+      goalsWithAdequateOrMet: goalsWithAdequateOrMet,
+      goalsWithNoProgress: goalsWithNoProgress
+    },
+    goalGroups: goalGroups,
+    grades: grades,
+    gpa: gpaResult
+  };
+}
+
+/** Student-friendly labels for progress ratings. */
+var PROGRESS_FRIENDLY_LABELS = {
+  'No Progress': "Let's keep working on this",
+  'Adequate Progress': "You're making progress!",
+  'Objective Met': 'You got it! \u2B50'
+};
+
+/** Escape HTML special characters for safe embedding in report. */
+function escHtml_(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/** Generate a printable HTML progress report for one student.
+ *  @param {Object} student — student record
+ *  @param {string} quarter — e.g. 'Q2'
+ *  @param {Array} allEntries — progress entries (all quarters for history)
+ *  @param {string} overallSummary — optional teacher-written summary
+ *  @returns {string} complete HTML document string */
+function generateProgressReportHtml_(student, quarter, allEntries, overallSummary) {
+  var data = assembleReportData_(student, quarter, allEntries);
+  var s = data.summary;
+
+  // Rating color helper
+  function ratingColor(rating) {
+    if (rating === 'Objective Met') return '#1B5E20';
+    if (rating === 'Adequate Progress') return '#7A5900';
+    if (rating === 'No Progress') return '#BA1A1A';
+    return '#666';
+  }
+  function ratingBg(rating) {
+    if (rating === 'Objective Met') return '#D6F5D6';
+    if (rating === 'Adequate Progress') return '#FFF3CD';
+    if (rating === 'No Progress') return '#FFDAD6';
+    return '#F5F5F5';
+  }
+
+  var html = '';
+  html += '<!DOCTYPE html><html><head><meta charset="utf-8">';
+  html += '<title>IEP Progress Report \u2014 ' + escHtml_(s.studentName) + '</title>';
+  html += '<style>';
+
+  // Base styles
+  html += 'body { font-family: "Roboto", Arial, sans-serif; font-size: 11pt; line-height: 1.5; color: #1C1B1F; max-width: 8.5in; margin: 0 auto; padding: 0.5in; }';
+  html += 'h1 { font-size: 18pt; font-weight: 500; margin: 0 0 4px 0; color: #C41E3A; }';
+  html += 'h2 { font-size: 14pt; font-weight: 500; margin: 24px 0 12px 0; padding-bottom: 6px; border-bottom: 2px solid #C41E3A; color: #1C1B1F; }';
+  html += 'h3 { font-size: 12pt; font-weight: 500; margin: 16px 0 8px 0; color: #1C1B1F; }';
+  html += 'p { margin: 4px 0; }';
+
+  // Header
+  html += '.report-header { border-bottom: 3px solid #C41E3A; padding-bottom: 12px; margin-bottom: 16px; }';
+  html += '.report-subtitle { font-size: 10pt; color: #49454F; }';
+  html += '.student-info { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 8px; font-size: 10pt; }';
+  html += '.student-info dt { font-weight: 500; color: #49454F; }';
+  html += '.student-info dd { margin: 0 0 4px 0; }';
+
+  // Summary card
+  html += '.summary-card { background: #F7F2FA; border-radius: 12px; padding: 16px 20px; margin-bottom: 20px; }';
+  html += '.summary-stats { display: flex; gap: 24px; flex-wrap: wrap; margin-top: 8px; }';
+  html += '.stat-item { text-align: center; }';
+  html += '.stat-value { font-size: 20pt; font-weight: 500; }';
+  html += '.stat-label { font-size: 9pt; color: #49454F; }';
+
+  // Goal sections
+  html += '.goal-area-section { margin-bottom: 20px; break-inside: avoid; }';
+  html += '.goal-block { margin-left: 12px; margin-bottom: 12px; }';
+  html += '.goal-text { font-style: italic; margin-bottom: 8px; }';
+  html += '.objective-row { margin-left: 16px; margin-bottom: 12px; padding: 8px 12px; border-left: 3px solid #D8C2C2; }';
+  html += '.rating-badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 10pt; font-weight: 500; }';
+  html += '.friendly-label { font-size: 9pt; font-style: italic; color: #49454F; margin-left: 8px; }';
+  html += '.anecdotal-notes { margin-top: 4px; font-size: 10pt; color: #49454F; }';
+  html += '.progress-timeline { margin-top: 4px; font-size: 9pt; color: #666; }';
+  html += '.timeline-chip { display: inline-block; padding: 1px 6px; border-radius: 8px; font-size: 8pt; margin-right: 4px; }';
+
+  // Grades table
+  html += '.grades-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 10pt; }';
+  html += '.grades-table th { background: #F5F5F5; text-align: left; padding: 8px 12px; border-bottom: 2px solid #D8C2C2; font-weight: 500; }';
+  html += '.grades-table td { padding: 8px 12px; border-bottom: 1px solid #E8E8E8; }';
+  html += '.gpa-display { margin-top: 8px; font-size: 11pt; }';
+  html += '.gpa-value { font-weight: 500; font-size: 14pt; }';
+
+  // Footer
+  html += '.report-footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #D8C2C2; font-size: 9pt; color: #49454F; }';
+
+  // Print styles
+  html += '@media print {';
+  html += '  body { padding: 0; margin: 0; }';
+  html += '  .goal-area-section { break-inside: avoid; }';
+  html += '  .objective-row { break-inside: avoid; }';
+  html += '  .summary-card { background: #F7F2FA !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }';
+  html += '  .rating-badge { -webkit-print-color-adjust: exact; print-color-adjust: exact; }';
+  html += '  .timeline-chip { -webkit-print-color-adjust: exact; print-color-adjust: exact; }';
+  html += '}';
+
+  html += '</style></head><body>';
+
+  // ── Header ──
+  html += '<div class="report-header">';
+  html += '<h1>IEP Progress Report</h1>';
+  html += '<p class="report-subtitle">Richfield Public Schools</p>';
+  html += '<div class="student-info">';
+  html += '<div><dt>Student</dt><dd><strong>' + escHtml_(s.studentName) + '</strong></dd></div>';
+  html += '<div><dt>Grade</dt><dd>' + escHtml_(s.gradeLevel) + '</dd></div>';
+  html += '<div><dt>Case Manager</dt><dd>' + escHtml_(s.caseManager) + '</dd></div>';
+  html += '<div><dt>Reporting Period</dt><dd>' + escHtml_(s.reportingPeriod) + '</dd></div>';
+  html += '<div><dt>Date Generated</dt><dd>' + new Date().toLocaleDateString() + '</dd></div>';
+  html += '</div></div>';
+
+  // ── Summary Card ──
+  html += '<div class="summary-card">';
+  html += '<h3 style="margin-top:0;">Progress Summary</h3>';
+
+  if (overallSummary && String(overallSummary).trim()) {
+    html += '<p>' + escHtml_(overallSummary) + '</p>';
+  }
+
+  html += '<div class="summary-stats">';
+  html += '<div class="stat-item"><div class="stat-value">' + s.totalGoals + '</div><div class="stat-label">Total Goals</div></div>';
+  html += '<div class="stat-item"><div class="stat-value" style="color:#1B5E20;">' + s.goalsWithAdequateOrMet + '</div><div class="stat-label">On Track</div></div>';
+  html += '<div class="stat-item"><div class="stat-value" style="color:#BA1A1A;">' + s.goalsWithNoProgress + '</div><div class="stat-label">Need Attention</div></div>';
+
+  // GPA in summary
+  if (data.gpa) {
+    html += '<div class="stat-item"><div class="stat-value">' + data.gpa.rounded + '</div><div class="stat-label">Current GPA</div></div>';
+  } else {
+    html += '<div class="stat-item"><div class="stat-value">N/A</div><div class="stat-label">Current GPA</div></div>';
+  }
+  html += '</div></div>';
+
+  // ── Goals Section ──
+  html += '<h2>Goals &amp; Objectives</h2>';
+
+  if (data.goalGroups.length === 0) {
+    html += '<p style="color:#49454F;">No IEP goals have been entered for this student.</p>';
+  }
+
+  data.goalGroups.forEach(function(group) {
+    html += '<div class="goal-area-section">';
+    html += '<h3>' + escHtml_(group.goalArea) + '</h3>';
+
+    group.goals.forEach(function(goal) {
+      html += '<div class="goal-block">';
+      html += '<p class="goal-text">' + escHtml_(goal.text) + '</p>';
+
+      goal.objectives.forEach(function(obj) {
+        html += '<div class="objective-row">';
+        html += '<p><strong>' + escHtml_(obj.text) + '</strong></p>';
+
+        // Current rating badge
+        var r = obj.currentProgress.rating;
+        html += '<span class="rating-badge" style="background:' + ratingBg(r) + ';color:' + ratingColor(r) + ';">' + escHtml_(r) + '</span>';
+
+        // Student-friendly label
+        var friendly = PROGRESS_FRIENDLY_LABELS[r] || '';
+        if (friendly) {
+          html += '<span class="friendly-label">' + escHtml_(friendly) + '</span>';
+        }
+
+        // Anecdotal notes
+        if (obj.currentProgress.notes) {
+          html += '<p class="anecdotal-notes">' + escHtml_(obj.currentProgress.notes) + '</p>';
+        }
+
+        // Progress timeline (prior quarters)
+        if (obj.progressHistory.length > 0) {
+          html += '<div class="progress-timeline">Progress: ';
+          obj.progressHistory.forEach(function(h) {
+            html += '<span class="timeline-chip" style="background:' + ratingBg(h.rating) + ';color:' + ratingColor(h.rating) + ';">' + h.quarter + ': ' + escHtml_(h.rating) + '</span> ';
+          });
+          // Current quarter
+          html += '<span class="timeline-chip" style="background:' + ratingBg(r) + ';color:' + ratingColor(r) + ';font-weight:500;">' + quarter + ': ' + escHtml_(r) + '</span>';
+          html += '</div>';
+        }
+
+        html += '</div>'; // objective-row
+      });
+
+      html += '</div>'; // goal-block
+    });
+
+    html += '</div>'; // goal-area-section
+  });
+
+  // ── Grades Section ──
+  html += '<h2>Current Grades</h2>';
+
+  if (data.grades.length === 0) {
+    html += '<p style="color:#49454F;">Grades not yet available.</p>';
+  } else {
+    html += '<table class="grades-table">';
+    html += '<thead><tr><th>Class</th><th>Grade</th><th>Missing Assignments</th></tr></thead>';
+    html += '<tbody>';
+
+    var hasPassFail = false;
+    data.grades.forEach(function(g) {
+      var isPassFail = !GPA_MAP.hasOwnProperty(g.grade) && g.grade;
+      if (isPassFail) hasPassFail = true;
+      html += '<tr>';
+      html += '<td>' + escHtml_(g.className) + '</td>';
+      html += '<td>' + escHtml_(g.grade) + (isPassFail ? ' <em style="font-size:9pt;color:#666;">(Pass/Fail)</em>' : '') + '</td>';
+      html += '<td>' + g.missing + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+
+    // GPA
+    html += '<div class="gpa-display">';
+    if (data.gpa) {
+      html += 'GPA: <span class="gpa-value">' + data.gpa.rounded + '</span>';
+      if (data.gpa.excludedCount > 0) {
+        html += ' <em style="font-size:9pt;color:#666;">(' + data.gpa.excludedCount + ' pass/fail class' + (data.gpa.excludedCount > 1 ? 'es' : '') + ' excluded)</em>';
+      }
+    } else {
+      html += 'GPA: <span class="gpa-value">N/A</span>';
+    }
+    html += '</div>';
+  }
+
+  // ── Footer ──
+  html += '<div class="report-footer">';
+  html += '<p><strong>Questions?</strong> Contact ' + escHtml_(s.caseManager) + '</p>';
+  html += '<p>This progress report is part of the IEP process under IDEA. For questions about your child\'s IEP, please contact the case manager listed above.</p>';
+  html += '</div>';
+
+  html += '</body></html>';
+  return html;
+}
+
+/** Public endpoint: generate a progress report for one student.
+ *  Called from the frontend. */
+function generateProgressReport(studentId, quarter, overallSummary) {
+  if (VALID_QUARTERS.indexOf(String(quarter)) === -1) {
+    return { success: false, error: 'Invalid quarter.' };
+  }
+
+  initializeSheetsIfNeeded_();
+  var students = getStudents();
+  var student = null;
+  for (var i = 0; i < students.length; i++) {
+    if (students[i].id === studentId) { student = students[i]; break; }
+  }
+  if (!student) return { success: false, error: 'Student not found.' };
+
+  // Get dashboard data for GPA/academic info
+  var dashData = getDashboardData();
+  var dashStudent = null;
+  for (var j = 0; j < dashData.length; j++) {
+    if (dashData[j].id === studentId) { dashStudent = dashData[j]; break; }
+  }
+
+  // Merge academic data into student record
+  if (dashStudent) {
+    student.academicData = dashStudent.academicData || [];
+    student.gpa = dashStudent.gpa;
+  } else {
+    student.academicData = [];
+    student.gpa = null;
+  }
+
+  var allEntries = getAllProgressForStudent(studentId);
+  var html = generateProgressReportHtml_(student, quarter, allEntries, overallSummary || '');
+  return { success: true, html: html };
+}
+
+/** Public endpoint: batch generate reports for entire caseload. */
+function generateBatchReports(quarter, overallSummaries) {
+  if (VALID_QUARTERS.indexOf(quarter) === -1) {
+    return { success: false, error: 'Invalid quarter: ' + quarter };
+  }
+
+  try {
+    initializeSheetsIfNeeded_();
+    var dashData = getDashboardData();
+    var summaries = overallSummaries || {};
+    var results = [];
+
+    dashData.forEach(function(student) {
+      var allEntries = getAllProgressForStudent(student.id);
+      var summary = summaries[student.id] || '';
+
+      // Ensure goalsJson is available
+      if (!student.goalsJson) student.goalsJson = '[]';
+
+      var html = generateProgressReportHtml_(student, quarter, allEntries, summary);
+      results.push({
+        studentId: student.id,
+        studentName: (student.firstName || '') + ' ' + (student.lastName || ''),
+        html: html
+      });
+    });
+
+    return { success: true, reports: results };
+  } catch (e) {
+    return { success: false, error: 'Failed to generate batch reports: ' + e.message };
+  }
 }
 
 // ───── Helpers ─────

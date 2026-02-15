@@ -92,14 +92,26 @@
 
     <!-- Dashboard View -->
     <div id="dashboard-view" class="view">
-      <div id="dashboard-greeting" class="dashboard-greeting"></div>
-      <div class="view-header" style="display:flex;justify-content:flex-end;align-items:center;gap:8px;">
+      <div class="view-header" style="display:flex;align-items:center;gap:8px;">
+        <div id="dashboard-greeting" class="dashboard-greeting" style="margin-right:auto;"></div>
+        <div id="caseload-filter-chips" class="filter-chips" style="display:none">
+          <button id="filter-chip-all" class="filter-chip" onclick="setCaseloadFilter('all')" aria-pressed="false">All Students</button>
+          <button id="filter-chip-my" class="filter-chip filter-chip-active" onclick="setCaseloadFilter('my')" aria-pressed="true">My Students</button>
+        </div>
+        <div id="checkin-progress" class="checkin-progress" style="display:none">
+          <span id="checkin-progress-text"></span>
+          <div class="checkin-progress-bar"><div id="checkin-progress-fill" class="checkin-progress-fill"></div></div>
+        </div>
         <button onclick="showAddStudent()" class="btn btn-primary btn-sm" id="add-student-btn">+ Add Student</button>
         <button onclick="refreshDashboard()" class="btn-icon" id="dashboard-refresh-btn" aria-label="Refresh dashboard" title="Refresh data">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
         </button>
       </div>
       <div id="tab-panel-caseload" class="tab-panel active">
+        <div id="dashboard-needs-attention" class="dashboard-section" style="display:none">
+          <h2 class="dashboard-subheader">Needs Attention</h2>
+          <div id="needs-attention-content"></div>
+        </div>
         <div id="dashboard-at-a-glance" class="dashboard-section" style="display:none">
           <h2 class="dashboard-subheader">At a Glance</h2>
           <div id="at-a-glance-content"></div>
@@ -107,6 +119,9 @@
         <div id="dashboard-evals-section" class="dashboard-section" style="display:none">
           <h2 class="dashboard-subheader">Evals</h2>
           <div id="evals-section-content"></div>
+        </div>
+        <div id="dashboard-missing-section" class="dashboard-section" style="display:none">
+          <div id="missing-metric-content"></div>
         </div>
         <div id="dashboard-recent-section" class="dashboard-section" style="display:none">
           <h2 class="dashboard-subheader">Recent Students</h2>
@@ -201,6 +216,8 @@
       </div>
       <div id="checkin-form-container"></div>
     </div>
+
+    <div class="keyboard-hint" role="button" tabindex="0" onclick="toggleKeyboardHelp()" onkeydown="if(event.key==='Enter')toggleKeyboardHelp()" title="Press ? for keyboard shortcuts"><kbd>?</kbd> Shortcuts</div>
 
   </main>
 

@@ -10,8 +10,10 @@ var appState = {
   currentStudentId: null,
   currentCheckIns: [],
   editingCheckIn: null,
-  sortField: 'name',
+  sortField: 'priority',
   sortAsc: true,
+  caseloadFilter: 'all',
+  highlightedRowIndex: -1,
   missingViewStudentId: null,
   feedbackLinks: null,
   currentUserEmail: '',
@@ -22,7 +24,9 @@ var appState = {
   evalSummary: null,
   timelineExpandedDay: null,
   editingEvalItemId: null,
-  recentStudents: []
+  recentStudents: [],
+  currentProgressQuarter: null,
+  progressEntries: []
 };
 var _persistTimers = {};
 var _persistInFlight = 0;
@@ -35,6 +39,9 @@ var _goalsAutosaveDirty = false;
 var _evalAutosaveTimer = null;
 var _evalAutosaveInFlight = false;
 var _evalAutosaveDirty = false;
+var _progressAutosaveTimer = null;
+var _progressAutosaveInFlight = false;
+var _progressAutosaveDirty = false;
 
 var onboardingState = {
   step: 1,
@@ -46,6 +53,13 @@ var GPA_MAP = {
   'A':4.0, 'A-':3.7, 'B+':3.3, 'B':3.0, 'B-':2.7,
   'C+':2.3, 'C':2.0, 'C-':1.7, 'D+':1.3, 'D':1.0, 'D-':0.7, 'F':0.0
 };
+
+// ─── Progress Reporting Constants ───
+var PROGRESS_RATINGS = [
+  { value: 'No Progress', label: 'No Progress', color: 'red' },
+  { value: 'Adequate Progress', label: 'Adequate Progress', color: 'yellow' },
+  { value: 'Objective Met', label: 'Objective Met', color: 'green' }
+];
 
 // ─── Eval Type Definitions ───
 var EVAL_TYPES = [
@@ -106,6 +120,93 @@ function trackRecentStudent(studentId) {
     appState.recentStudents = appState.recentStudents.slice(0, 5);
   }
   renderRecentStudents();
+}
+
+// ─── Dashboard Helpers ───
+function computeUrgencyScore(s) {
+  var score = 0;
+  if (s.daysSinceCheckIn != null && s.daysSinceCheckIn > 7) score += 2;
+  if (s.avgRating != null) {
+    if (s.avgRating < 3.0) score += 2;
+    else if (s.avgRating < 4.0) score += 1;
+  }
+  if (s.totalMissing >= 4) score += 2;
+  else if (s.totalMissing >= 1) score += 1;
+  if (s.trend === 'down') score += 1;
+  return score;
+}
+
+function formatRelativeDate(dateStr) {
+  if (!dateStr) return { text: 'Never', tier: 'red' };
+  var parts = dateStr.split('-');
+  if (parts.length !== 3) return { text: dateStr, tier: 'gray' };
+  var checkDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+  var today = new Date();
+  today.setHours(0,0,0,0);
+  var diffDays = Math.floor((today - checkDate) / 86400000);
+  var text;
+  if (diffDays < 0) text = 'Upcoming';
+  else if (diffDays === 0) text = 'Today';
+  else if (diffDays === 1) text = 'Yesterday';
+  else if (diffDays < 7) text = diffDays + 'd ago';
+  else if (diffDays < 14) text = '1 wk ago';
+  else text = Math.floor(diffDays / 7) + ' wks ago';
+  var tier = diffDays < 0 ? 'green' : diffDays <= 6 ? 'green' : diffDays <= 13 ? 'yellow' : 'red';
+  return { text: text, tier: tier };
+}
+
+function buildSparklineSvg(efHistory) {
+  if (!efHistory || efHistory.length < 2) return '';
+  var w = 60, h = 24, pad = 3;
+  var points = [];
+  var n = efHistory.length;
+  for (var i = 0; i < n; i++) {
+    var x = pad + (i / (n - 1)) * (w - pad * 2);
+    var y = h - pad - ((efHistory[i] - 1) / 4) * (h - pad * 2);
+    points.push({ x: x, y: y });
+  }
+  var pathD = points.map(function(p, i) {
+    return (i === 0 ? 'M' : 'L') + p.x.toFixed(1) + ',' + p.y.toFixed(1);
+  }).join(' ');
+  var lastVal = efHistory[n - 1];
+  var dotColor = lastVal >= 4 ? '#1B5E20' : lastVal >= 3 ? '#7A5900' : '#BA1A1A';
+  var lp = points[n - 1];
+  return '<svg class="ef-sparkline" width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '">' +
+    '<path d="' + pathD + '" fill="none" stroke="var(--md-outline)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>' +
+    '<circle cx="' + lp.x.toFixed(1) + '" cy="' + lp.y.toFixed(1) + '" r="3" fill="' + dotColor + '"/>' +
+  '</svg>';
+}
+
+function applyFilter_(data) {
+  if (appState.caseloadFilter === 'my') {
+    var email = (appState.currentUserEmail || '').toLowerCase();
+    return data.filter(function(s) {
+      return (s.caseManagerEmail || '').toLowerCase() === email;
+    });
+  }
+  return data;
+}
+
+function setCaseloadFilter(filter) {
+  appState.caseloadFilter = filter;
+  var chipAll = document.getElementById('filter-chip-all');
+  var chipMy = document.getElementById('filter-chip-my');
+  if (chipAll) {
+    chipAll.classList.toggle('filter-chip-active', filter === 'all');
+    chipAll.setAttribute('aria-pressed', filter === 'all' ? 'true' : 'false');
+  }
+  if (chipMy) {
+    chipMy.classList.toggle('filter-chip-active', filter === 'my');
+    chipMy.setAttribute('aria-pressed', filter === 'my' ? 'true' : 'false');
+  }
+  if (appState.dashboardData) {
+    var filtered = applyFilter_(appState.dashboardData);
+    renderDashboard(filtered);
+    renderNeedsAttention(filtered);
+    renderCheckInProgress(filtered);
+    renderMissingAggregate(filtered);
+    renderRecentStudents();
+  }
 }
 
 // ─── Preloaded Options ───
@@ -188,6 +289,10 @@ function enterApp() {
       if (isCM) {
         var myCaseloadItem = document.getElementById('drawer-mycaseload');
         if (myCaseloadItem) myCaseloadItem.style.display = '';
+        var filterChips = document.getElementById('caseload-filter-chips');
+        if (filterChips) filterChips.style.display = '';
+        appState.caseloadFilter = 'my';
+        setCaseloadFilter('my');
       }
       // Show Admin drawer item if superuser
       if (appState.isSuperuser) {
@@ -386,16 +491,84 @@ document.addEventListener('mouseout', function(e) {
 
 // Close panels on Escape key
 document.addEventListener('keydown', function(e) {
+  // Close keyboard help on Escape regardless of context
+  var helpOverlay = document.querySelector('.keyboard-help-overlay');
+  if (e.key === 'Escape' && helpOverlay) {
+    helpOverlay.remove();
+    return;
+  }
   if (e.key === 'Escape') {
     closeNavDrawer();
     closeSidePanel();
     hideNavTooltip_();
     hideNavFlyout_();
-    // Also close any confirmation dialogs
     var overlay = document.querySelector('.confirm-overlay');
     if (overlay) closeConfirmDialog(overlay);
+    // Clear row highlight
+    appState.highlightedRowIndex = -1;
+    document.querySelectorAll('.row-highlighted').forEach(function(r) { r.classList.remove('row-highlighted'); });
+    return;
+  }
+  // Skip shortcuts if user is typing in an input
+  var tag = (document.activeElement && document.activeElement.tagName) || '';
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  // Only handle dashboard shortcuts when dashboard is visible
+  var dashView = document.getElementById('dashboard-view');
+  if (!dashView || !dashView.classList.contains('active')) return;
+  var rows = document.querySelectorAll('#dashboard-table-container tbody tr');
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (rows.length === 0) return;
+    appState.highlightedRowIndex = Math.min(appState.highlightedRowIndex + 1, rows.length - 1);
+    updateRowHighlight(rows);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (rows.length === 0) return;
+    appState.highlightedRowIndex = Math.max(appState.highlightedRowIndex - 1, 0);
+    updateRowHighlight(rows);
+  } else if (e.key === 'Enter' && appState.highlightedRowIndex >= 0 && rows[appState.highlightedRowIndex]) {
+    e.preventDefault();
+    rows[appState.highlightedRowIndex].click();
+  } else if (e.key === 'n' && appState.highlightedRowIndex >= 0 && rows[appState.highlightedRowIndex]) {
+    e.preventDefault();
+    var sid = rows[appState.highlightedRowIndex].dataset.studentId;
+    if (sid) startCheckIn(sid);
+  } else if (e.key === 'p' && appState.highlightedRowIndex >= 0 && rows[appState.highlightedRowIndex]) {
+    e.preventDefault();
+    var sid2 = rows[appState.highlightedRowIndex].dataset.studentId;
+    if (sid2) showStudentProfile(sid2);
+  } else if (e.key === '?') {
+    e.preventDefault();
+    toggleKeyboardHelp();
   }
 });
+
+function updateRowHighlight(rows) {
+  rows.forEach(function(r) { r.classList.remove('row-highlighted'); });
+  if (appState.highlightedRowIndex >= 0 && rows[appState.highlightedRowIndex]) {
+    rows[appState.highlightedRowIndex].classList.add('row-highlighted');
+    rows[appState.highlightedRowIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+}
+
+function toggleKeyboardHelp() {
+  var existing = document.querySelector('.keyboard-help-overlay');
+  if (existing) { existing.remove(); return; }
+  var overlay = document.createElement('div');
+  overlay.className = 'keyboard-help-overlay';
+  overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+  overlay.innerHTML =
+    '<div class="keyboard-help">' +
+      '<h3>Keyboard Shortcuts</h3>' +
+      '<div class="kb-row"><span>Navigate rows</span><span><kbd>&#x2191;</kbd> <kbd>&#x2193;</kbd></span></div>' +
+      '<div class="kb-row"><span>Open side panel</span><kbd>Enter</kbd></div>' +
+      '<div class="kb-row"><span>New check-in</span><kbd>n</kbd></div>' +
+      '<div class="kb-row"><span>Student profile</span><kbd>p</kbd></div>' +
+      '<div class="kb-row"><span>Close / deselect</span><kbd>Esc</kbd></div>' +
+      '<div class="kb-row"><span>Show this help</span><kbd>?</kbd></div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+}
 
 function closeConfirmDialog(overlayEl) {
   if (!overlayEl || overlayEl.classList.contains('dialog-closing')) return;
@@ -451,7 +624,11 @@ function loadDashboard() {
   // If academic-data persists are pending or in-flight, render from
   // local optimistic state to avoid overwriting unsaved changes.
   if (Object.keys(_persistTimers).length > 0 || _persistInFlight > 0) {
-    renderDashboard(appState.dashboardData);
+    var cached = applyFilter_(appState.dashboardData);
+    renderDashboard(cached);
+    renderNeedsAttention(cached);
+    renderCheckInProgress(cached);
+    renderMissingAggregate(cached);
     renderRecentStudents();
     if (appState.evalSummary) renderEvalSummary(appState.evalSummary);
     return;
@@ -462,7 +639,11 @@ function loadDashboard() {
     .withSuccessHandler(function(data) {
       try {
         appState.dashboardData = data || [];
-        renderDashboard(data);
+        var filtered = applyFilter_(data);
+        renderDashboard(filtered);
+        renderNeedsAttention(filtered);
+        renderCheckInProgress(filtered);
+        renderMissingAggregate(filtered);
         renderRecentStudents();
       } catch(e) {
         document.getElementById('dashboard-table-container').innerHTML =
@@ -502,7 +683,9 @@ function switchDashboardTab(tabName) {
   if (tabName === 'caseload' || tabName === 'dashboard') {
     loadDashboard();
   } else if (tabName === 'mycaseload') {
-    renderMyCaseload();
+    setCaseloadFilter('my');
+    switchDashboardTab('caseload');
+    return;
   } else if (tabName === 'admin') {
     loadAdminView();
   }
@@ -515,7 +698,7 @@ function toggleSort(field) {
     appState.sortField = field;
     appState.sortAsc = true;
   }
-  renderDashboard(appState.dashboardData);
+  renderDashboard(applyFilter_(appState.dashboardData));
 }
 
 function sortIcon(field) {
@@ -534,6 +717,7 @@ function sortIcon(field) {
 }
 
 function renderDashboard(data) {
+  appState.highlightedRowIndex = -1;
   var container = document.getElementById('dashboard-table-container');
 
   if (!data || data.length === 0) {
@@ -548,7 +732,10 @@ function renderDashboard(data) {
   // Sort data
   var sorted = data.slice().sort(function(a, b) {
     var cmp = 0;
-    if (appState.sortField === 'name') {
+    if (appState.sortField === 'priority') {
+      cmp = computeUrgencyScore(b) - computeUrgencyScore(a);
+      if (cmp === 0) cmp = String(a.firstName).localeCompare(String(b.firstName));
+    } else if (appState.sortField === 'name') {
       cmp = String(a.firstName).localeCompare(String(b.firstName));
       if (cmp === 0) cmp = String(a.lastName).localeCompare(String(b.lastName));
     } else if (appState.sortField === 'grade') {
@@ -564,16 +751,16 @@ function renderDashboard(data) {
   });
 
   var html = '<table class="dashboard-table"><thead><tr>' +
-    '<th><span class="th-sortable">' + sortIcon('name') + 'Name</span></th>' +
+    '<th><span class="th-sortable">' + sortIcon('priority') + sortIcon('name') + 'Name</span></th>' +
     '<th><span class="th-sortable">' + sortIcon('grade') + 'Grade</span></th>' +
     '<th>EF Avg</th><th>Trend</th><th>GPA</th>' +
-    '<th>Missing</th><th>Last Check-In</th><th>Actions</th>' +
+    '<th>Missing</th><th>Last Check-In</th><th style="text-align:left">Actions</th>' +
     '</tr></thead><tbody>';
 
   sorted.forEach(function(s, index) {
-    var origIndex = data.indexOf(s);
+    var origIndex = (appState.dashboardData || data).indexOf(s);
     var delay = Math.min(index * 50, 400);
-    html += '<tr class="stagger-row" style="animation-delay:' + delay + 'ms" onclick="openSidePanel(' + origIndex + ')" title="Click for quick view">';
+    html += '<tr class="stagger-row" data-student-id="' + s.id + '" data-row-index="' + index + '" style="animation-delay:' + delay + 'ms" onclick="openSidePanel(' + origIndex + ')" title="Click for quick view">';
     html += '<td><strong>' + esc(s.firstName + ' ' + s.lastName) + '</strong>';
     if (s.evalType) {
       var evalLabel = getEvalTypeLabel(s.evalType);
@@ -582,10 +769,15 @@ function renderDashboard(data) {
     html += '</td>';
     html += '<td>' + esc(s.grade || '-') + '</td>';
 
-    // EF Average
+    // EF Average with sparkline
     if (s.avgRating != null) {
       var efClass = s.avgRating >= 4 ? 'chip-green' : s.avgRating >= 3 ? 'chip-yellow' : 'chip-red';
-      html += '<td><span class="chip ' + efClass + '">' + s.avgRating.toFixed(1) + '</span></td>';
+      var sparkSvg = (s.efHistory && s.efHistory.length >= 2) ? buildSparklineSvg(s.efHistory) : '';
+      if (sparkSvg) {
+        html += '<td><span class="ef-sparkline-cell">' + sparkSvg + '<span class="chip ' + efClass + '">' + s.avgRating.toFixed(1) + '</span></span></td>';
+      } else {
+        html += '<td><span class="chip ' + efClass + '">' + s.avgRating.toFixed(1) + '</span></td>';
+      }
     } else {
       html += '<td><span class="chip chip-gray">--</span></td>';
     }
@@ -612,8 +804,13 @@ function renderDashboard(data) {
       html += '<td><span class="chip chip-clickable chip-green" onclick="event.stopPropagation(); showMissingAssignments(\'' + s.id + '\')" title="View missing assignments">0</span></td>';
     }
 
-    // Last check-in date
-    html += '<td>' + esc(formatDateDisplay(s.latestWeek)) + '</td>';
+    // Last check-in staleness
+    if (s.latestWeek) {
+      var rel = formatRelativeDate(s.latestWeek);
+      html += '<td><span class="staleness-chip staleness-' + rel.tier + '" title="' + esc(formatDateDisplay(s.latestWeek)) + '">' + esc(rel.text) + '</span></td>';
+    } else {
+      html += '<td><span class="chip chip-gray">--</span></td>';
+    }
 
     // Action buttons (icon-only)
     html += '<td><div class="action-btns">' +
@@ -633,6 +830,170 @@ function renderDashboard(data) {
 
   container.innerHTML = html;
   animateContentIn(container);
+}
+
+// ─── Needs Attention Cards (Feature 1 + 10) ───
+
+function renderNeedsAttention(data) {
+  var section = document.getElementById('dashboard-needs-attention');
+  var content = document.getElementById('needs-attention-content');
+  if (!section || !content) return;
+
+  if (!data || data.length === 0) {
+    section.style.display = 'none';
+    return;
+  }
+
+  var flagged = data.filter(function(s) {
+    if (s.daysSinceCheckIn != null && s.daysSinceCheckIn >= 7) return true;
+    if (s.avgRating != null && s.avgRating < 3) return true;
+    if (s.trend === 'down') return true;
+    if (s.totalMissing >= 4) return true;
+    return false;
+  });
+
+  section.style.display = '';
+
+  if (flagged.length === 0) {
+    content.innerHTML = '<div class="needs-attention-empty">' +
+      '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>' +
+      'All students on track this week</div>';
+    return;
+  }
+
+  // Sort by urgency
+  flagged.sort(function(a, b) {
+    return computeUrgencyScore(b) - computeUrgencyScore(a);
+  });
+
+  var html = '<div class="needs-attention-cards">';
+  flagged.forEach(function(s) {
+    var reasons = [];
+    if (s.daysSinceCheckIn != null && s.daysSinceCheckIn >= 7) {
+      reasons.push(s.daysSinceCheckIn + 'd no check-in');
+    }
+    if (s.avgRating != null && s.avgRating < 3) {
+      reasons.push('EF ' + s.avgRating.toFixed(1));
+    } else if (s.trend === 'down') {
+      reasons.push('EF trending down');
+    }
+    if (s.totalMissing >= 4) {
+      reasons.push(s.totalMissing + ' missing');
+    }
+
+    var spIdx = (appState.dashboardData || []).indexOf(s);
+    html += '<div class="needs-attention-card" role="button" tabindex="0" onclick="openSidePanel(' + spIdx + ')" onkeydown="if(event.key===\'Enter\')openSidePanel(' + spIdx + ')">';
+    html += '<div class="needs-attention-name">' + esc(s.firstName + ' ' + s.lastName) + '</div>';
+    html += '<div class="needs-attention-reasons">';
+    reasons.forEach(function(r) {
+      html += '<span class="needs-attention-reason">' + esc(r) + '</span>';
+    });
+    html += '</div>';
+    html += '<button class="needs-attention-action" onclick="event.stopPropagation(); startCheckIn(\'' + s.id + '\')">Check In &#x2192;</button>';
+    html += '</div>';
+  });
+  html += '</div>';
+  content.innerHTML = html;
+}
+
+// ─── Check-In Progress Counter (Feature 3) ───
+
+function renderCheckInProgress(data) {
+  var wrapper = document.getElementById('checkin-progress');
+  var textEl = document.getElementById('checkin-progress-text');
+  var fillEl = document.getElementById('checkin-progress-fill');
+  if (!wrapper || !textEl || !fillEl) return;
+
+  if (!data || data.length === 0) {
+    wrapper.style.display = 'none';
+    return;
+  }
+
+  // Calculate Monday of current week
+  var now = new Date();
+  var day = now.getDay();
+  var monday = new Date(now);
+  monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
+  monday.setHours(0, 0, 0, 0);
+  var mondayStr = monday.getFullYear() + '-' +
+    String(monday.getMonth() + 1).padStart(2, '0') + '-' +
+    String(monday.getDate()).padStart(2, '0');
+
+  var checkedIn = 0;
+  data.forEach(function(s) {
+    if (s.latestWeek && s.latestWeek >= mondayStr) checkedIn++;
+  });
+
+  var total = data.length;
+  var pct = total > 0 ? Math.round((checkedIn / total) * 100) : 0;
+
+  textEl.textContent = checkedIn + ' of ' + total + ' checked in';
+  fillEl.style.width = pct + '%';
+  var barEl = fillEl.parentElement;
+  if (barEl) {
+    barEl.setAttribute('role', 'progressbar');
+    barEl.setAttribute('aria-valuenow', pct);
+    barEl.setAttribute('aria-valuemin', '0');
+    barEl.setAttribute('aria-valuemax', '100');
+    barEl.setAttribute('aria-label', checkedIn + ' of ' + total + ' students checked in this week');
+  }
+  wrapper.style.display = '';
+}
+
+// ─── Missing Assignments Aggregate (Feature 7) ───
+
+function renderMissingAggregate(data) {
+  var section = document.getElementById('dashboard-missing-section');
+  var content = document.getElementById('missing-metric-content');
+  if (!section || !content) return;
+
+  if (!data || data.length === 0) {
+    section.style.display = 'none';
+    return;
+  }
+
+  var totalMissing = 0;
+  var studentsWithMissing = [];
+  data.forEach(function(s) {
+    if (s.totalMissing > 0) {
+      totalMissing += s.totalMissing;
+      studentsWithMissing.push(s);
+    }
+  });
+
+  if (totalMissing === 0) {
+    section.style.display = 'none';
+    return;
+  }
+
+  studentsWithMissing.sort(function(a, b) { return b.totalMissing - a.totalMissing; });
+
+  section.style.display = '';
+  var chipClass = totalMissing >= 10 ? 'chip-red' : totalMissing >= 4 ? 'chip-yellow' : 'chip-green';
+
+  var html = '<div class="eval-metric-card-wrapper">' +
+    '<div id="metric-card-missing-agg" class="eval-metric-card eval-metric-card-clickable" onclick="toggleMetricDropdown(\'missing-agg\')" role="button" aria-expanded="false" aria-controls="metric-dropdown-missing-agg">' +
+      '<div class="eval-metric-icon">' +
+        '<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm2 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>' +
+      '</div>' +
+      '<div class="eval-metric-info">' +
+        '<div class="eval-metric-value"><span class="chip ' + chipClass + '">' + totalMissing + '</span></div>' +
+        '<div class="eval-metric-label">Total Missing Assignments</div>' +
+      '</div>' +
+      '<svg class="eval-metric-chevron" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>' +
+    '</div>' +
+    '<div id="metric-dropdown-missing-agg" class="eval-metric-dropdown">' +
+      '<div class="missing-agg-students">';
+
+  studentsWithMissing.forEach(function(s) {
+    html += '<div class="missing-agg-row" role="button" tabindex="0" onclick="event.stopPropagation(); showMissingAssignments(\'' + s.id + '\')" onkeydown="if(event.key===\'Enter\'){event.stopPropagation(); showMissingAssignments(\'' + s.id + '\')}">' +
+      '<span>' + esc(s.firstName + ' ' + s.lastName) + '</span>' +
+      '<span class="missing-agg-count">' + s.totalMissing + '</span>' +
+    '</div>';
+  });
+
+  html += '</div></div></div>';
+  content.innerHTML = html;
 }
 
 // ─── Eval Summary Cards + Next 7 Days Timeline ───
@@ -664,9 +1025,13 @@ function buildMetricCardsHtml_(summary) {
   var html = '<div class="eval-metric-cards">';
 
   // Due This Week card
-  html += '<div class="eval-metric-card">' +
+  var dtwClickable = summary.dueThisWeekCount > 0 ? ' eval-metric-card-clickable' : '';
+  var dtwOnclick = summary.dueThisWeekCount > 0 ? ' onclick="toggleMetricDropdown(\'due-this-week\')"' : '';
+  html += '<div class="eval-metric-card-wrapper">' +
+    '<div class="eval-metric-card' + dtwClickable + '"' + dtwOnclick +
+      ' role="button" tabindex="0" aria-expanded="false" id="metric-card-due-this-week">' +
     '<div class="eval-metric-icon">' +
-      '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">' +
+      '<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">' +
         '<path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM9 10H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2z"/>' +
       '</svg>' +
     '</div>' +
@@ -674,13 +1039,21 @@ function buildMetricCardsHtml_(summary) {
       '<span class="eval-metric-label">Due This Week</span>' +
       '<span class="eval-metric-value">' + summary.dueThisWeekCount + '</span>' +
     '</div>' +
-  '</div>';
+    (summary.dueThisWeekCount > 0 ? '<svg class="eval-metric-chevron" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>' : '') +
+  '</div>' +
+  '<div class="eval-metric-dropdown" id="metric-dropdown-due-this-week">' +
+    buildMetricTaskList_(summary.dueThisWeekTasks || [], 'due') +
+  '</div></div>';
 
   // Overdue card
   var overdueClass = summary.overdueCount > 0 ? ' eval-metric-card-alert' : '';
-  html += '<div class="eval-metric-card' + overdueClass + '">' +
+  var ovClickable = summary.overdueCount > 0 ? ' eval-metric-card-clickable' : '';
+  var ovOnclick = summary.overdueCount > 0 ? ' onclick="toggleMetricDropdown(\'overdue\')"' : '';
+  html += '<div class="eval-metric-card-wrapper">' +
+    '<div class="eval-metric-card' + overdueClass + ovClickable + '"' + ovOnclick +
+      ' role="button" tabindex="0" aria-expanded="false" id="metric-card-overdue">' +
     '<div class="eval-metric-icon' + (summary.overdueCount > 0 ? ' eval-metric-icon-alert' : '') + '">' +
-      '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">' +
+      '<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">' +
         '<path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>' +
       '</svg>' +
     '</div>' +
@@ -688,10 +1061,59 @@ function buildMetricCardsHtml_(summary) {
       '<span class="eval-metric-label">Overdue</span>' +
       '<span class="eval-metric-value' + (summary.overdueCount > 0 ? ' eval-metric-value-alert' : '') + '">' + summary.overdueCount + '</span>' +
     '</div>' +
-  '</div>';
+    (summary.overdueCount > 0 ? '<svg class="eval-metric-chevron" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>' : '') +
+  '</div>' +
+  '<div class="eval-metric-dropdown" id="metric-dropdown-overdue">' +
+    buildMetricTaskList_(summary.overdueTasks || [], 'overdue') +
+  '</div></div>';
 
   html += '</div>';
   return html;
+}
+
+function buildMetricTaskList_(tasks, type) {
+  if (!tasks.length) return '<div class="eval-metric-dropdown-empty">No tasks</div>';
+  var html = '';
+  tasks.forEach(function(task) {
+    var dateLabel = '';
+    if (task.dueDate) {
+      var parts = task.dueDate.split('-');
+      dateLabel = parseInt(parts[1], 10) + '/' + parseInt(parts[2], 10);
+    }
+    html += '<div class="eval-metric-dropdown-item" onclick="navigateToEvalTask(\'' + esc(task.studentId) + '\')" ' +
+      'role="link" tabindex="0">' +
+      '<div class="eval-metric-dropdown-item-main">' +
+        '<span class="eval-metric-dropdown-item-text">' + esc(task.text) + '</span>' +
+        (dateLabel ? '<span class="eval-metric-dropdown-item-date' +
+          (type === 'overdue' ? ' eval-metric-dropdown-item-date-overdue' : '') + '">' + dateLabel + '</span>' : '') +
+      '</div>' +
+      '<span class="eval-metric-dropdown-item-student">' + esc(task.studentName) + '</span>' +
+    '</div>';
+  });
+  return html;
+}
+
+function toggleMetricDropdown(key) {
+  var card = document.getElementById('metric-card-' + key);
+  var dropdown = document.getElementById('metric-dropdown-' + key);
+  if (!card || !dropdown) return;
+
+  var isOpen = dropdown.classList.contains('eval-metric-dropdown-open');
+
+  // Close all open dropdowns first
+  var allDropdowns = document.querySelectorAll('.eval-metric-dropdown-open');
+  var allCards = document.querySelectorAll('.eval-metric-card[aria-expanded="true"]');
+  for (var i = 0; i < allDropdowns.length; i++) {
+    allDropdowns[i].classList.remove('eval-metric-dropdown-open');
+  }
+  for (var j = 0; j < allCards.length; j++) {
+    allCards[j].setAttribute('aria-expanded', 'false');
+  }
+
+  if (!isOpen) {
+    dropdown.classList.add('eval-metric-dropdown-open');
+    card.setAttribute('aria-expanded', 'true');
+  }
 }
 
 function buildTimelineHtml_(summary) {
@@ -920,18 +1342,85 @@ function toggleTimelineDay(dayIndex) {
 }
 
 function navigateToEvalTask(studentId) {
+  // Optimistic UI: show eval checklist view with skeleton immediately
+  var student = getStudentById(studentId);
+  var studentName = student ? (student.firstName + ' ' + student.lastName) : 'Student';
+
+  updateEvalBreadcrumb_('Eval');
+  var titleEl = document.getElementById('eval-checklist-title');
+  if (titleEl) titleEl.textContent = studentName;
+  var actionsEl = document.getElementById('eval-checklist-actions');
+  if (actionsEl) actionsEl.innerHTML = '';
+  var contentEl = document.getElementById('eval-checklist-content');
+  if (contentEl) contentEl.innerHTML = buildEvalChecklistSkeleton_();
+
+  showView('eval-checklist-view');
+
   google.script.run
     .withSuccessHandler(function(evaluation) {
       if (evaluation) {
         showEvalChecklistView(studentId, evaluation);
       } else {
         showToast('No active evaluation found for this student.');
+        goBackFromEvalChecklist();
       }
     })
     .withFailureHandler(function(err) {
       showToast('Error loading evaluation: ' + (err && err.message ? err.message : String(err)));
+      goBackFromEvalChecklist();
     })
     .getEvaluation(studentId);
+}
+
+function buildEvalChecklistSkeleton_() {
+  var html = '<div class="skeleton-fade-in"><div class="eval-checklist-layout"><div class="eval-checklist-main">';
+
+  // Summary card skeleton
+  html += '<div class="eval-summary-card">' +
+    '<div class="eval-summary-top">' +
+      '<div class="eval-summary-left">' +
+        '<div class="skeleton" style="width:140px;height:20px;border-radius:6px;margin-bottom:8px;"></div>' +
+        '<div class="skeleton" style="width:200px;height:14px;border-radius:4px;"></div>' +
+      '</div>' +
+      '<div class="eval-summary-right">' +
+        '<div class="skeleton" style="width:48px;height:36px;border-radius:8px;"></div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="eval-progress-bar"><div class="skeleton" style="width:100%;height:100%;border-radius:inherit;"></div></div>' +
+  '</div>';
+
+  // Column header skeleton
+  html += '<div class="eval-items-card"><div class="eval-items-header">' +
+    '<span>Task</span><span>Due Date</span><span>Completed</span><span>Actions</span>' +
+  '</div>';
+
+  // Item row skeletons
+  for (var i = 0; i < 6; i++) {
+    var w = (i % 3 === 0) ? '70%' : (i % 3 === 1) ? '55%' : '85%';
+    html += '<div class="eval-item" style="pointer-events:none;">' +
+      '<div class="eval-item-task"><label class="eval-item-label">' +
+        '<div class="skeleton" style="width:16px;height:16px;border-radius:3px;flex-shrink:0;"></div>' +
+        '<div class="skeleton" style="width:' + w + ';height:16px;border-radius:4px;margin-left:10px;"></div>' +
+      '</label></div>' +
+      '<div class="eval-item-due"><div class="skeleton" style="width:80px;height:16px;border-radius:4px;"></div></div>' +
+      '<div class="eval-item-completed"><div class="skeleton" style="width:60px;height:16px;border-radius:4px;"></div></div>' +
+      '<div class="eval-item-actions"><div class="skeleton" style="width:24px;height:24px;border-radius:4px;"></div></div>' +
+    '</div>';
+  }
+
+  html += '</div></div>';
+
+  // Files sidebar skeleton
+  html += '<div class="eval-checklist-sidebar">' +
+    '<div class="eval-files-card">' +
+      '<div class="skeleton" style="width:80px;height:18px;border-radius:4px;margin-bottom:12px;"></div>' +
+      '<div class="skeleton" style="width:100%;height:36px;border-radius:8px;margin-bottom:8px;"></div>' +
+      '<div class="skeleton" style="width:100%;height:36px;border-radius:8px;"></div>' +
+    '</div>' +
+  '</div>';
+
+  html += '</div></div>';
+  return html;
 }
 
 // ─── Side Panel (Quick View on Double-Click) ───
@@ -998,24 +1487,46 @@ function openSidePanel(index) {
     content += '</div>';
   }
 
-  // Classes & Grades
+  // Classes & Grades (with inline grade selects)
   content += '<div class="sp-section">';
   content += '<div class="sp-section-title">Classes &amp; Grades</div>';
   if (s.academicData && s.academicData.length > 0) {
     content += '<ul class="sp-class-list">';
-    s.academicData.forEach(function(c) {
+    s.academicData.forEach(function(c, classIdx) {
       var missingNum = Number(c.missing) || 0;
-      var missingBadgeClass = missingNum > 0 ? '' : ' none';
       var classLabel = c.className || 'Unknown';
-      // Find period from student's class list
       var matchedClass = (s.classes || []).find(function(cl) { return cl.name === c.className; });
       if (matchedClass && matchedClass.period) classLabel += ' (P' + matchedClass.period + ')';
+      // Grade select dropdown
+      var gradeOpts = ['--', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'D-', 'F'];
+      var gradeSelect = '<select class="sp-grade-select" onchange="sidePanelChangeGrade(\'' + s.id + '\', ' + classIdx + ', this.value)" title="Change grade">';
+      gradeOpts.forEach(function(g) {
+        var sel = (c.grade || '--') === g ? ' selected' : '';
+        gradeSelect += '<option value="' + g + '"' + sel + '>' + g + '</option>';
+      });
+      gradeSelect += '</select>';
+      // Missing items with mark-done buttons
+      var missingHtml = '';
+      if (missingNum > 0 && c.missingAssignments && c.missingAssignments.length > 0) {
+        missingHtml += '<div class="sp-missing-detail">';
+        c.missingAssignments.forEach(function(a, aIdx) {
+          missingHtml += '<div class="sp-missing-item">' +
+            '<span>' + esc(a.name || 'Assignment ' + (aIdx + 1)) + '</span>' +
+            '<button class="sp-missing-done-btn" onclick="event.stopPropagation(); spMarkDone(\'' + s.id + '\', ' + classIdx + ', ' + aIdx + ', this)" title="Mark done">' +
+              '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>' +
+            '</button>' +
+          '</div>';
+        });
+        missingHtml += '</div>';
+      }
+      var missingBadgeClass = missingNum > 0 ? '' : ' none';
       content += '<li class="sp-class-item">' +
         '<span class="sp-class-name">' + esc(classLabel) + '</span>' +
         '<span class="sp-class-meta">' +
-          '<span class="sp-class-grade">' + esc(c.grade || '--') + '</span>' +
+          gradeSelect +
           '<span class="sp-missing-badge clickable' + missingBadgeClass + '" onclick="event.stopPropagation(); closeSidePanel(); showMissingAssignments(\'' + s.id + '\')" title="View missing assignments">' + missingNum + ' missing</span>' +
         '</span>' +
+        missingHtml +
       '</li>';
     });
     content += '</ul>';
@@ -1034,6 +1545,15 @@ function openSidePanel(index) {
   }
   content += '</div>';
 
+  // Quick note
+  content += '<div class="sp-section">';
+  content += '<div class="sp-section-title">Quick Note</div>';
+  content += '<div class="sp-quick-note-form">' +
+    '<textarea id="sp-note-input" class="sp-quick-note-input" placeholder="Add a quick note..." rows="2"></textarea>' +
+    '<button class="btn btn-secondary btn-sm" onclick="saveQuickNote(\'' + s.id + '\')">Save Note</button>' +
+  '</div>';
+  content += '</div>';
+
   // Action buttons
   content += '<div class="sp-actions">' +
     '<button class="btn btn-primary" onclick="closeSidePanel(); startCheckIn(\'' + s.id + '\')">New Check-In</button>' +
@@ -1048,6 +1568,96 @@ function openSidePanel(index) {
 function closeSidePanel() {
   document.getElementById('side-panel').classList.remove('open');
   document.getElementById('side-panel-overlay').classList.remove('open');
+}
+
+function sidePanelChangeGrade(studentId, classIdx, newGrade) {
+  var student = getStudentById(studentId);
+  if (!student || !student.academicData || !student.academicData[classIdx]) return;
+  student.academicData[classIdx].grade = newGrade === '--' ? '' : newGrade;
+  // Recalculate GPA using global GPA_MAP
+  var validGrades = [];
+  student.academicData.forEach(function(c) {
+    if (c.grade && GPA_MAP[c.grade] !== undefined) validGrades.push(GPA_MAP[c.grade]);
+  });
+  student.gpa = validGrades.length > 0 ? validGrades.reduce(function(a, b) { return a + b; }, 0) / validGrades.length : null;
+  // Update GPA display in panel
+  var gpaSection = document.querySelector('.sp-gpa');
+  if (gpaSection) {
+    if (student.gpa != null) {
+      var gpaClass = student.gpa >= 3.5 ? 'high' : student.gpa > 3.0 ? 'mid' : student.gpa >= 2.5 ? 'caution' : 'low';
+      gpaSection.className = 'sp-gpa ' + gpaClass;
+      gpaSection.textContent = student.gpa.toFixed(2);
+    } else {
+      gpaSection.className = 'sp-gpa none';
+      gpaSection.textContent = 'No GPA data';
+    }
+  }
+  persistAcademicData_(student);
+  showToast('Grade updated');
+}
+
+function spMarkDone(studentId, classIdx, assignmentIdx, btnEl) {
+  modifyMissingAssignment(studentId, classIdx, assignmentIdx, { action: 'done' });
+  // Optimistic: remove the item from DOM
+  var item = btnEl.closest('.sp-missing-item');
+  if (item) {
+    item.style.transition = 'opacity 0.2s, height 0.2s';
+    item.style.opacity = '0';
+    item.style.height = '0';
+    item.style.overflow = 'hidden';
+    setTimeout(function() { item.remove(); }, 200);
+  }
+  // Update missing badge count in side panel
+  var student = getStudentById(studentId);
+  if (student) {
+    var classData = student.academicData && student.academicData[classIdx];
+    if (classData) {
+      var badges = document.querySelectorAll('.sp-missing-badge');
+      if (badges[classIdx]) {
+        var newCount = Number(classData.missing) || 0;
+        badges[classIdx].textContent = newCount + ' missing';
+        badges[classIdx].classList.toggle('none', newCount === 0);
+      }
+    }
+    // Update total missing display
+    var totalEl = document.querySelector('.sp-total-missing');
+    if (totalEl) {
+      var tm = student.totalMissing || 0;
+      if (tm === 0) {
+        totalEl.className = 'sp-total-missing ok sp-no-missing';
+        totalEl.innerHTML = 'No Missing Assignments! <span class="sp-no-missing-emoji">&#x1F4AF;</span>';
+      } else {
+        totalEl.className = 'sp-total-missing alert';
+        totalEl.textContent = 'Total Missing Assignments: ' + tm;
+      }
+    }
+  }
+}
+
+function saveQuickNote(studentId) {
+  var input = document.getElementById('sp-note-input');
+  if (!input) return;
+  var text = input.value.trim();
+  if (!text) { showToast('Enter a note first'); return; }
+  input.disabled = true;
+  google.script.run
+    .withSuccessHandler(function(result) {
+      input.disabled = false;
+      if (result && result.success) {
+        input.value = '';
+        showToast('Note saved');
+        // Update local state
+        var student = getStudentById(studentId);
+        if (student && result.notes) student.notes = result.notes;
+      } else {
+        showToast('Failed to save note');
+      }
+    })
+    .withFailureHandler(function(err) {
+      input.disabled = false;
+      showToast('Error: ' + (err && err.message ? err.message : String(err)));
+    })
+    .appendStudentNote(studentId, text);
 }
 
 // ─── Check-In Form ───
@@ -1100,6 +1710,16 @@ function renderCheckInForm(student, checkIns, existingCheckIn) {
       '<div class="banner-label">Previous Goal</div>' +
       '<div class="banner-goal">' + esc(lastCheckIn.microGoal) + '</div>' +
       '<div class="banner-date">Set on check-in: ' + esc(lastCheckIn.weekOf || 'Unknown date') + '</div>' +
+    '</div>';
+    // Goal met tracking
+    var prefillGoalMet = (existingCheckIn && existingCheckIn.goalMet) || '';
+    html += '<div class="goal-met-section">' +
+      '<label>Did the student meet this goal?</label>' +
+      '<div class="goal-met-options">' +
+        '<button class="goal-met-btn' + (prefillGoalMet === 'yes' ? ' selected' : '') + '" data-goal-met="yes" onclick="selectGoalMet(this, \'yes\')">Yes</button>' +
+        '<button class="goal-met-btn' + (prefillGoalMet === 'partially' ? ' selected' : '') + '" data-goal-met="partially" onclick="selectGoalMet(this, \'partially\')">Partially</button>' +
+        '<button class="goal-met-btn' + (prefillGoalMet === 'no' ? ' selected' : '') + '" data-goal-met="no" onclick="selectGoalMet(this, \'no\')">No</button>' +
+      '</div>' +
     '</div>';
   } else {
     html += '<div class="prev-goal-banner no-goal">' +
@@ -1371,6 +1991,18 @@ function getAcademicData() {
   return result;
 }
 
+function selectGoalMet(btn, value) {
+  var btns = btn.parentElement.querySelectorAll('.goal-met-btn');
+  btns.forEach(function(b) { b.classList.remove('selected'); });
+  btn.classList.add('selected');
+  btn.dataset.goalMet = value;
+}
+
+function getSelectedGoalMet() {
+  var selected = document.querySelector('.goal-met-btn.selected');
+  return selected ? (selected.dataset.goalMet || '') : '';
+}
+
 function collectCheckInData() {
   var weekOfEl = document.getElementById('ci-weekOf');
   if (!weekOfEl) return null;
@@ -1387,7 +2019,8 @@ function collectCheckInData() {
     microGoal: document.getElementById('ci-microGoal').value,
     microGoalCategory: document.getElementById('ci-microGoalCategory').value,
     teacherNotes: document.getElementById('ci-teacherNotes').value,
-    academicData: getAcademicData()
+    academicData: getAcademicData(),
+    goalMet: getSelectedGoalMet()
   };
 }
 
@@ -1410,7 +2043,7 @@ function saveCheckIn() {
 
   // Optimistic UI: navigate immediately
   showView('dashboard-view');
-  renderDashboard(appState.dashboardData);
+  renderDashboard(applyFilter_(appState.dashboardData));
   showToast('Saving check-in\u2026');
 
   google.script.run
@@ -1622,6 +2255,8 @@ function collectGoalsData() {
     var goalId = goalEl.getAttribute('data-goal-id') || '';
     var goalText = goalEl.querySelector('[data-field="goal-text"]');
     var text = goalText ? goalText.value : '';
+    var goalAreaInput = goalEl.querySelector('[data-field="goal-area"]');
+    var goalArea = goalAreaInput ? goalAreaInput.value : '';
 
     var objectives = [];
     var objItems = goalEl.querySelectorAll('.profile-objective-item');
@@ -1637,6 +2272,7 @@ function collectGoalsData() {
     goals.push({
       id: goalId,
       text: text,
+      goalArea: goalArea,
       objectives: objectives
     });
   });
@@ -2144,7 +2780,7 @@ function reRenderProfileAcademics(student) {
 }
 
 function goBackFromMissing() {
-  renderDashboard(appState.dashboardData);
+  renderDashboard(applyFilter_(appState.dashboardData));
   showView('dashboard-view');
 }
 
@@ -2183,6 +2819,11 @@ function editStudent(studentId) {
 }
 
 function showStudentProfile(studentId) {
+  // Clean up any in-progress autosave from a previous student
+  if (_progressAutosaveTimer) { clearTimeout(_progressAutosaveTimer); _progressAutosaveTimer = null; }
+  _progressAutosaveInFlight = false;
+  _progressAutosaveDirty = false;
+
   appState.currentStudentId = studentId;
   trackRecentStudent(studentId);
   document.getElementById('student-view-breadcrumb').textContent = 'Student Profile';
@@ -2478,7 +3119,18 @@ function renderStudentProfileDashboard(student) {
   html += '<button type="button" class="btn btn-sm btn-secondary profile-add-goal-btn" onclick="addGoal()">+ Add Goal</button>';
   html += '</div>';
 
-  // ─── Section 3: Check-In History placeholder ───
+  // ─── Section 3: Quarterly Progress ───
+  html += '<div class="profile-section-card">';
+  html += '<div class="profile-section-header">' +
+    '<span class="profile-section-title">Quarterly Progress</span>' +
+    '<span class="progress-autosave-status" id="progress-autosave-status"></span>' +
+  '</div>';
+  html += '<div id="progress-section-container">';
+  html += '<div class="progress-loading-placeholder" style="color:var(--md-on-surface-variant);font-size:14px;padding:12px 0;">Loading progress data\u2026</div>';
+  html += '</div>';
+  html += '</div>';
+
+  // ─── Section 4: Check-In History placeholder ───
   html += '<div id="checkin-history-section"></div>';
 
   container.innerHTML = html;
@@ -2486,6 +3138,9 @@ function renderStudentProfileDashboard(student) {
 
   // Setup goals autosave listeners
   setupGoalsAutosave();
+
+  // Load quarterly progress section
+  loadProgressSection(student.id, goals);
 
   // Async-load eval checklist card state
   loadEvalCardState(student.id);
@@ -2499,6 +3154,12 @@ function renderGoalItem(goal) {
       '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>' +
     '</button>' +
   '</div>';
+  html += '<div class="profile-goal-area-row">';
+  html += '<label class="profile-goal-area-label">Goal Area:</label>';
+  html += '<input type="text" class="profile-goal-area-input" data-field="goal-area" ' +
+    'placeholder="e.g., Math Calculation, Reading Comprehension, Behavior..." ' +
+    'value="' + esc(goal.goalArea || '') + '" />';
+  html += '</div>';
   html += '<textarea class="profile-goal-textarea" data-field="goal-text" placeholder="Enter IEP goal...">' + esc(goal.text || '') + '</textarea>';
 
   // Objectives
@@ -2527,6 +3188,426 @@ function toggleProfileRow(idx) {
   if (!mainRow || !detailRow) return;
   mainRow.classList.toggle('expanded');
   detailRow.classList.toggle('expanded');
+}
+
+// ─── Quarterly Progress Section ───
+
+function loadProgressSection(studentId, goals) {
+  appState.currentProgressQuarter = null;
+  appState.progressEntries = [];
+
+  // Get current quarter from backend, then load entries
+  google.script.run
+    .withSuccessHandler(function(quarter) {
+      appState.currentProgressQuarter = quarter;
+      google.script.run
+        .withSuccessHandler(function(entries) {
+          appState.progressEntries = entries || [];
+          renderProgressSection(studentId, goals, quarter, entries || []);
+        })
+        .withFailureHandler(function() {
+          appState.progressEntries = [];
+          renderProgressSection(studentId, goals, quarter, []);
+        })
+        .getAllProgressForStudent(studentId);
+    })
+    .withFailureHandler(function() {
+      // Fallback: guess quarter client-side
+      var month = new Date().getMonth();
+      var q = month >= 8 && month <= 10 ? 'Q1' : (month === 11 || month <= 1) ? 'Q2' : month <= 4 ? 'Q3' : 'Q4';
+      appState.currentProgressQuarter = q;
+      renderProgressSection(studentId, goals, q, []);
+    })
+    .getCurrentQuarter();
+}
+
+function renderProgressSection(studentId, goals, quarter, allEntries) {
+  var container = document.getElementById('progress-section-container');
+  if (!container) return;
+
+  // Build entry lookup: goalId|objectiveId|quarter → entry
+  var entryMap = {};
+  (allEntries || []).forEach(function(e) {
+    var key = e.goalId + '|' + e.objectiveId + '|' + e.quarter;
+    entryMap[key] = e;
+  });
+
+  var html = '';
+
+  // Quarter selector
+  html += '<div class="progress-quarter-selector">';
+  html += '<label class="progress-quarter-label">Quarter:</label>';
+  ['Q1', 'Q2', 'Q3', 'Q4'].forEach(function(q) {
+    var active = q === quarter ? ' progress-quarter-btn-active' : '';
+    html += '<button type="button" class="btn btn-sm progress-quarter-btn' + active + '" ' +
+      'onclick="switchProgressQuarter(\'' + esc(studentId) + '\', \'' + q + '\')">' + q + '</button>';
+  });
+  html += '</div>';
+
+  if (!goals || goals.length === 0) {
+    html += '<p style="color:var(--md-on-surface-variant);font-size:14px;padding:8px 0;">Add IEP goals above to begin tracking quarterly progress.</p>';
+    container.innerHTML = html;
+    return;
+  }
+
+  // Determine prior quarters for timeline
+  var qOrder = ['Q1', 'Q2', 'Q3', 'Q4'];
+  var currentIdx = qOrder.indexOf(quarter);
+  var priorQuarters = currentIdx > 0 ? qOrder.slice(0, currentIdx) : [];
+
+  // Group goals by goalArea
+  var areaMap = {};
+  var areaOrder = [];
+  goals.forEach(function(goal) {
+    var area = goal.goalArea || 'General';
+    if (!areaMap[area]) {
+      areaMap[area] = [];
+      areaOrder.push(area);
+    }
+    areaMap[area].push(goal);
+  });
+
+  // Render each goal area group
+  areaOrder.forEach(function(area) {
+    html += '<div class="progress-goal-group">';
+    html += '<h4 class="progress-area-heading">' + esc(area) + '</h4>';
+
+    areaMap[area].forEach(function(goal) {
+      html += '<div class="progress-goal-block">';
+      html += '<p class="progress-goal-text">' + esc(goal.text || '') + '</p>';
+
+      var objectives = goal.objectives || [];
+      objectives.forEach(function(obj) {
+        var entryKey = goal.id + '|' + obj.id + '|' + quarter;
+        var entry = entryMap[entryKey] || null;
+        var currentRating = entry ? entry.progressRating : '';
+        var currentNotes = entry ? entry.anecdotalNotes : '';
+
+        html += '<div class="progress-objective-row" data-goal-id="' + esc(goal.id) + '" data-obj-id="' + esc(obj.id) + '">';
+        html += '<p class="progress-obj-text">' + esc(obj.text || '') + '</p>';
+
+        // Prior quarter timeline chips
+        if (priorQuarters.length > 0) {
+          html += '<div class="progress-timeline-row">';
+          priorQuarters.forEach(function(pq) {
+            var pKey = goal.id + '|' + obj.id + '|' + pq;
+            var pEntry = entryMap[pKey];
+            if (pEntry) {
+              var chipClass = pEntry.progressRating === 'Objective Met' ? 'progress-chip-met' :
+                              pEntry.progressRating === 'Adequate Progress' ? 'progress-chip-adequate' : 'progress-chip-none';
+              html += '<span class="progress-timeline-chip ' + chipClass + '">' + pq + ': ' + esc(pEntry.progressRating) + '</span>';
+            } else {
+              html += '<span class="progress-timeline-chip progress-chip-empty">' + pq + ': \u2014</span>';
+            }
+          });
+          html += '</div>';
+        }
+
+        // Rating buttons (3-option segmented)
+        html += '<div class="progress-rating-group">';
+        PROGRESS_RATINGS.forEach(function(r) {
+          var selected = currentRating === r.value ? ' progress-rating-selected progress-rating-' + r.color : '';
+          html += '<button type="button" class="btn btn-sm progress-rating-btn' + selected + '" ' +
+            'data-rating="' + esc(r.value) + '" ' +
+            'onclick="selectProgressRating(this, \'' + esc(studentId) + '\', \'' + esc(goal.id) + '\', \'' + esc(obj.id) + '\')">' +
+            esc(r.label) + '</button>';
+        });
+        html += '</div>';
+
+        // Anecdotal notes textarea
+        html += '<textarea class="progress-notes-input" ' +
+          'data-goal-id="' + esc(goal.id) + '" data-obj-id="' + esc(obj.id) + '" ' +
+          'placeholder="Anecdotal notes (required, minimum 10 characters)..." ' +
+          'oninput="scheduleProgressAutosave(\'' + esc(studentId) + '\')">' +
+          esc(currentNotes) + '</textarea>';
+
+        html += '</div>'; // objective-row
+      });
+
+      html += '</div>'; // goal-block
+    });
+
+    html += '</div>'; // goal-group
+  });
+
+  // Overall teacher summary for report
+  html += '<div class="progress-summary-section">';
+  html += '<label class="progress-summary-label">Overall Teacher Summary <span style="color:var(--md-on-surface-variant);font-weight:400;">(optional, appears in printed report)</span></label>';
+  html += '<textarea class="progress-summary-input" id="progress-overall-summary" ' +
+    'placeholder="Brief summary of overall student progress this quarter..." ' +
+    'oninput="scheduleProgressAutosave(\'' + esc(studentId) + '\')"></textarea>';
+  html += '</div>';
+
+  // Action buttons
+  html += '<div class="progress-actions">';
+  html += '<button type="button" class="btn btn-primary" onclick="saveAllProgress(\'' + esc(studentId) + '\')">Save Progress</button>';
+  html += '<button type="button" class="btn btn-secondary" onclick="generateReport(\'' + esc(studentId) + '\')">Generate Report</button>';
+  html += '</div>';
+
+  container.innerHTML = html;
+}
+
+function switchProgressQuarter(studentId, quarter) {
+  // Cancel any pending autosave from the previous quarter
+  if (_progressAutosaveTimer) { clearTimeout(_progressAutosaveTimer); _progressAutosaveTimer = null; }
+  _progressAutosaveDirty = false;
+
+  appState.currentProgressQuarter = quarter;
+  var goals = [];
+  var student = getStudentById(studentId);
+  if (student && student.goalsJson) {
+    try { goals = JSON.parse(student.goalsJson); } catch(e) { goals = []; }
+  } else if (student && student.goals) {
+    goals = student.goals;
+  }
+  renderProgressSection(studentId, goals, quarter, appState.progressEntries);
+}
+
+function selectProgressRating(btn, studentId, goalId, objId) {
+  // Deselect siblings
+  var group = btn.parentElement;
+  if (!group) return;
+  var siblings = group.querySelectorAll('.progress-rating-btn');
+  siblings.forEach(function(s) {
+    s.classList.remove('progress-rating-selected', 'progress-rating-red', 'progress-rating-yellow', 'progress-rating-green');
+  });
+  // Select this one
+  var rating = btn.getAttribute('data-rating');
+  var colorClass = rating === 'Objective Met' ? 'progress-rating-green' :
+                   rating === 'Adequate Progress' ? 'progress-rating-yellow' : 'progress-rating-red';
+  btn.classList.add('progress-rating-selected', colorClass);
+
+  scheduleProgressAutosave(studentId);
+}
+
+function collectProgressData(studentId) {
+  var quarter = appState.currentProgressQuarter;
+  if (!quarter) return [];
+  var entries = [];
+  var rows = document.querySelectorAll('.progress-objective-row');
+
+  rows.forEach(function(row) {
+    var goalId = row.getAttribute('data-goal-id');
+    var objId = row.getAttribute('data-obj-id');
+
+    // Get selected rating
+    var selectedBtn = row.querySelector('.progress-rating-btn.progress-rating-selected');
+    var rating = selectedBtn ? selectedBtn.getAttribute('data-rating') : '';
+
+    // Get anecdotal notes
+    var notesEl = row.querySelector('.progress-notes-input');
+    var notes = notesEl ? notesEl.value : '';
+
+    if (rating && notes.trim().length >= 10) {
+      entries.push({
+        studentId: studentId,
+        goalId: goalId,
+        objectiveId: objId,
+        quarter: quarter,
+        progressRating: rating,
+        anecdotalNotes: notes.trim()
+      });
+    }
+  });
+
+  return entries;
+}
+
+function scheduleProgressAutosave(studentId) {
+  _progressAutosaveDirty = true;
+  updateAutosaveIndicator('unsaved', 'progress-autosave-status');
+  if (_progressAutosaveTimer) clearTimeout(_progressAutosaveTimer);
+  _progressAutosaveTimer = setTimeout(function() {
+    performProgressAutosave(studentId);
+  }, 2000);
+}
+
+function performProgressAutosave(studentId) {
+  if (_progressAutosaveInFlight) {
+    scheduleProgressAutosave(studentId);
+    return;
+  }
+
+  var entries = collectProgressData(studentId);
+  if (entries.length === 0) {
+    _progressAutosaveDirty = false;
+    updateAutosaveIndicator('idle', 'progress-autosave-status');
+    return;
+  }
+
+  _progressAutosaveInFlight = true;
+  _progressAutosaveDirty = false;
+  updateAutosaveIndicator('saving', 'progress-autosave-status');
+
+  var saved = 0;
+  var total = entries.length;
+  var errors = [];
+
+  entries.forEach(function(entry) {
+    google.script.run
+      .withSuccessHandler(function(result) {
+        saved++;
+        if (!result.success) errors.push(result.error);
+        if (saved === total) {
+          _progressAutosaveInFlight = false;
+          if (errors.length > 0) {
+            updateAutosaveIndicator('error', 'progress-autosave-status');
+          } else {
+            updateAutosaveIndicator('idle', 'progress-autosave-status');
+          }
+          // Only refresh cache and reschedule if still viewing the same student
+          if (studentId === appState.currentStudentId) {
+            google.script.run
+              .withSuccessHandler(function(fresh) {
+                appState.progressEntries = fresh || [];
+              })
+              .getAllProgressForStudent(studentId);
+
+            if (_progressAutosaveDirty) {
+              scheduleProgressAutosave(studentId);
+            }
+          }
+        }
+      })
+      .withFailureHandler(function() {
+        saved++;
+        errors.push('Save failed');
+        if (saved === total) {
+          _progressAutosaveInFlight = false;
+          updateAutosaveIndicator('error', 'progress-autosave-status');
+          if (_progressAutosaveDirty && studentId === appState.currentStudentId) {
+            scheduleProgressAutosave(studentId);
+          }
+        }
+      })
+      .saveProgressEntry(entry);
+  });
+}
+
+function saveAllProgress(studentId) {
+  if (_progressAutosaveTimer) clearTimeout(_progressAutosaveTimer);
+
+  var entries = collectProgressData(studentId);
+  if (entries.length === 0) {
+    showToast('Enter ratings and notes for at least one objective before saving.');
+    return;
+  }
+
+  updateAutosaveIndicator('saving', 'progress-autosave-status');
+  var saved = 0;
+  var total = entries.length;
+  var errors = [];
+
+  entries.forEach(function(entry) {
+    google.script.run
+      .withSuccessHandler(function(result) {
+        saved++;
+        if (!result.success) errors.push(result.error);
+        if (saved === total) {
+          if (errors.length > 0) {
+            showToast('Some entries had errors: ' + errors[0]);
+            updateAutosaveIndicator('error', 'progress-autosave-status');
+          } else {
+            showToast('Progress saved for ' + total + ' objective' + (total > 1 ? 's' : '') + '.');
+            updateAutosaveIndicator('idle', 'progress-autosave-status');
+          }
+          // Refresh entries
+          google.script.run
+            .withSuccessHandler(function(fresh) {
+              appState.progressEntries = fresh || [];
+            })
+            .getAllProgressForStudent(studentId);
+        }
+      })
+      .withFailureHandler(function() {
+        saved++;
+        errors.push('Save failed');
+        if (saved === total) {
+          showToast('Error saving progress. Please try again.');
+          updateAutosaveIndicator('error', 'progress-autosave-status');
+        }
+      })
+      .saveProgressEntry(entry);
+  });
+}
+
+function generateReport(studentId) {
+  var quarter = appState.currentProgressQuarter || 'Q1';
+  var summaryEl = document.getElementById('progress-overall-summary');
+  var overallSummary = summaryEl ? summaryEl.value : '';
+
+  showToast('Generating report\u2026');
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (!result.success) {
+        showToast('Error: ' + result.error);
+        return;
+      }
+      // Open report in new window
+      var win = window.open('', '_blank');
+      if (win) {
+        win.document.write(result.html);
+        win.document.close();
+      } else {
+        showToast('Pop-up blocked. Please allow pop-ups for this site.');
+      }
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error generating report: ' + (err.message || err));
+    })
+    .generateProgressReport(studentId, quarter, overallSummary);
+}
+
+function generateBatchReports() {
+  var quarter = appState.currentProgressQuarter || 'Q1';
+  showToast('Generating reports for all students\u2026');
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (!result.success) {
+        showToast('Error: ' + result.error);
+        return;
+      }
+      var reports = result.reports || [];
+      if (reports.length === 0) {
+        showToast('No students found.');
+        return;
+      }
+
+      // Extract styles from first report, then combine body content with page breaks
+      var reportStyles = '';
+      var firstStyleMatch = reports[0].html.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+      if (firstStyleMatch) reportStyles = firstStyleMatch[1];
+
+      var combinedHtml = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Batch Progress Reports</title>';
+      combinedHtml += '<style>' + reportStyles;
+      combinedHtml += ' @media print { .page-break { page-break-before: always; } }';
+      combinedHtml += '</style></head><body>';
+
+      reports.forEach(function(r, idx) {
+        if (idx > 0) combinedHtml += '<div class="page-break"></div>';
+        // Extract body content from each report's HTML
+        var bodyMatch = r.html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+        var bodyContent = bodyMatch ? bodyMatch[1] : r.html.replace(/<\/?(?:html|head|style|meta|title)[^>]*>/gi, '');
+        combinedHtml += '<div class="student-report">' + bodyContent + '</div>';
+      });
+
+      combinedHtml += '</body></html>';
+
+      var win = window.open('', '_blank');
+      if (win) {
+        win.document.write(combinedHtml);
+        win.document.close();
+        showToast(reports.length + ' report' + (reports.length > 1 ? 's' : '') + ' generated.');
+      } else {
+        showToast('Pop-up blocked. Please allow pop-ups for this site.');
+      }
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error generating batch reports: ' + (err.message || err));
+    })
+    .generateBatchReports(quarter, {});
 }
 
 function cancelStudentEdit() {
@@ -3083,7 +4164,7 @@ function saveStudentForm() {
   if (appState.currentStudentId) {
     showStudentProfile(appState.currentStudentId);
   } else {
-    renderDashboard(appState.dashboardData);
+    renderDashboard(applyFilter_(appState.dashboardData));
     showView('dashboard-view');
   }
   showToast('Saving\u2026');
@@ -3114,7 +4195,7 @@ function confirmDeleteStudent(studentId) {
 function doDeleteStudent(studentId) {
   // Optimistic UI: remove from local state immediately
   appState.dashboardData = appState.dashboardData.filter(function(s) { return s.id !== studentId; });
-  renderDashboard(appState.dashboardData);
+  renderDashboard(applyFilter_(appState.dashboardData));
   showView('dashboard-view');
   showToast('Deleting\u2026');
 
@@ -3804,7 +4885,7 @@ function doLeaveTeam() {
 // ─── Dashboard Refresh (for co-teacher data freshness) ───
 function refreshDashboard() {
   if (Object.keys(_persistTimers).length > 0 || _persistInFlight > 0) {
-    renderDashboard(appState.dashboardData);
+    renderDashboard(applyFilter_(appState.dashboardData));
     showToast('Saving changes\u2026 refresh will complete shortly.');
     return;
   }
@@ -3814,12 +4895,12 @@ function refreshDashboard() {
     .withSuccessHandler(function(data) {
       try {
         appState.dashboardData = data || [];
-        renderDashboard(data);
-        // Also refresh My Caseload if that tab is active
-        var mcItem = document.getElementById('drawer-mycaseload');
-        if (mcItem && mcItem.classList.contains('active')) {
-          renderMyCaseload();
-        }
+        var filtered = applyFilter_(data);
+        renderDashboard(filtered);
+        renderNeedsAttention(filtered);
+        renderCheckInProgress(filtered);
+        renderMissingAggregate(filtered);
+        renderRecentStudents();
         showToast('Dashboard refreshed');
       } catch(e) { showToast('Render error: ' + e.message); }
     })
@@ -3848,6 +4929,26 @@ function showDashboardSkeleton() {
     }
     skelHtml += '</div></div></div>';
     atAGlanceContent.innerHTML = skelHtml;
+  }
+
+  // Evals carousel skeleton
+  var evalsEl = document.getElementById('dashboard-evals-section');
+  var evalsContent = document.getElementById('evals-section-content');
+  if (evalsEl && evalsContent) {
+    evalsEl.style.display = '';
+    var evalsSkelHtml = '<div class="skeleton-fade-in"><div class="eval-cards-carousel">';
+    for (var c = 0; c < 4; c++) {
+      evalsSkelHtml += '<div class="eval-carousel-card" style="pointer-events:none;">' +
+        '<div class="skeleton" style="width:75%;height:16px;border-radius:4px;margin-bottom:6px;"></div>' +
+        '<div class="skeleton" style="width:50%;height:12px;border-radius:4px;margin-bottom:12px;"></div>' +
+        '<div style="display:flex;align-items:center;gap:8px;">' +
+          '<div class="skeleton" style="flex:1;height:4px;border-radius:4px;"></div>' +
+          '<div class="skeleton" style="width:32px;height:12px;border-radius:4px;"></div>' +
+        '</div>' +
+      '</div>';
+    }
+    evalsSkelHtml += '</div></div>';
+    evalsContent.innerHTML = evalsSkelHtml;
   }
 
   // Dashboard table skeleton
@@ -4362,9 +5463,10 @@ function renderMyCaseload() {
 
   var html = '';
 
-  // Open SpEdForms button
+  // Action buttons row
   html += '<div class="mycaseload-spedforms-btn">' +
     '<a href="https://15.spedforms.org/students2020.php?login=1" target="_blank" class="btn btn-secondary">Open SpEdForms</a>' +
+    '<button type="button" class="btn btn-secondary" onclick="generateBatchReports()">Generate All Progress Reports</button>' +
   '</div>';
 
   if (myStudents.length === 0) {
