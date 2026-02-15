@@ -22,7 +22,8 @@ var appState = {
   evalSummary: null,
   timelineExpandedDay: null,
   editingEvalItemId: null,
-  recentStudents: []
+  recentStudents: [],
+  searchQuery: ''
 };
 var _persistTimers = {};
 var _persistInFlight = 0;
@@ -36,6 +37,7 @@ var _evalAutosaveTimer = null;
 var _evalAutosaveInFlight = false;
 var _evalAutosaveDirty = false;
 var _evalItemFilter = 'all'; // 'all' | 'remaining' | 'overdue' | 'completed'
+var _searchDebounceTimer = null;
 var _evalFocusedIndex = -1;
 
 var onboardingState = {
@@ -310,11 +312,15 @@ function enterApp() {
     })
     .withFailureHandler(function() {})
     .getCaseManagers();
-  // Render greeting
+  // Render greeting with date context
   var greetingEl = document.getElementById('dashboard-greeting');
   if (greetingEl) {
     var firstName = getFirstNameFromEmail(appState.currentUserEmail);
-    greetingEl.textContent = firstName ? 'Hi, ' + firstName + '!' : 'Welcome!';
+    var today = new Date();
+    var dateStr = today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+    greetingEl.innerHTML =
+      '<div class="greeting-text">' + esc(firstName ? 'Hi, ' + firstName + '!' : 'Welcome!') + '</div>' +
+      '<div class="greeting-date">' + esc(dateStr) + '</div>';
   }
   showView('dashboard-view');
   showDashboardSkeleton();
@@ -669,6 +675,25 @@ function toggleSort(field) {
   renderDashboard(appState.dashboardData);
 }
 
+function filterDashboardSearch(query) {
+  if (_searchDebounceTimer) clearTimeout(_searchDebounceTimer);
+  var clearBtn = document.getElementById('dashboard-search-clear');
+  if (clearBtn) clearBtn.style.display = query ? '' : 'none';
+  _searchDebounceTimer = setTimeout(function() {
+    appState.searchQuery = query.trim().toLowerCase();
+    renderDashboard(appState.dashboardData);
+  }, 200);
+}
+
+function clearDashboardSearch() {
+  var input = document.getElementById('dashboard-search-input');
+  if (input) input.value = '';
+  appState.searchQuery = '';
+  var clearBtn = document.getElementById('dashboard-search-clear');
+  if (clearBtn) clearBtn.style.display = 'none';
+  renderDashboard(appState.dashboardData);
+}
+
 function sortIcon(field) {
   var isActive = appState.sortField === field;
   var arrow;
@@ -686,18 +711,47 @@ function sortIcon(field) {
 
 function renderDashboard(data) {
   var container = document.getElementById('dashboard-table-container');
+  var searchBar = document.getElementById('dashboard-search');
 
   if (!data || data.length === 0) {
+    if (searchBar) searchBar.style.display = 'none';
     container.innerHTML =
       '<div class="empty-state">' +
+        '<div class="empty-state-icon">' +
+          '<svg width="40" height="40" viewBox="0 0 24 24" fill="currentColor">' +
+            '<path d="M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3L1 9l11 6 9-4.91V17h2V9L12 3z"/>' +
+          '</svg>' +
+        '</div>' +
         '<h3>No Students Yet</h3>' +
-        '<p>Click "+ Add Student" to get started.</p>' +
+        '<p>Add your first student to start tracking EF skills and academic progress.</p>' +
+        '<button onclick="showAddStudent()" class="btn btn-primary">+ Add Student</button>' +
+      '</div>';
+    return;
+  }
+
+  // Show search bar when students exist
+  if (searchBar) searchBar.style.display = '';
+
+  // Apply search filter
+  var filtered = data;
+  if (appState.searchQuery) {
+    var q = appState.searchQuery;
+    filtered = data.filter(function(s) {
+      var full = (s.firstName + ' ' + s.lastName).toLowerCase();
+      return full.indexOf(q) !== -1;
+    });
+  }
+
+  if (filtered.length === 0) {
+    container.innerHTML =
+      '<div class="empty-state">' +
+        '<p>No students match "' + esc(appState.searchQuery) + '"</p>' +
       '</div>';
     return;
   }
 
   // Sort data
-  var sorted = data.slice().sort(function(a, b) {
+  var sorted = filtered.slice().sort(function(a, b) {
     var cmp = 0;
     if (appState.sortField === 'name') {
       cmp = String(a.firstName).localeCompare(String(b.firstName));
@@ -3238,15 +3292,18 @@ function saveStudentForm() {
     showView('dashboard-view');
   }
   showToast('Saving\u2026');
+  showGlobalProgress();
 
   google.script.run
     .withSuccessHandler(function(result) {
+      hideGlobalProgress();
       if (result.success) {
         showToast('Student saved');
         loadDashboard();
       }
     })
     .withFailureHandler(function(err) {
+      hideGlobalProgress();
       showToast('Error: ' + (err && err.message ? err.message : String(err)));
       loadDashboard();
     })
@@ -3268,13 +3325,16 @@ function doDeleteStudent(studentId) {
   renderDashboard(appState.dashboardData);
   showView('dashboard-view');
   showToast('Deleting\u2026');
+  showGlobalProgress();
 
   google.script.run
     .withSuccessHandler(function() {
+      hideGlobalProgress();
       showToast('Student deleted');
       loadDashboard();
     })
     .withFailureHandler(function(err) {
+      hideGlobalProgress();
       showToast('Error: ' + (err && err.message ? err.message : String(err)));
       loadDashboard();
     })
@@ -4208,6 +4268,15 @@ function hideToast() {
   toast.classList.remove('show');
 }
 
+function showGlobalProgress() {
+  var el = document.getElementById('global-progress');
+  if (el) el.style.display = '';
+}
+function hideGlobalProgress() {
+  var el = document.getElementById('global-progress');
+  if (el) el.style.display = 'none';
+}
+
 function animateContentIn(container) {
   container.classList.add('content-fade-in');
   container.addEventListener('animationend', function handler() {
@@ -4241,7 +4310,7 @@ function showConfirmDialog(opts) {
       '<p>' + (opts.body || '') + '</p>' +
       (opts.hint ? '<p class="hint">' + opts.hint + '</p>' : '') +
       '<div class="confirm-actions">' +
-        '<button class="btn btn-secondary" onclick="closeConfirmDialog(this.closest(\'.confirm-overlay\'))">' + (opts.cancelLabel || 'Cancel') + '</button>' +
+        '<button class="btn btn-outlined" onclick="closeConfirmDialog(this.closest(\'.confirm-overlay\'))">' + (opts.cancelLabel || 'Cancel') + '</button>' +
         '<button class="btn ' + (opts.confirmClass || 'btn-danger') + '" onclick="' + opts.onConfirm + '; closeConfirmDialog(this.closest(\'.confirm-overlay\'))">' + (opts.confirmLabel || 'Confirm') + '</button>' +
       '</div>' +
     '</div>';
