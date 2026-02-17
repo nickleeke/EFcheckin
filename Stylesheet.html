@@ -3543,6 +3543,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 }
 @media (max-width: 480px) {
   .eval-metric-cards { grid-template-columns: 1fr; }
+  .dp-summary-row { grid-template-columns: 1fr; }
 }
 
 /* ─── Onboarding Wizard ─── */
@@ -4142,6 +4143,20 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   color: var(--md-error);
   margin-top: 6px;
 }
+.eval-carousel-card-due {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--md-on-surface-variant);
+  margin-top: 4px;
+}
+.eval-carousel-card-due-overdue {
+  color: var(--md-error);
+}
+.eval-carousel-card-due-today {
+  color: var(--md-primary);
+  font-weight: 700;
+}
 
 /* ─── Eval Summary Cards + Next 7 Days Timeline ─── */
 
@@ -4516,6 +4531,35 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 
 /* ─── Due Process View ─── */
 
+/* ── Summary Stats Row ── */
+
+.dp-summary-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+.dp-metric-icon-meetings {
+  background: rgba(117, 90, 47, 0.12);
+  color: var(--md-tertiary);
+}
+.dp-metric-icon-progress {
+  background: #D6F5D6;
+  color: #1B5E20;
+}
+.dp-summary-progress-bar {
+  height: 4px;
+  background: var(--md-surface-container-high);
+  border-radius: var(--md-shape-full);
+  margin: 0 20px 8px;
+  overflow: hidden;
+}
+.dp-summary-progress-fill {
+  height: 100%;
+  background: #1B5E20;
+  border-radius: var(--md-shape-full);
+  transition: width var(--md-duration-medium2) var(--md-easing-standard);
+}
+
 .dp-section {
   margin-bottom: 24px;
 }
@@ -4525,6 +4569,8 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   gap: 10px;
   margin-bottom: 12px;
 }
+/* Title Medium (16px/500) — intentionally smaller than view-level Headline Small
+   since these are sub-section headers within the Due Process view */
 .dp-section-header {
   font-size: 16px;
   font-weight: 500;
@@ -4552,7 +4598,9 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
+}
+.dp-calendar-header > .dp-section-header {
+  margin-bottom: 0;
 }
 .dp-calendar-strip {
   background: var(--md-surface);
@@ -4768,8 +4816,117 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   color: var(--md-on-surface-variant);
 }
 
+/* ── Upcoming Meetings List ── */
+
+.dp-upcoming-meetings {
+  margin-top: 16px;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-md);
+  overflow: hidden;
+}
+.dp-upcoming-header {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--md-on-surface-variant);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 10px 16px;
+  background: var(--md-surface-container-low);
+  border-bottom: 1px solid var(--md-outline-variant);
+}
+.dp-upcoming-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: background var(--md-duration-short3) var(--md-easing-standard);
+  border-bottom: 1px solid var(--md-outline-variant);
+}
+.dp-upcoming-row:last-child {
+  border-bottom: none;
+}
+.dp-upcoming-row:hover {
+  background: var(--md-surface-container);
+}
+.dp-upcoming-row:focus-visible {
+  outline: 2px solid var(--md-primary);
+  outline-offset: -2px;
+}
+.dp-upcoming-date {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--md-on-surface-variant);
+  min-width: 90px;
+  flex-shrink: 0;
+}
+.dp-upcoming-today {
+  color: var(--md-on-surface);
+  font-weight: 700;
+}
+.dp-upcoming-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.dp-upcoming-type {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--md-on-surface);
+}
+.dp-upcoming-student {
+  font-size: 12px;
+  color: var(--md-on-surface-variant);
+}
+.dp-upcoming-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: var(--md-shape-full);
+  background: var(--md-tertiary);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
 /* ── Progress Reports Section ── */
 
+.dp-progress-summary-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.dp-progress-summary-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--md-on-surface);
+  white-space: nowrap;
+}
+.dp-progress-bar {
+  flex: 1;
+  height: 4px;
+  background: var(--md-surface-container-high);
+  border-radius: var(--md-shape-full);
+  overflow: hidden;
+}
+.dp-progress-bar-fill {
+  height: 100%;
+  background: #1B5E20;
+  border-radius: var(--md-shape-full);
+  transition: width var(--md-duration-medium2) var(--md-easing-standard);
+}
+.dp-progress-filters {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
 .dp-progress-list {
   display: flex;
   flex-direction: column;
@@ -4796,11 +4953,11 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   outline-offset: 2px;
 }
 .dp-progress-complete {
-  border-color: #4CAF50;
-  background: #f0faf0;
+  border-color: #1B5E20;
+  background: #D6F5D6;
 }
 .dp-progress-complete:hover {
-  background: #e5f5e5;
+  background: #c4ecc4;
 }
 .dp-progress-card-header {
   display: flex;
@@ -6410,6 +6567,8 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   .dp-calendar-30 .dp-cal-day-abbr { font-size: 8px; }
   .dp-calendar-30 .dp-cal-day-num { font-size: 12px; }
   .dp-progress-card-header { flex-wrap: wrap; }
+  .dp-upcoming-date { min-width: 70px; font-size: 11px; }
+  .dp-upcoming-row { padding: 8px 12px; gap: 8px; }
 }
 
 /* ─── Reduced Motion ─── */

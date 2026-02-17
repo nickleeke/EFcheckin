@@ -33,6 +33,7 @@ var appState = {
   dueProcessData: null,
   dueProcessCalendarWeeks: 1,
   dueProcessExpandedDay: null,
+  dueProcessProgressFilter: 'all',
   currentGoals: [],
   editingGoalId: null,
   expandedGoalIds: {},
@@ -61,6 +62,10 @@ var _progressAutosaveTimer = null;
 var _progressAutosaveInFlight = false;
 var _progressCompletionFiredFor = {};
 var _progressAutosaveDirty = false;
+var _lastDashboardFetch = 0;
+var _lastEvalSummaryFetch = 0;
+var _lastDueProcessFetch = 0;
+var DATA_FRESH_MS = 30000; // 30s — frontend staleness window for navigation
 
 var onboardingState = {
   step: 1,
@@ -863,27 +868,40 @@ function showView(viewId) {
 }
 
 // ─── Dashboard ───
+
+function renderDashboardFromState() {
+  var filtered = applyFilter_(appState.dashboardData);
+  renderNeedsAttention(filtered);
+  renderMissingAggregate(filtered);
+  renderRecentStudents();
+  if (appState.evalSummary) renderEvalSummary(appState.evalSummary);
+}
+
 function showDashboard() {
   switchDashboardTab('dashboard');
 }
 
-function loadDashboard() {
+function loadDashboard(force) {
   // If academic-data persists are pending or in-flight, render from
   // local optimistic state to avoid overwriting unsaved changes.
   if (Object.keys(_persistTimers).length > 0 || _persistInFlight > 0) {
-    var cached = applyFilter_(appState.dashboardData);
-    renderNeedsAttention(cached);
-    renderMissingAggregate(cached);
-    renderRecentStudents();
-    if (appState.evalSummary) renderEvalSummary(appState.evalSummary);
+    renderDashboardFromState();
+    return;
+  }
+  // Skip re-fetch if data is fresh and not forced
+  if (!force && _lastDashboardFetch > 0 &&
+      (Date.now() - _lastDashboardFetch) < DATA_FRESH_MS &&
+      appState.dashboardData && appState.dashboardData.length > 0) {
+    renderDashboardFromState();
     return;
   }
   showDashboardSkeleton();
-  loadEvalSummary();
+  loadEvalSummary(force);
   google.script.run
     .withSuccessHandler(function(data) {
       try {
         appState.dashboardData = data || [];
+        _lastDashboardFetch = Date.now();
         var filtered = applyFilter_(data);
         renderNeedsAttention(filtered);
         renderMissingAggregate(filtered);
@@ -1490,11 +1508,19 @@ function renderMissingAggregate(data) {
 
 // ─── Eval Summary Cards + Next 7 Days Timeline ───
 
-function loadEvalSummary() {
+function loadEvalSummary(force) {
+  // Skip re-fetch if eval data is fresh (changes infrequently)
+  if (!force && _lastEvalSummaryFetch > 0 &&
+      (Date.now() - _lastEvalSummaryFetch) < 60000 &&
+      appState.evalSummary) {
+    renderEvalSummary(appState.evalSummary);
+    return;
+  }
   google.script.run
     .withSuccessHandler(function(summary) {
       try {
         appState.evalSummary = summary;
+        _lastEvalSummaryFetch = Date.now();
         renderEvalSummary(summary);
       } catch(e) {
         hideEvalSections_();
@@ -1717,10 +1743,32 @@ function buildTimelineHtml_(summary) {
 }
 
 function buildEvalCarouselHtml_(activeEvals) {
+  var now = new Date();
+  var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  var todayStr = today.getFullYear() + '-' +
+    String(today.getMonth() + 1).padStart(2, '0') + '-' +
+    String(today.getDate()).padStart(2, '0');
+  var monthAbbrs = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
   var html = '<div class="eval-cards-carousel">';
   activeEvals.forEach(function(ev) {
     var pct = ev.total > 0 ? Math.round(ev.done / ev.total * 100) : 0;
     var alertClass = ev.overdueCount > 0 ? ' eval-carousel-card-alert' : '';
+
+    // Build next due date label
+    var dueLine = '';
+    if (ev.nextDueDate) {
+      var parts = ev.nextDueDate.split('-');
+      var dueLabel = monthAbbrs[parseInt(parts[1], 10) - 1] + ' ' + parseInt(parts[2], 10);
+      if (ev.nextDueDate < todayStr) {
+        dueLine = '<span class="eval-carousel-card-due eval-carousel-card-due-overdue">Overdue since ' + dueLabel + '</span>';
+      } else if (ev.nextDueDate === todayStr) {
+        dueLine = '<span class="eval-carousel-card-due eval-carousel-card-due-today">Due today</span>';
+      } else {
+        dueLine = '<span class="eval-carousel-card-due">Next: ' + dueLabel + '</span>';
+      }
+    }
+
     html += '<div class="eval-carousel-card' + alertClass + '" role="button" tabindex="0" onclick="navigateToEvalTask(\'' + esc(ev.studentId) + '\')" onkeydown="if(event.key===\'Enter\')navigateToEvalTask(\'' + esc(ev.studentId) + '\')" aria-label="' + esc(ev.studentName) + ', ' + esc(getEvalTypeLabel(ev.type)) + ', ' + pct + '% complete' + (ev.overdueCount > 0 ? ', ' + ev.overdueCount + ' overdue' : '') + '">' +
       '<div class="eval-carousel-card-name">' + esc(ev.studentName) + '</div>' +
       '<div class="eval-carousel-card-type">' + esc(getEvalTypeLabel(ev.type)) + '</div>' +
@@ -1728,6 +1776,7 @@ function buildEvalCarouselHtml_(activeEvals) {
         '<div class="eval-carousel-bar"><div class="eval-carousel-bar-fill" style="width:' + pct + '%"></div></div>' +
         '<span class="eval-carousel-card-pct">' + ev.done + '/' + ev.total + '</span>' +
       '</div>' +
+      dueLine +
       (ev.overdueCount > 0 ? '<span class="eval-carousel-card-overdue">' + ev.overdueCount + ' overdue</span>' : '') +
     '</div>';
   });
@@ -1779,8 +1828,18 @@ function showDueProcess() {
 
   appState.dueProcessExpandedDay = null;
   appState.dueProcessCalendarWeeks = 1;
+  appState.dueProcessProgressFilter = 'all';
 
   showView('dueprocess-view');
+
+  // Reuse cached data if fresh
+  if (appState.dueProcessData && _lastDueProcessFetch > 0 &&
+      (Date.now() - _lastDueProcessFetch) < DATA_FRESH_MS) {
+    try { renderDueProcess(appState.dueProcessData); }
+    catch(e) { showToast('Error rendering Due Process: ' + e.message); }
+    return;
+  }
+
   var container = document.getElementById('dueprocess-content');
   if (container) container.innerHTML = buildDueProcessSkeleton_();
 
@@ -1788,6 +1847,7 @@ function showDueProcess() {
     .withSuccessHandler(function(data) {
       if (_currentViewId !== 'dueprocess-view') return;
       appState.dueProcessData = data;
+      _lastDueProcessFetch = Date.now();
       try { renderDueProcess(data); }
       catch(e) { showToast('Error rendering Due Process: ' + e.message); }
     })
@@ -1799,17 +1859,27 @@ function showDueProcess() {
 }
 
 function refreshDueProcess() {
+  _lastDueProcessFetch = 0;
   showDueProcess();
 }
 
 function buildDueProcessSkeleton_() {
-  return '<div class="dp-section"><div class="skeleton skeleton-title" style="width:180px;margin-bottom:12px;"></div>' +
+  // Summary stats row skeleton
+  return '<div class="dp-section"><div class="dp-summary-row">' +
+    '<div class="skeleton" style="height:80px;border-radius:12px;"></div>' +
+    '<div class="skeleton" style="height:80px;border-radius:12px;"></div>' +
+    '<div class="skeleton" style="height:80px;border-radius:12px;"></div>' +
+    '<div class="skeleton" style="height:80px;border-radius:12px;"></div></div></div>' +
+    // Evals carousel skeleton
+    '<div class="dp-section"><div class="skeleton skeleton-title" style="width:180px;margin-bottom:12px;"></div>' +
     '<div style="display:flex;gap:12px;">' +
     '<div class="skeleton" style="width:200px;height:100px;border-radius:12px;"></div>' +
     '<div class="skeleton" style="width:200px;height:100px;border-radius:12px;"></div>' +
     '<div class="skeleton" style="width:200px;height:100px;border-radius:12px;"></div></div></div>' +
+    // Calendar skeleton
     '<div class="dp-section"><div class="skeleton skeleton-title" style="width:140px;margin-bottom:12px;"></div>' +
     '<div class="skeleton" style="width:100%;height:80px;border-radius:12px;"></div></div>' +
+    // Progress reports skeleton
     '<div class="dp-section"><div class="skeleton skeleton-title" style="width:160px;margin-bottom:12px;"></div>' +
     '<div class="skeleton" style="width:100%;height:120px;border-radius:12px;"></div></div>';
 }
@@ -1818,6 +1888,7 @@ function renderDueProcess(data) {
   var container = document.getElementById('dueprocess-content');
   if (!container) return;
   var html = '';
+  html += buildDPSummarySection_(data);
   html += buildDPEvalsSection_(data.evalSummary);
   html += buildDPCalendarSection_(data);
   html += buildDPProgressSection_(data);
@@ -1825,32 +1896,150 @@ function renderDueProcess(data) {
   animateContentIn(container);
 }
 
+// ── Summary Stats Row ──
+
+function buildDPSummarySection_(data) {
+  var evalSummary = data.evalSummary || {};
+  var overdueCount = evalSummary.overdueCount || 0;
+  var dueThisWeekCount = evalSummary.dueThisWeekCount || 0;
+  var meetingsThisWeek = data.meetingsThisWeek || [];
+  var completionMap = data.completionMap || {};
+  var assignments = data.progressAssignments || [];
+
+  // Compute progress totals
+  var progressStudents = {};
+  assignments.forEach(function(a) { progressStudents[a.studentId] = true; });
+  var studentIds = Object.keys(progressStudents);
+  var totalStudents = studentIds.length;
+  var doneStudents = 0;
+  studentIds.forEach(function(sid) {
+    var comp = completionMap[sid];
+    if (comp && comp.allDone) doneStudents++;
+  });
+
+  var html = '<div class="dp-section"><div class="dp-summary-row">';
+
+  // 1. Overdue Tasks
+  var ovClickable = overdueCount > 0 ? ' eval-metric-card-clickable' : '';
+  var ovAlert = overdueCount > 0 ? ' eval-metric-card-alert' : '';
+  var ovOnclick = overdueCount > 0 ? ' onclick="toggleMetricDropdown(\'dp-overdue\')"' : '';
+  html += '<div class="eval-metric-card-wrapper">' +
+    '<div class="eval-metric-card' + ovAlert + ovClickable + '"' + ovOnclick +
+      ' role="button" tabindex="0" aria-expanded="false" id="metric-card-dp-overdue">' +
+    '<div class="eval-metric-icon' + (overdueCount > 0 ? ' eval-metric-icon-alert' : '') + '">' +
+      '<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">' +
+        '<path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>' +
+      '</svg>' +
+    '</div>' +
+    '<div class="eval-metric-info">' +
+      '<span class="eval-metric-label">Overdue</span>' +
+      '<span class="eval-metric-value' + (overdueCount > 0 ? ' eval-metric-value-alert' : '') + '">' + overdueCount + '</span>' +
+    '</div>' +
+    (overdueCount > 0 ? '<svg class="eval-metric-chevron" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>' : '') +
+  '</div>' +
+  '<div class="eval-metric-dropdown" id="metric-dropdown-dp-overdue">' +
+    buildMetricTaskList_(evalSummary.overdueTasks || [], 'overdue') +
+  '</div></div>';
+
+  // 2. Due This Week
+  var dtwClickable = dueThisWeekCount > 0 ? ' eval-metric-card-clickable' : '';
+  var dtwOnclick = dueThisWeekCount > 0 ? ' onclick="toggleMetricDropdown(\'dp-due-week\')"' : '';
+  html += '<div class="eval-metric-card-wrapper">' +
+    '<div class="eval-metric-card' + dtwClickable + '"' + dtwOnclick +
+      ' role="button" tabindex="0" aria-expanded="false" id="metric-card-dp-due-week">' +
+    '<div class="eval-metric-icon">' +
+      '<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">' +
+        '<path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM9 10H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2z"/>' +
+      '</svg>' +
+    '</div>' +
+    '<div class="eval-metric-info">' +
+      '<span class="eval-metric-label">Due This Week</span>' +
+      '<span class="eval-metric-value">' + dueThisWeekCount + '</span>' +
+    '</div>' +
+    (dueThisWeekCount > 0 ? '<svg class="eval-metric-chevron" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>' : '') +
+  '</div>' +
+  '<div class="eval-metric-dropdown" id="metric-dropdown-dp-due-week">' +
+    buildMetricTaskList_(evalSummary.dueThisWeekTasks || [], 'due') +
+  '</div></div>';
+
+  // 3. Meetings This Week
+  var mtgCount = meetingsThisWeek.length;
+  var mtgClickable = mtgCount > 0 ? ' eval-metric-card-clickable' : '';
+  var mtgOnclick = mtgCount > 0 ? ' onclick="toggleMetricDropdown(\'dp-meetings\')"' : '';
+  html += '<div class="eval-metric-card-wrapper">' +
+    '<div class="eval-metric-card' + mtgClickable + '"' + mtgOnclick +
+      ' role="button" tabindex="0" aria-expanded="false" id="metric-card-dp-meetings">' +
+    '<div class="eval-metric-icon dp-metric-icon-meetings">' +
+      '<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">' +
+        '<path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>' +
+      '</svg>' +
+    '</div>' +
+    '<div class="eval-metric-info">' +
+      '<span class="eval-metric-label">Meetings This Week</span>' +
+      '<span class="eval-metric-value">' + mtgCount + '</span>' +
+    '</div>' +
+    (mtgCount > 0 ? '<svg class="eval-metric-chevron" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>' : '') +
+  '</div>' +
+  '<div class="eval-metric-dropdown" id="metric-dropdown-dp-meetings">' +
+    buildDPMeetingsDropdownList_(meetingsThisWeek) +
+  '</div></div>';
+
+  // 4. Progress Reports
+  var pctDone = totalStudents > 0 ? Math.round(doneStudents / totalStudents * 100) : 0;
+  html += '<div class="eval-metric-card-wrapper">' +
+    '<div class="eval-metric-card" role="group" id="metric-card-dp-progress">' +
+    '<div class="eval-metric-icon dp-metric-icon-progress">' +
+      '<svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">' +
+        '<path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/>' +
+      '</svg>' +
+    '</div>' +
+    '<div class="eval-metric-info">' +
+      '<span class="eval-metric-label">Progress Reports</span>' +
+      '<span class="eval-metric-value">' + doneStudents + '/' + totalStudents + '</span>' +
+    '</div>' +
+  '</div>' +
+  '<div class="dp-summary-progress-bar">' +
+    '<div class="dp-summary-progress-fill" style="width:' + pctDone + '%"></div>' +
+  '</div></div>';
+
+  html += '</div></div>';
+  return html;
+}
+
+function buildDPMeetingsDropdownList_(meetings) {
+  if (!meetings.length) return '<div class="eval-metric-dropdown-empty">No meetings this week</div>';
+  var html = '';
+  meetings.forEach(function(m) {
+    var dateLabel = '';
+    if (m.date) {
+      var parts = m.date.split('-');
+      dateLabel = parseInt(parts[1], 10) + '/' + parseInt(parts[2], 10);
+    }
+    html += '<div class="eval-metric-dropdown-item" onclick="showStudentProfile(\'' + esc(m.studentId) + '\')" ' +
+      'role="link" tabindex="0">' +
+      '<div class="eval-metric-dropdown-item-main">' +
+        '<span class="eval-metric-dropdown-item-text">' + esc(m.meetingType) + '</span>' +
+        '<span class="eval-metric-dropdown-item-date">' + dateLabel + '</span>' +
+      '</div>' +
+      '<span class="eval-metric-dropdown-item-student">' + esc(m.studentName) +
+      (m.notes ? ' &#x00B7; ' + esc(m.notes) : '') + '</span>' +
+    '</div>';
+  });
+  return html;
+}
+
 // ── Section 1: Evaluations in Progress ──
 
 function buildDPEvalsSection_(evalSummary) {
   var activeEvals = (evalSummary && evalSummary.activeEvals) || [];
-  var overdueCount = (evalSummary && evalSummary.overdueCount) || 0;
-  var dueThisWeekCount = (evalSummary && evalSummary.dueThisWeekCount) || 0;
 
   var html = '<div class="dp-section">';
-  html += '<div class="dp-section-header-row">';
   html += '<h2 class="dp-section-header">Evaluations in Progress</h2>';
-  if (dueThisWeekCount > 0) {
-    html += '<span class="chip-yellow">' + dueThisWeekCount + ' due this week</span>';
-  }
-  html += '</div>';
 
   if (activeEvals.length === 0) {
     html += '<p class="dp-empty-state">No active evaluations.</p>';
     html += '</div>';
     return html;
-  }
-
-  // Summary chips
-  if (overdueCount > 0) {
-    html += '<div class="dp-eval-chips">';
-    html += '<span class="chip-red">' + overdueCount + ' overdue task' + (overdueCount !== 1 ? 's' : '') + '</span>';
-    html += '</div>';
   }
 
   html += buildEvalCarouselHtml_(activeEvals);
@@ -1925,7 +2114,7 @@ function buildDPCalendarSection_(data) {
 
   var html = '<div class="dp-section" id="dp-calendar-section">';
   html += '<div class="dp-calendar-header">';
-  html += '<h2 class="dp-section-header" style="margin-bottom:0;">At a Glance</h2>';
+  html += '<h2 class="dp-section-header">At a Glance</h2>';
   html += '<button class="btn btn-sm" onclick="toggleDPCalendarRange()">' +
     (numWeeks === 1 ? 'Show 4 Weeks' : 'This Week') + '</button>';
   html += '</div>';
@@ -1957,6 +2146,9 @@ function buildDPCalendarSection_(data) {
       html += buildDPExpandedDayHtml_(days[expandedIdx]);
     }
   }
+
+  // Upcoming meetings list (all meetings within the calendar range)
+  html += buildDPUpcomingMeetingsList_(data.meetings || [], days);
 
   html += '</div>';
   return html;
@@ -2069,14 +2261,64 @@ function toggleDPDay(dateStr) {
   renderDPCalendarOnly_();
 }
 
+function buildDPUpcomingMeetingsList_(meetings, days) {
+  if (!meetings || meetings.length === 0) return '';
+
+  // Filter meetings to those within the calendar date range and from today onward
+  var now = new Date();
+  var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  var todayStr = today.getFullYear() + '-' +
+    String(today.getMonth() + 1).padStart(2, '0') + '-' +
+    String(today.getDate()).padStart(2, '0');
+  var lastDate = days.length > 0 ? days[days.length - 1].date : todayStr;
+
+  var upcoming = meetings.filter(function(m) {
+    return m.date >= todayStr && m.date <= lastDate;
+  }).sort(function(a, b) {
+    return a.date < b.date ? -1 : a.date > b.date ? 1 : 0;
+  });
+
+  if (upcoming.length === 0) return '';
+
+  var monthAbbrs = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  var dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  var html = '<div class="dp-upcoming-meetings">';
+  html += '<div class="dp-upcoming-header">Upcoming Meetings</div>';
+
+  upcoming.forEach(function(m) {
+    var parts = m.date.split('-');
+    var meetDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    var dateLabel = dayNames[meetDate.getDay()] + ', ' + monthAbbrs[meetDate.getMonth()] + ' ' + meetDate.getDate();
+    var isToday = m.date === todayStr;
+
+    html += '<div class="dp-upcoming-row" role="button" tabindex="0" ' +
+      'onclick="showStudentProfile(\'' + esc(m.studentId) + '\')" ' +
+      'onkeydown="if(event.key===\'Enter\')showStudentProfile(\'' + esc(m.studentId) + '\')">' +
+      '<span class="dp-upcoming-date' + (isToday ? ' dp-upcoming-today' : '') + '">' +
+        (isToday ? 'Today' : esc(dateLabel)) + '</span>' +
+      '<div class="dp-upcoming-info">' +
+        '<span class="dp-upcoming-type">' + esc(m.meetingType) + '</span>' +
+        '<span class="dp-upcoming-student">' + esc(m.studentName) +
+        (m.notes ? ' &#x00B7; ' + esc(m.notes) : '') + '</span>' +
+      '</div>' +
+      '<span class="dp-upcoming-badge">IEP</span>' +
+    '</div>';
+  });
+
+  html += '</div>';
+  return html;
+}
+
 // ── Section 3: Progress Reports ──
 
 function buildDPProgressSection_(data) {
   var assignments = data.progressAssignments || [];
   var completionMap = data.completionMap || {};
   var quarter = data.currentQuarter || '';
+  var filter = appState.dueProcessProgressFilter || 'all';
 
-  var html = '<div class="dp-section">';
+  var html = '<div class="dp-section" id="dp-progress-section">';
   html += '<h2 class="dp-section-header">Progress Reports (' + esc(quarter) + ')</h2>';
 
   if (assignments.length === 0) {
@@ -2096,11 +2338,53 @@ function buildDPProgressSection_(data) {
     studentGoals[a.studentId].goals.push(a);
   });
 
+  // Compute aggregate completion
+  var totalStudents = studentOrder.length;
+  var doneStudents = 0;
+  studentOrder.forEach(function(sid) {
+    var comp = completionMap[sid];
+    if (comp && comp.allDone) doneStudents++;
+  });
+  var pctDone = totalStudents > 0 ? Math.round(doneStudents / totalStudents * 100) : 0;
+
+  // Aggregate progress bar
+  html += '<div class="dp-progress-summary-row">';
+  html += '<span class="dp-progress-summary-text">' + doneStudents + ' of ' + totalStudents + ' complete</span>';
+  html += '<div class="dp-progress-bar"><div class="dp-progress-bar-fill" style="width:' + pctDone + '%"></div></div>';
+  html += '</div>';
+
+  // Filter chips
+  html += '<div class="dp-progress-filters">';
+  var filters = [
+    { key: 'all', label: 'All' },
+    { key: 'incomplete', label: 'Incomplete' },
+    { key: 'complete', label: 'Complete' }
+  ];
+  filters.forEach(function(f) {
+    var isActive = filter === f.key;
+    html += '<button class="eval-filter-chip' + (isActive ? ' eval-filter-chip-active' : '') + '" ' +
+      'aria-pressed="' + isActive + '" onclick="setDPProgressFilter(\'' + f.key + '\')">' +
+      f.label + '</button>';
+  });
+  html += '</div>';
+
+  // Sort: incomplete first, then complete
+  var sortedOrder = studentOrder.slice().sort(function(a, b) {
+    var aDone = (completionMap[a] && completionMap[a].allDone) ? 1 : 0;
+    var bDone = (completionMap[b] && completionMap[b].allDone) ? 1 : 0;
+    return aDone - bDone;
+  });
+
   html += '<div class="dp-progress-list">';
 
-  studentOrder.forEach(function(sid) {
+  sortedOrder.forEach(function(sid) {
     var info = studentGoals[sid];
     var comp = completionMap[sid] || { total: 0, completed: 0, allDone: false };
+
+    // Apply filter
+    if (filter === 'incomplete' && comp.allDone) return;
+    if (filter === 'complete' && !comp.allDone) return;
+
     var cardClass = 'dp-progress-card' + (comp.allDone ? ' dp-progress-complete' : '');
 
     html += '<div class="' + cardClass + '" role="button" tabindex="0" ' +
@@ -2135,7 +2419,6 @@ function buildDPProgressSection_(data) {
     // Fire confetti for newly-complete students on initial render
     if (comp.allDone && !_progressCompletionFiredFor[sid + quarter]) {
       _progressCompletionFiredFor[sid + quarter] = true;
-      // Defer confetti to after DOM render
       setTimeout(function() {
         var card = document.querySelector('.dp-progress-card[onclick*="' + sid + '"]');
         if (card) launchConfetti(card);
@@ -2146,6 +2429,20 @@ function buildDPProgressSection_(data) {
   html += '</div>';
   html += '</div>';
   return html;
+}
+
+function setDPProgressFilter(filter) {
+  appState.dueProcessProgressFilter = filter;
+  renderDPProgressOnly_();
+}
+
+function renderDPProgressOnly_() {
+  var section = document.getElementById('dp-progress-section');
+  if (!section || !appState.dueProcessData) return;
+  var tmp = document.createElement('div');
+  tmp.innerHTML = buildDPProgressSection_(appState.dueProcessData);
+  var newSection = tmp.firstChild;
+  section.parentNode.replaceChild(newSection, section);
 }
 
 // ─── Recent Students ───
@@ -2964,7 +3261,8 @@ function saveCheckIn() {
     .withSuccessHandler(function(result) {
       if (result.success) {
         showToast('Check-in saved');
-        loadDashboard();
+        renderDashboardFromState();
+        _lastDashboardFetch = 0;
       } else {
         showToast('Error saving check-in');
       }
@@ -2986,7 +3284,7 @@ function goBackFromCheckIn() {
       data.id = appState.editingCheckIn.id;
       _ciAutosaveDirty = false;
       google.script.run
-        .withSuccessHandler(function() { loadDashboard(); })
+        .withSuccessHandler(function() { renderDashboardFromState(); _lastDashboardFetch = 0; })
         .withFailureHandler(function() {})
         .saveCheckIn(data);
     }
@@ -3623,7 +3921,8 @@ function persistAcademicData_(student) {
         // Once all persists complete, sync dashboard from backend if visible
         if (_persistInFlight === 0 && Object.keys(_persistTimers).length === 0 &&
             document.getElementById('dashboard-view').classList.contains('active')) {
-          loadDashboard();
+          renderDashboardFromState();
+          _lastDashboardFetch = 0;
         }
       })
       .withFailureHandler(function(err) {
@@ -5556,13 +5855,14 @@ function saveStudentForm() {
       hideGlobalProgress();
       if (result.success) {
         showToast('Student saved');
-        loadDashboard();
+        renderDashboardFromState();
+        _lastDashboardFetch = 0;
       }
     })
     .withFailureHandler(function(err) {
       hideGlobalProgress();
       showToast('Error: ' + (err && err.message ? err.message : String(err)));
-      loadDashboard();
+      loadDashboard(true);
     })
     .saveStudent(profile);
 }
@@ -5588,12 +5888,12 @@ function doDeleteStudent(studentId) {
     .withSuccessHandler(function() {
       hideGlobalProgress();
       showToast('Student deleted');
-      loadDashboard();
+      loadDashboard(true);
     })
     .withFailureHandler(function(err) {
       hideGlobalProgress();
       showToast('Error: ' + (err && err.message ? err.message : String(err)));
-      loadDashboard();
+      loadDashboard(true);
     })
     .deleteStudent(studentId);
 }

@@ -327,7 +327,7 @@ function migrateStudentColumns_(sheet) {
     }
   }
 
-  if (changed) invalidateCache_();
+  if (changed) invalidateStudentCaches_();
 }
 
 // ───── Student CRUD ─────
@@ -395,7 +395,7 @@ function saveStudent(profile) {
         birthday: profile.birthday || '',
         updatedAt: now
       });
-      invalidateCache_();
+      invalidateStudentCaches_();
       return { success: true, id: profile.id };
     }
   }
@@ -409,7 +409,7 @@ function saveStudent(profile) {
     profile.iepGoal||'', profile.goalsJson||'', profile.caseManagerEmail||'',
     profile.online ? 'TRUE' : '', contactsJson, profile.birthday || ''
   ]);
-  invalidateCache_();
+  invalidateStudentCaches_();
   return { success: true, id: id };
 }
 
@@ -425,7 +425,7 @@ function saveStudentGoals(studentId, goalsJson) {
       goalsJson: goalsJson || '',
       updatedAt: now
     });
-    invalidateCache_();
+    invalidateStudentCaches_();
     return { success: true };
   }
   return { success: false, error: 'Student not found' };
@@ -447,7 +447,7 @@ function saveStudentContacts(studentId, contactsJson) {
       contactsJson: sanitized,
       updatedAt: now
     });
-    invalidateCache_();
+    invalidateStudentCaches_();
     return { success: true };
   }
   return { success: false, error: 'Student not found' };
@@ -472,7 +472,7 @@ function appendStudentNote(studentId, noteText) {
     notes: newNotes,
     updatedAt: new Date().toISOString()
   });
-  invalidateCache_();
+  invalidateStudentCaches_();
   return { success: true, notes: newNotes };
 }
 
@@ -530,7 +530,7 @@ function saveCheckIn(data) {
         academicDataJson: academicJson,
         goalMet: data.goalMet || ''
       });
-      invalidateCache_();
+      invalidateCheckInCaches_();
       return { success: true, id: data.id };
     }
   }
@@ -546,7 +546,7 @@ function saveCheckIn(data) {
     data.teacherNotes||'', academicJson, now,
     data.goalMet||''
   ]);
-  invalidateCache_();
+  invalidateCheckInCaches_();
   return { success: true, id: id };
 }
 
@@ -581,7 +581,7 @@ function deleteCheckIn(checkInId) {
   if (!sheet) return { success: false };
   const data = sheet.getDataRange().getValues();
   for (let i = data.length - 1; i >= 1; i--) {
-    if (data[i][0] === checkInId) { sheet.deleteRow(i + 1); invalidateCache_(); return { success: true }; }
+    if (data[i][0] === checkInId) { sheet.deleteRow(i + 1); invalidateCheckInCaches_(); return { success: true }; }
   }
   return { success: false };
 }
@@ -595,7 +595,7 @@ function updateCheckInAcademicData(checkInId, academicData) {
   var found = findRowById_(sheet, checkInId);
   if (found && found.colIdx['academicDataJson']) {
     sheet.getRange(found.rowIndex, found.colIdx['academicDataJson']).setValue(JSON.stringify(academicData || []));
-    invalidateCache_();
+    invalidateCheckInCaches_();
     return { success: true };
   }
   return { success: false };
@@ -791,6 +791,47 @@ function invalidateCache_() {
   } catch(e) {}
 }
 
+// Targeted invalidation — only clear caches affected by the write
+function invalidateStudentCaches_() {
+  try {
+    var props = PropertiesService.getUserProperties();
+    props.deleteProperty(CACHE_PREFIX + 'students');
+    props.deleteProperty(CACHE_PREFIX + 'dashboard');
+  } catch(e) {}
+}
+
+function invalidateCheckInCaches_() {
+  try {
+    var props = PropertiesService.getUserProperties();
+    props.deleteProperty(CACHE_PREFIX + 'dashboard');
+  } catch(e) {}
+}
+
+function invalidateEvalCaches_() {
+  try {
+    var props = PropertiesService.getUserProperties();
+    props.deleteProperty(CACHE_PREFIX + 'eval_summary');
+    props.deleteProperty(CACHE_PREFIX + 'dashboard');
+    props.deleteProperty(CACHE_PREFIX + 'due_process');
+  } catch(e) {}
+}
+
+function invalidateMeetingCaches_() {
+  try {
+    var props = PropertiesService.getUserProperties();
+    props.deleteProperty(CACHE_PREFIX + 'eval_summary');
+    props.deleteProperty(CACHE_PREFIX + 'due_process');
+  } catch(e) {}
+}
+
+function invalidateProgressCaches_() {
+  try {
+    var props = PropertiesService.getUserProperties();
+    props.deleteProperty(CACHE_PREFIX + 'progress');
+    props.deleteProperty(CACHE_PREFIX + 'due_process');
+  } catch(e) {}
+}
+
 // ───── Eval Task Summary (cross-student aggregation) ─────
 
 function getEvalTaskSummary() {
@@ -969,7 +1010,7 @@ function saveIEPMeeting(data) {
         meetingType: data.meetingType,
         notes: data.notes || ''
       });
-      invalidateCache_();
+      invalidateMeetingCaches_();
       return { success: true, id: data.id, updated: true };
     }
 
@@ -979,7 +1020,7 @@ function saveIEPMeeting(data) {
       id, data.studentId, data.meetingDate, data.meetingType,
       data.notes || '', now, email
     ]);
-    invalidateCache_();
+    invalidateMeetingCaches_();
     return { success: true, id: id, updated: false };
   } finally {
     lock.releaseLock();
@@ -1014,7 +1055,7 @@ function deleteIEPMeeting(meetingId) {
   if (!found) return { success: false, error: 'Meeting not found' };
 
   sheet.deleteRow(found.rowIndex);
-  invalidateCache_();
+  invalidateMeetingCaches_();
   return { success: true };
 }
 
@@ -1034,6 +1075,19 @@ function getDueProcessData() {
 
   // 2. Merged meetings from eval meetingDate + standalone IEPMeetings
   var meetings = getAllMeetingsForCalendar_(students);
+
+  // 2b. Count meetings this M-F week for summary stats
+  var now = new Date();
+  var todayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  var dow = todayDate.getDay();
+  var mondayOffset = (dow === 0) ? -6 : 1 - dow;
+  var weekMonday = new Date(todayDate.getTime() + mondayOffset * 86400000);
+  var weekFriday = new Date(weekMonday.getTime() + 4 * 86400000);
+  var weekMondayStr = formatDateValue_(weekMonday);
+  var weekFridayStr = formatDateValue_(weekFriday);
+  var meetingsThisWeek = meetings.filter(function(m) {
+    return m.date >= weekMondayStr && m.date <= weekFridayStr;
+  });
 
   // 3. Progress responsibility: goals where current user is responsible
   var progressAssignments = [];
@@ -1063,6 +1117,7 @@ function getDueProcessData() {
   var result = {
     evalSummary: evalSummary,
     meetings: meetings,
+    meetingsThisWeek: meetingsThisWeek,
     progressAssignments: progressAssignments,
     completionMap: completionMap,
     currentQuarter: quarter
@@ -1142,9 +1197,13 @@ function getEvalTimelineExtended_(numDays) {
 
     var evalDone = 0;
     var evalOverdue = 0;
+    var evalNextDue = null; // earliest unchecked due date
     items.forEach(function(item) {
       if (item.checked) { evalDone++; return; }
       if (!item.dueDate) return;
+
+      // Track earliest unchecked due date for this eval
+      if (!evalNextDue || item.dueDate < evalNextDue) evalNextDue = item.dueDate;
 
       if (item.dueDate < todayStr) {
         overdueCount++;
@@ -1176,7 +1235,8 @@ function getEvalTimelineExtended_(numDays) {
 
     activeEvals.push({
       evalId: evalId, studentId: studentId, studentName: studentFullName,
-      type: evalType, done: evalDone, total: items.length, overdueCount: evalOverdue
+      type: evalType, done: evalDone, total: items.length, overdueCount: evalOverdue,
+      nextDueDate: evalNextDue
     });
   }
 
@@ -1626,7 +1686,7 @@ function createEvaluation(studentId, type) {
   var id = Utilities.getUuid();
 
   sheet.appendRow([id, studentId, type, JSON.stringify(items), now, now, JSON.stringify([]), '']);
-  invalidateCache_();
+  invalidateEvalCaches_();
 
   return { success: true, id: id, studentId: studentId, type: type, items: items, files: [], meetingDate: '' };
 }
@@ -1644,7 +1704,7 @@ function updateEvalMeetingDate(evalId, meetingDate) {
     meetingDate: meetingDate || '',
     updatedAt: new Date().toISOString()
   });
-  invalidateCache_();
+  invalidateEvalCaches_();
   return { success: true };
 }
 
@@ -1664,7 +1724,7 @@ function updateEvaluationType(evalId, newType) {
     type: newType,
     updatedAt: new Date().toISOString()
   });
-  invalidateCache_();
+  invalidateEvalCaches_();
   return { success: true };
 }
 
@@ -1700,7 +1760,7 @@ function saveEvaluationItems(evalId, items) {
     itemsJson: JSON.stringify(sanitized),
     updatedAt: new Date().toISOString()
   });
-  invalidateCache_();
+  invalidateEvalCaches_();
 
   return { success: true, items: sanitized };
 }
@@ -1762,7 +1822,7 @@ function deleteEvaluation(evalId) {
   for (var i = data.length - 1; i >= 1; i--) {
     if (data[i][0] === evalId) {
       sheet.deleteRow(i + 1);
-      invalidateCache_();
+      invalidateEvalCaches_();
       return { success: true };
     }
   }
@@ -2095,7 +2155,7 @@ function saveProgressEntry(data) {
         enteredBy: email,
         lastModified: now
       });
-      invalidateCache_();
+      invalidateProgressCaches_();
       return { success: true, id: existingId, updated: true };
     } else {
       // Create new entry
@@ -2113,7 +2173,7 @@ function saveProgressEntry(data) {
       now,
       now
     ]);
-      invalidateCache_();
+      invalidateProgressCaches_();
       return { success: true, id: id, updated: false };
     }
   } finally {
@@ -2173,7 +2233,7 @@ function deleteProgressEntry_(entryId) {
   var found = findRowById_(sheet, entryId);
   if (found) {
     sheet.deleteRow(found.rowIndex);
-    invalidateCache_();
+    invalidateProgressCaches_();
   }
 }
 
@@ -2826,6 +2886,6 @@ function assignCaseManager(studentId, caseManagerEmail) {
   }
 
   sheet.getRange(found.rowIndex, found.colIdx['caseManagerEmail']).setValue(caseManagerEmail || '');
-  invalidateCache_();
+  invalidateStudentCaches_();
   return { success: true };
 }
