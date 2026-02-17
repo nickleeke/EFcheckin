@@ -36,7 +36,8 @@ var appState = {
   editingGoalId: null,
   expandedGoalIds: {},
   expandedProgressGoalIds: {},
-  editingProgressGoalId: null
+  editingProgressGoalId: null,
+  lastProgressQuarter: {}
 };
 var _persistTimers = {};
 var _persistInFlight = 0;
@@ -4113,29 +4114,38 @@ function loadProgressSection(studentId, goals) {
   appState.currentProgressQuarter = null;
   appState.progressEntries = [];
 
-  // Get current quarter from backend, then load entries
-  google.script.run
-    .withSuccessHandler(function(quarter) {
-      appState.currentProgressQuarter = quarter;
-      google.script.run
-        .withSuccessHandler(function(entries) {
-          appState.progressEntries = entries || [];
-          renderProgressSection(studentId, goals, quarter, entries || []);
-        })
-        .withFailureHandler(function() {
-          appState.progressEntries = [];
-          renderProgressSection(studentId, goals, quarter, []);
-        })
-        .getAllProgressForStudent(studentId);
-    })
-    .withFailureHandler(function() {
-      // Fallback: guess quarter client-side
-      var month = new Date().getMonth();
-      var q = month >= 8 && month <= 10 ? 'Q1' : (month === 11 || month <= 1) ? 'Q2' : month <= 4 ? 'Q3' : 'Q4';
-      appState.currentProgressQuarter = q;
-      renderProgressSection(studentId, goals, q, []);
-    })
-    .getCurrentQuarter();
+  // Use remembered quarter if available, otherwise get from backend
+  var remembered = appState.lastProgressQuarter[studentId];
+
+  function loadEntries(quarter) {
+    appState.currentProgressQuarter = quarter;
+    appState.lastProgressQuarter[studentId] = quarter;
+    google.script.run
+      .withSuccessHandler(function(entries) {
+        appState.progressEntries = entries || [];
+        renderProgressSection(studentId, goals, quarter, entries || []);
+      })
+      .withFailureHandler(function() {
+        appState.progressEntries = [];
+        renderProgressSection(studentId, goals, quarter, []);
+      })
+      .getAllProgressForStudent(studentId);
+  }
+
+  if (remembered) {
+    loadEntries(remembered);
+  } else {
+    google.script.run
+      .withSuccessHandler(function(quarter) {
+        loadEntries(quarter);
+      })
+      .withFailureHandler(function() {
+        var month = new Date().getMonth();
+        var q = month >= 8 && month <= 10 ? 'Q1' : (month === 11 || month <= 1) ? 'Q2' : month <= 4 ? 'Q3' : 'Q4';
+        loadEntries(q);
+      })
+      .getCurrentQuarter();
+  }
 }
 
 function renderProgressSection(studentId, goals, quarter, allEntries) {
@@ -4439,7 +4449,15 @@ function switchProgressQuarter(studentId, quarter) {
   _progressAutosaveDirty = false;
   appState.editingProgressGoalId = null;
 
+  // Determine slide direction based on quarter order
+  var qOrder = ['Q1', 'Q2', 'Q3', 'Q4'];
+  var oldIdx = qOrder.indexOf(appState.currentProgressQuarter);
+  var newIdx = qOrder.indexOf(quarter);
+  var slideClass = newIdx > oldIdx ? 'progress-slide-forward' : 'progress-slide-backward';
+
   appState.currentProgressQuarter = quarter;
+  appState.lastProgressQuarter[studentId] = quarter;
+
   var goals = [];
   var student = getStudentById(studentId);
   if (student && student.goalsJson) {
@@ -4448,6 +4466,18 @@ function switchProgressQuarter(studentId, quarter) {
     goals = student.goals;
   }
   renderProgressSection(studentId, goals, quarter, appState.progressEntries);
+
+  // Apply slide animation
+  var container = document.getElementById('progress-section-container');
+  if (container && oldIdx !== newIdx) {
+    container.classList.remove('progress-slide-forward', 'progress-slide-backward');
+    void container.offsetWidth; // force reflow
+    container.classList.add(slideClass);
+    container.addEventListener('animationend', function handler() {
+      container.classList.remove(slideClass);
+      container.removeEventListener('animationend', handler);
+    });
+  }
 }
 
 function selectProgressRating(btn, studentId, goalId, objId) {

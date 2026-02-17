@@ -2403,6 +2403,25 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   gap: 4px;
 }
 
+/* ─── Progress Quarter Slide Transitions ─── */
+#progress-section-container {
+  overflow: hidden;
+}
+@keyframes progressSlideForward {
+  from { opacity: 0; transform: translateX(30px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes progressSlideBackward {
+  from { opacity: 0; transform: translateX(-30px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.progress-slide-forward {
+  animation: progressSlideForward var(--md-duration-medium2) var(--md-easing-emphasized-decelerate) both;
+}
+.progress-slide-backward {
+  animation: progressSlideBackward var(--md-duration-medium2) var(--md-easing-emphasized-decelerate) both;
+}
+
 /* ─── Progress Expandable Cards ─── */
 .progress-card {
   border: 1px solid var(--md-outline-variant);
