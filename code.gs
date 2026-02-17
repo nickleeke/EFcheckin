@@ -1645,12 +1645,19 @@ function saveEvaluationItems(evalId, items) {
   if (!found) return { success: false, error: 'Evaluation not found.' };
 
   var sanitized = (items || []).map(function(item) {
+    var files = [];
+    if (Array.isArray(item.files)) {
+      files = item.files.map(function(f) {
+        return { id: String(f.id || ''), name: String(f.name || '').trim(), url: String(f.url || '').trim() };
+      }).filter(function(f) { return f.name && f.url; });
+    }
     return {
       id: String(item.id || ''),
       text: String(item.text || '').trim(),
       checked: !!item.checked,
       completedAt: item.completedAt || null,
-      dueDate: item.dueDate || null
+      dueDate: item.dueDate || null,
+      files: files
     };
   });
 

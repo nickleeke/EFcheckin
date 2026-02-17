@@ -45,6 +45,7 @@ var _evalAutosaveTimer = null;
 var _evalAutosaveInFlight = false;
 var _evalAutosaveDirty = false;
 var _evalItemFilter = 'all'; // 'all' | 'remaining' | 'overdue' | 'completed'
+var _expandedEvalItemFiles = {}; // { itemId: true } — tracks expanded file lists per task
 var _searchDebounceTimer = null;
 var _evalFocusedIndex = -1;
 var _progressAutosaveTimer = null;
@@ -923,7 +924,7 @@ function filterDashboardSearch(query) {
   if (clearBtn) clearBtn.style.display = query ? '' : 'none';
   _searchDebounceTimer = setTimeout(function() {
     appState.searchQuery = query.trim().toLowerCase();
-    renderDashboard(appState.dashboardData);
+    renderDashboard(appState.dashboardData, { skipAnimation: true });
   }, 200);
 }
 
@@ -933,7 +934,7 @@ function clearDashboardSearch() {
   appState.searchQuery = '';
   var clearBtn = document.getElementById('dashboard-search-clear');
   if (clearBtn) clearBtn.style.display = 'none';
-  renderDashboard(appState.dashboardData);
+  renderDashboard(appState.dashboardData, { skipAnimation: true });
 }
 
 function sortIcon(field) {
@@ -951,7 +952,8 @@ function sortIcon(field) {
   return '<button class="' + cls + '" onclick="event.stopPropagation(); toggleSort(\'' + field + '\')" aria-label="Sort by ' + field + '">' + arrow + '</button>';
 }
 
-function renderDashboard(data) {
+function renderDashboard(data, opts) {
+  var skipAnimation = opts && opts.skipAnimation;
   appState.highlightedRowIndex = -1;
   var container = document.getElementById('dashboard-table-container');
   var searchBar = document.getElementById('dashboard-search');
@@ -1023,8 +1025,9 @@ function renderDashboard(data) {
 
   sorted.forEach(function(s, index) {
     var origIndex = (appState.dashboardData || data).indexOf(s);
-    var delay = Math.min(index * 50, 400);
-    html += '<tr class="stagger-row" data-student-id="' + s.id + '" data-row-index="' + index + '" style="animation-delay:' + delay + 'ms" onclick="openSidePanel(' + origIndex + ')" title="Click for quick view">';
+    var rowClass = skipAnimation ? '' : ' stagger-row';
+    var delayStyle = skipAnimation ? '' : ' style="animation-delay:' + Math.min(index * 50, 400) + 'ms"';
+    html += '<tr class="' + rowClass + '" data-student-id="' + s.id + '" data-row-index="' + index + '"' + delayStyle + ' onclick="openSidePanel(' + origIndex + ')" title="Click for quick view">';
     html += '<td><strong>' + esc(s.firstName + ' ' + s.lastName) + '</strong>';
     if (s.online) html += ' <span class="online-badge" title="Online">Online</span>';
     if (s.evalType) {
@@ -1094,7 +1097,7 @@ function renderDashboard(data) {
   html += '<p class="hint" style="margin-top:8px;">Click any row for a quick academic overview.</p>';
 
   container.innerHTML = html;
-  animateContentIn(container);
+  if (!skipAnimation) animateContentIn(container);
 }
 
 // ─── Needs Attention Cards (Feature 1 + 10) ───
@@ -6723,6 +6726,7 @@ function showEvalChecklistView(studentId, evaluation, scrollToItemId) {
   resetEvalAutosave();
   appState.editingEvalItemId = null;
   _evalFocusedIndex = -1;
+  _expandedEvalItemFiles = {};
   appState.evalChecklistStudentId = studentId;
   appState.currentEvaluation = evaluation;
 
@@ -6770,6 +6774,8 @@ function buildEvalItemRow(evalId, item) {
   }
   var isOverdue = isEvalItemOverdue_(item);
   var isDueSoon = isEvalItemDueSoon_(item);
+  var itemFiles = item.files || [];
+  var isFilesExpanded = !!_expandedEvalItemFiles[item.id];
 
   var classes = 'eval-item' + checkedClass + (isOverdue ? ' eval-item-overdue' : '') + (isDueSoon ? ' eval-item-due-soon' : '') + (isEditing ? ' eval-item-editing' : '');
 
@@ -6795,7 +6801,18 @@ function buildEvalItemRow(evalId, item) {
   } else {
     html += '<span class="eval-item-text">' + esc(item.text) + '</span>';
   }
-  html += '</label></div>';
+  html += '</label>';
+  // File indicator (non-edit mode, when item has files)
+  if (itemFiles.length > 0 && !isEditing) {
+    html += '<span class="eval-item-file-indicator" role="button" tabindex="0" ' +
+      'onclick="event.stopPropagation();toggleEvalItemFiles(\'' + esc(item.id) + '\')" ' +
+      'onkeydown="if(event.key===\'Enter\'){event.stopPropagation();toggleEvalItemFiles(\'' + esc(item.id) + '\');}" ' +
+      'title="' + itemFiles.length + ' file' + (itemFiles.length !== 1 ? 's' : '') + ' attached">' +
+      '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z"/></svg>' +
+      (itemFiles.length > 1 ? '<span class="eval-item-file-count">' + itemFiles.length + '</span>' : '') +
+    '</span>';
+  }
+  html += '</div>';
 
   // Due Date column
   html += '<div class="eval-item-due">';
@@ -6829,6 +6846,46 @@ function buildEvalItemRow(evalId, item) {
     '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>' +
   '</button>';
   html += '</div>';
+
+  // Expanded file list (spans all grid columns)
+  if (itemFiles.length > 0 && (isFilesExpanded || isEditing)) {
+    html += '<div class="eval-item-files-panel">';
+    itemFiles.forEach(function(file) {
+      html += '<div class="eval-item-file-row">' +
+        '<a href="' + esc(file.url) + '" target="_blank" rel="noopener" class="eval-item-file-link" title="Open ' + esc(file.name) + '">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" class="eval-item-file-link-icon"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg>' +
+          '<span class="eval-item-file-name">' + esc(file.name) + '</span>' +
+        '</a>';
+      if (isEditing) {
+        html += '<button class="btn-icon btn-sm eval-item-file-remove" onclick="event.stopPropagation();removeEvalItemFile(\'' + esc(evalId) + '\',\'' + esc(item.id) + '\',\'' + esc(file.id) + '\')" title="Remove file">' +
+          '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>' +
+        '</button>';
+      }
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+
+  // Add files section (edit mode only, spans all grid columns)
+  if (isEditing) {
+    html += '<div class="eval-item-add-file-section">' +
+      '<button type="button" class="btn-ghost btn-sm eval-item-add-file-btn" id="eval-item-add-file-btn-' + esc(item.id) + '" ' +
+        'onclick="event.stopPropagation();showEvalItemAddFileForm(\'' + esc(item.id) + '\')">' +
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="margin-right:4px"><path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z"/></svg>' +
+        '+ Add File' +
+      '</button>' +
+      '<div class="eval-item-add-file-form" id="eval-item-add-file-form-' + esc(item.id) + '" style="display:none;">' +
+        '<div class="eval-item-add-file-row">' +
+          '<input type="text" class="eval-item-add-file-name" id="eval-item-add-file-name-' + esc(item.id) + '" placeholder="File name...">' +
+          '<input type="text" class="eval-item-add-file-url" id="eval-item-add-file-url-' + esc(item.id) + '" placeholder="Paste URL..." ' +
+            'onkeydown="if(event.key===\'Enter\'){event.preventDefault();confirmAddEvalItemFile(\'' + esc(evalId) + '\',\'' + esc(item.id) + '\');}">' +
+          '<button type="button" class="mv-confirm-btn" onclick="event.stopPropagation();confirmAddEvalItemFile(\'' + esc(evalId) + '\',\'' + esc(item.id) + '\')" title="Add file">' +
+            '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>' +
+          '</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
 
   html += '</div>';
   return html;
@@ -7231,6 +7288,64 @@ function rerenderEvalItem(itemId) {
   }
   if (!item) { el.remove(); return; }
   el.outerHTML = buildEvalItemRow(appState.currentEvaluation.id, item);
+}
+
+// ─── Per-Task File Attachments ───
+
+function toggleEvalItemFiles(itemId) {
+  if (_expandedEvalItemFiles[itemId]) {
+    delete _expandedEvalItemFiles[itemId];
+  } else {
+    _expandedEvalItemFiles[itemId] = true;
+  }
+  rerenderEvalItem(itemId);
+}
+
+function showEvalItemAddFileForm(itemId) {
+  var btn = document.getElementById('eval-item-add-file-btn-' + itemId);
+  var form = document.getElementById('eval-item-add-file-form-' + itemId);
+  if (btn) btn.style.display = 'none';
+  if (form) form.style.display = '';
+  var nameInput = document.getElementById('eval-item-add-file-name-' + itemId);
+  if (nameInput) nameInput.focus();
+}
+
+function confirmAddEvalItemFile(evalId, itemId) {
+  var nameInput = document.getElementById('eval-item-add-file-name-' + itemId);
+  var urlInput = document.getElementById('eval-item-add-file-url-' + itemId);
+  var name = (nameInput ? nameInput.value : '').trim();
+  var url = (urlInput ? urlInput.value : '').trim();
+
+  if (!name) { showToast('Please enter a file name'); if (nameInput) nameInput.focus(); return; }
+  if (!url) { showToast('Please enter a URL'); if (urlInput) urlInput.focus(); return; }
+
+  if (!appState.currentEvaluation) return;
+  for (var i = 0; i < appState.currentEvaluation.items.length; i++) {
+    if (appState.currentEvaluation.items[i].id === itemId) {
+      if (!appState.currentEvaluation.items[i].files) appState.currentEvaluation.items[i].files = [];
+      appState.currentEvaluation.items[i].files.push({ id: 'file-' + Date.now(), name: name, url: url });
+      break;
+    }
+  }
+
+  _expandedEvalItemFiles[itemId] = true;
+  rerenderEvalItem(itemId);
+  scheduleEvalAutosave();
+  showToast('File added');
+}
+
+function removeEvalItemFile(evalId, itemId, fileId) {
+  if (!appState.currentEvaluation) return;
+  for (var i = 0; i < appState.currentEvaluation.items.length; i++) {
+    if (appState.currentEvaluation.items[i].id === itemId) {
+      var files = appState.currentEvaluation.items[i].files || [];
+      appState.currentEvaluation.items[i].files = files.filter(function(f) { return f.id !== fileId; });
+      break;
+    }
+  }
+  rerenderEvalItem(itemId);
+  scheduleEvalAutosave();
+  showToast('File removed');
 }
 
 // ─── Eval Autosave ───
