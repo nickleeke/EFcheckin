@@ -2904,8 +2904,8 @@ function performGoalsAutosave() {
           appState.currentStudent.goalsJson = goalsJson;
           appState.currentStudent.goals = goalsData;
         }
-        // Sync in-memory goals from saved data (if still on same student)
-        if (studentId === appState.currentStudentId) {
+        // Sync in-memory goals from saved data (if still on same student and not editing)
+        if (studentId === appState.currentStudentId && !appState.editingGoalId) {
           appState.currentGoals = goalsData;
         }
 
@@ -3119,6 +3119,7 @@ function removeObjective(goalId, objId) {
   if (!goalEl) return;
   var objEl = goalEl.querySelector('[data-obj-id="' + objId + '"]');
   if (objEl) objEl.remove();
+  saveEditingGoalToState_();
   scheduleGoalsAutosave();
 }
 
@@ -3419,8 +3420,7 @@ function profileChangeGrade(studentId, classIdx, newGrade) {
 
   student.academicData[classIdx].grade = newGrade;
 
-  // Recalculate GPA locally
-  var GPA_MAP = {'A':4.0,'A-':3.7,'B+':3.3,'B':3.0,'B-':2.7,'C+':2.3,'C':2.0,'C-':1.7,'D+':1.3,'D':1.0,'D-':0.7,'F':0.0};
+  // Recalculate GPA locally (uses global GPA_MAP)
   var gpaValues = [];
   student.academicData.forEach(function(c) {
     if (c.grade && GPA_MAP.hasOwnProperty(c.grade)) gpaValues.push(GPA_MAP[c.grade]);
@@ -4959,16 +4959,17 @@ function editProfileContact(studentId, idx) {
 function removeProfileContact(studentId, idx) {
   showConfirmDialog({
     title: 'Remove Contact',
-    message: 'Are you sure you want to remove this contact?',
+    body: 'Are you sure you want to remove this contact?',
     confirmLabel: 'Remove',
-    danger: true,
-    onConfirm: function() {
-      var contacts = getStudentContacts_(studentId);
-      contacts.splice(idx, 1);
-      saveContactsToServer_(studentId, contacts);
-      refreshContactsList_(studentId);
-    }
+    onConfirm: "confirmRemoveContact('" + esc(studentId) + "', " + idx + ")"
   });
+}
+
+function confirmRemoveContact(studentId, idx) {
+  var contacts = getStudentContacts_(studentId);
+  contacts.splice(idx, 1);
+  saveContactsToServer_(studentId, contacts);
+  refreshContactsList_(studentId);
 }
 
 // ─── Contacts in Student Edit Form ───
@@ -5158,7 +5159,7 @@ function confirmDeleteStudent(studentId) {
     title: 'Delete Student?',
     body: 'This will permanently delete this student and all their check-in records.',
     confirmLabel: 'Delete',
-    onConfirm: "doDeleteStudent('" + studentId + "')"
+    onConfirm: "doDeleteStudent('" + esc(studentId) + "')"
   });
 }
 
@@ -5264,7 +5265,7 @@ function confirmDeleteCheckIn(checkInId, studentId) {
     title: 'Delete Check-In?',
     body: 'This check-in record will be permanently deleted.',
     confirmLabel: 'Delete',
-    onConfirm: "doDeleteCheckIn('" + checkInId + "', '" + studentId + "')"
+    onConfirm: "doDeleteCheckIn('" + esc(checkInId) + "', '" + esc(studentId) + "')"
   });
 }
 
@@ -6906,7 +6907,7 @@ function handleCreateEvalChecklist(type) {
     body: 'This will create a new <strong>' + typeLabel + ' Checklist</strong> for this student. Only one checklist can be active at a time.',
     confirmLabel: 'Create',
     confirmClass: 'btn-primary',
-    onConfirm: "doCreateEvalChecklist('" + studentId + "', '" + type + "')"
+    onConfirm: "doCreateEvalChecklist('" + esc(studentId) + "', '" + esc(type) + "')"
   });
 }
 
