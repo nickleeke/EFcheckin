@@ -1166,3 +1166,67 @@ function test_completionMap_ignoresOtherUsersGoals() {
     createdIds.forEach(function(id) { try { deleteProgressEntry_(id); } catch(e) {} });
   }
 }
+
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 8. PER-TASK FILE ATTACHMENTS
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+function test_saveEvaluationItems_preservesFiles() {
+  initializeSheetsIfNeeded_();
+  var ss = getSS_();
+  var sheet = ss.getSheetByName(SHEET_EVALUATIONS);
+
+  // Create a test evaluation
+  var evalId = 'test-eval-files-' + Date.now();
+  var items = [
+    {
+      id: 'item-1', text: 'Task with files', checked: false,
+      completedAt: null, dueDate: null,
+      files: [
+        { id: 'f1', name: 'Doc A', url: 'https://example.com/a' },
+        { id: 'f2', name: 'Doc B', url: 'https://example.com/b' }
+      ]
+    },
+    {
+      id: 'item-2', text: 'Task without files', checked: false,
+      completedAt: null, dueDate: null
+    },
+    {
+      id: 'item-3', text: 'Task with malformed files', checked: false,
+      completedAt: null, dueDate: null,
+      files: [
+        { id: 'f3', name: '', url: 'https://example.com/c' },
+        { id: 'f4', name: 'Valid', url: 'https://example.com/d' },
+        { id: 'f5', name: 'No URL', url: '' }
+      ]
+    }
+  ];
+
+  sheet.appendRow([evalId, 'student-test', 'initial-eval', JSON.stringify(items), new Date().toISOString(), new Date().toISOString(), '[]', '']);
+
+  try {
+    var result = saveEvaluationItems(evalId, items);
+    assert_(result.success, 'saveEvaluationItems should succeed');
+
+    // Item 1: both valid files preserved
+    var saved1 = result.items[0];
+    assertEqual_(saved1.files.length, 2, 'Item 1 should have 2 files');
+    assertEqual_(saved1.files[0].name, 'Doc A', 'First file name preserved');
+    assertEqual_(saved1.files[0].url, 'https://example.com/a', 'First file url preserved');
+    assertEqual_(saved1.files[1].name, 'Doc B', 'Second file name preserved');
+
+    // Item 2: no files, should have empty array
+    var saved2 = result.items[1];
+    assertEqual_(saved2.files.length, 0, 'Item 2 should have 0 files');
+
+    // Item 3: only the valid file survives (name and url both non-empty)
+    var saved3 = result.items[2];
+    assertEqual_(saved3.files.length, 1, 'Item 3 should have 1 valid file (malformed stripped)');
+    assertEqual_(saved3.files[0].name, 'Valid', 'Only valid file preserved');
+  } finally {
+    // Clean up test row
+    var found = findRowById_(sheet, evalId);
+    if (found) sheet.deleteRow(found.rowIndex);
+  }
+}

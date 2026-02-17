@@ -175,7 +175,7 @@ var STUDENT_HEADERS = [
   'id','firstName','lastName','grade','period',
   'focusGoal','accommodations','notes','classesJson',
   'createdAt','updatedAt','iepGoal','goalsJson','caseManagerEmail',
-  'contactsJson'
+  'online','contactsJson'
 ];
 var CHECKIN_HEADERS = [
   'id','studentId','weekOf',
@@ -362,6 +362,7 @@ function saveStudent(profile) {
         iepGoal: profile.iepGoal || '',
         goalsJson: profile.goalsJson || '',
         caseManagerEmail: profile.caseManagerEmail || '',
+        online: profile.online ? 'TRUE' : '',
         contactsJson: contactsJson,
         updatedAt: now
       });
@@ -377,7 +378,7 @@ function saveStudent(profile) {
     profile.focusGoal||'', profile.accommodations||'',
     profile.notes||'', classesJson, now, now,
     profile.iepGoal||'', profile.goalsJson||'', profile.caseManagerEmail||'',
-    contactsJson
+    profile.online ? 'TRUE' : '', contactsJson
   ]);
   invalidateCache_();
   return { success: true, id: id };
@@ -1014,6 +1015,7 @@ function getDueProcessData() {
           goalArea: goal.goalArea || 'General',
           goalText: goal.text || '',
           caseManagerEmail: s.caseManagerEmail || '',
+          online: s.online === 'TRUE',
           objectiveCount: (goal.objectives || []).length
         });
       }
@@ -1643,12 +1645,19 @@ function saveEvaluationItems(evalId, items) {
   if (!found) return { success: false, error: 'Evaluation not found.' };
 
   var sanitized = (items || []).map(function(item) {
+    var files = [];
+    if (Array.isArray(item.files)) {
+      files = item.files.map(function(f) {
+        return { id: String(f.id || ''), name: String(f.name || '').trim(), url: String(f.url || '').trim() };
+      }).filter(function(f) { return f.name && f.url; });
+    }
     return {
       id: String(item.id || ''),
       text: String(item.text || '').trim(),
       checked: !!item.checked,
       completedAt: item.completedAt || null,
-      dueDate: item.dueDate || null
+      dueDate: item.dueDate || null,
+      files: files
     };
   });
 
