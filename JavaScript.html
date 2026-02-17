@@ -523,8 +523,6 @@ function enterApp() {
       if (isCM) {
         var myCaseloadItem = document.getElementById('drawer-mycaseload');
         if (myCaseloadItem) myCaseloadItem.style.display = '';
-        var filterContainer = document.getElementById('header-filter-container');
-        if (filterContainer) filterContainer.style.display = '';
         appState.caseloadFilter = 'my';
         setCaseloadFilter('my');
       }
@@ -980,9 +978,10 @@ function switchDashboardTab(tabName) {
   showView('dashboard-view');
   closeHeaderSearch();
   closeFilterDropdown();
-  // Deactivate all drawer child items and panels
+  // Deactivate all drawer child items, parent items, and panels
   document.querySelectorAll('.nav-drawer-child').forEach(function(t) { t.classList.remove('active'); });
   document.querySelectorAll('.nav-drawer-items > .nav-drawer-item').forEach(function(t) { t.classList.remove('active'); });
+  document.querySelectorAll('.nav-drawer-parent').forEach(function(t) { t.classList.remove('active'); });
   document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
   // Map tab names to panels and drawer items
   var isAdmin = (tabName === 'admin');
@@ -997,11 +996,19 @@ function switchDashboardTab(tabName) {
     var dashItem = document.getElementById('drawer-dashboard');
     if (dashItem) dashItem.classList.add('active');
   }
+  // For student list tabs, also highlight the parent Students group
+  if (isStudentList) {
+    var studentsParent = document.querySelector('#nav-group-students .nav-drawer-parent');
+    if (studentsParent) studentsParent.classList.add('active');
+  }
   // Show/hide header buttons
   var refreshBtn = document.getElementById('dashboard-refresh-btn');
   if (refreshBtn) refreshBtn.style.display = isAdmin ? 'none' : '';
   var addStudentBtn = document.getElementById('add-student-btn');
   if (addStudentBtn) addStudentBtn.style.display = (isAdmin || tabName === 'dashboard') ? 'none' : '';
+  // Show filter button only on student list tabs
+  var filterContainer = document.getElementById('header-filter-container');
+  if (filterContainer) filterContainer.style.display = isStudentList ? '' : 'none';
   // Close mobile submenu and drawer
   var openGroup = document.querySelector('.nav-drawer-group.submenu-open');
   if (openGroup) openGroup.classList.remove('submenu-open');
