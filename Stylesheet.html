@@ -1999,7 +1999,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   user-select: none;
 }
 .goal-card-header:hover {
-  background: color-mix(in srgb, var(--md-on-surface) 5%, transparent);
+  background: var(--md-state-on-surface-hover);
 }
 .goal-card-header-left {
   display: flex;
@@ -5664,7 +5664,8 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .btn-remove-class:focus-visible,
 .rating-btn:focus-visible,
 .drive-browser-item:focus-visible,
-.nav-collapse-btn:focus-visible {
+.nav-collapse-btn:focus-visible,
+.goal-card-header:focus-visible {
   outline: 2px solid var(--md-primary);
   outline-offset: 2px;
 }
