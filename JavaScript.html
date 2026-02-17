@@ -31,7 +31,7 @@ var appState = {
   progressEntries: [],
   dashboardMeetings: [],
   dueProcessData: null,
-  dueProcessCalendarDays: 7,
+  dueProcessCalendarWeeks: 1,
   dueProcessExpandedDay: null,
   currentGoals: [],
   editingGoalId: null,
@@ -1780,7 +1780,7 @@ function showDueProcess() {
   closeNavDrawerIfMobile_();
 
   appState.dueProcessExpandedDay = null;
-  appState.dueProcessCalendarDays = 7;
+  appState.dueProcessCalendarWeeks = 1;
 
   showView('dueprocess-view');
   var container = document.getElementById('dueprocess-content');
@@ -1862,13 +1862,12 @@ function buildDPEvalsSection_(evalSummary) {
 
 // ── Section 2: Calendar (Week / Month at a Glance) ──
 
-function buildDPCalendarSection_(data) {
-  var numDays = appState.dueProcessCalendarDays;
+function buildDPCalendarDays_(data) {
   var meetings = data.meetings || [];
   var evalSummary = data.evalSummary || {};
   var timeline = evalSummary.timeline || [];
+  var numWeeks = appState.dueProcessCalendarWeeks;
 
-  // Build day objects
   var now = new Date();
   var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   var todayStr = today.getFullYear() + '-' +
@@ -1877,51 +1876,63 @@ function buildDPCalendarSection_(data) {
   var dayAbbrs = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   var monthAbbrs = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+  // Find Monday of the current week
+  var dow = today.getDay();
+  var mondayOffset = (dow === 0) ? -6 : 1 - dow;
+  var monday = new Date(today.getTime() + mondayOffset * 86400000);
+
+  // Build M-F day objects for numWeeks weeks
   var days = [];
-  for (var d = 0; d < numDays; d++) {
-    var dayDate = new Date(today.getTime() + d * 86400000);
-    var dateStr = dayDate.getFullYear() + '-' +
-      String(dayDate.getMonth() + 1).padStart(2, '0') + '-' +
-      String(dayDate.getDate()).padStart(2, '0');
-    days.push({
-      date: dateStr,
-      dayOfWeek: dayDate.getDay(),
-      dayAbbr: dayAbbrs[dayDate.getDay()],
-      dayNum: dayDate.getDate(),
-      monthShort: monthAbbrs[dayDate.getMonth()],
-      isToday: dateStr === todayStr,
-      tasks: [],
-      meetings: []
-    });
+  for (var w = 0; w < numWeeks; w++) {
+    for (var d = 0; d < 5; d++) {
+      var dayDate = new Date(monday.getTime() + (w * 7 + d) * 86400000);
+      var dateStr = dayDate.getFullYear() + '-' +
+        String(dayDate.getMonth() + 1).padStart(2, '0') + '-' +
+        String(dayDate.getDate()).padStart(2, '0');
+      days.push({
+        date: dateStr,
+        dayOfWeek: dayDate.getDay(),
+        dayAbbr: dayAbbrs[dayDate.getDay()],
+        dayNum: dayDate.getDate(),
+        monthShort: monthAbbrs[dayDate.getMonth()],
+        isToday: dateStr === todayStr,
+        tasks: [],
+        meetings: []
+      });
+    }
   }
 
-  // Map timeline tasks to days
+  // Map timeline tasks and meetings to days
   var dateMap = {};
   days.forEach(function(day, idx) { dateMap[day.date] = idx; });
 
   timeline.forEach(function(tDay) {
     var idx = dateMap[tDay.date];
-    if (idx !== undefined) {
-      days[idx].tasks = tDay.tasks || [];
-    }
+    if (idx !== undefined) days[idx].tasks = tDay.tasks || [];
   });
 
-  // Map meetings to days
   meetings.forEach(function(m) {
     var idx = dateMap[m.date];
-    if (idx !== undefined) {
-      days[idx].meetings.push(m);
-    }
+    if (idx !== undefined) days[idx].meetings.push(m);
   });
 
-  var html = '<div class="dp-section">';
+  return { days: days, dateMap: dateMap, monthAbbrs: monthAbbrs };
+}
+
+function buildDPCalendarSection_(data) {
+  var numWeeks = appState.dueProcessCalendarWeeks;
+  var result = buildDPCalendarDays_(data);
+  var days = result.days;
+  var dateMap = result.dateMap;
+
+  var html = '<div class="dp-section" id="dp-calendar-section">';
   html += '<div class="dp-calendar-header">';
   html += '<h2 class="dp-section-header" style="margin-bottom:0;">At a Glance</h2>';
   html += '<button class="btn btn-sm" onclick="toggleDPCalendarRange()">' +
-    (numDays === 7 ? 'Show 30 Days' : 'Show 7 Days') + '</button>';
+    (numWeeks === 1 ? 'Show 4 Weeks' : 'This Week') + '</button>';
   html += '</div>';
 
-  if (numDays <= 7) {
+  if (numWeeks === 1) {
     html += '<div class="dp-calendar-strip">';
     html += '<div class="dp-calendar-days">';
     html += buildDPCalendarDaysHtml_(days);
@@ -1929,9 +1940,8 @@ function buildDPCalendarSection_(data) {
     html += '</div>';
   } else {
     html += '<div class="dp-calendar-strip dp-calendar-30">';
-    for (var w = 0; w < Math.ceil(numDays / 7); w++) {
-      var weekDays = days.slice(w * 7, (w + 1) * 7);
-      // Month label if first day of week is in a new month or first week
+    for (var w = 0; w < numWeeks; w++) {
+      var weekDays = days.slice(w * 5, (w + 1) * 5);
       if (w === 0 || weekDays[0].dayNum <= 7) {
         html += '<div class="dp-calendar-month-label">' + esc(weekDays[0].monthShort) + '</div>';
       }
@@ -1959,12 +1969,10 @@ function buildDPCalendarDaysHtml_(days) {
   days.forEach(function(day) {
     var hasMeeting = day.meetings.length > 0;
     var hasTasks = day.tasks.length > 0;
-    var isWeekend = (day.dayOfWeek === 0 || day.dayOfWeek === 6);
     var isExpanded = (appState.dueProcessExpandedDay === day.date);
 
     var dayClass = 'dp-cal-day';
     if (day.isToday) dayClass += ' dp-cal-today';
-    if (isWeekend) dayClass += ' dp-cal-weekend';
     if (hasMeeting) dayClass += ' dp-cal-meeting';
     if (isExpanded) dayClass += ' dp-cal-expanded';
 
@@ -2043,15 +2051,24 @@ function buildDPExpandedDayHtml_(day) {
   return html;
 }
 
+function renderDPCalendarOnly_() {
+  var section = document.getElementById('dp-calendar-section');
+  if (!section || !appState.dueProcessData) return;
+  var tmp = document.createElement('div');
+  tmp.innerHTML = buildDPCalendarSection_(appState.dueProcessData);
+  var newSection = tmp.firstChild;
+  section.parentNode.replaceChild(newSection, section);
+}
+
 function toggleDPCalendarRange() {
-  appState.dueProcessCalendarDays = (appState.dueProcessCalendarDays === 7) ? 30 : 7;
+  appState.dueProcessCalendarWeeks = (appState.dueProcessCalendarWeeks === 1) ? 4 : 1;
   appState.dueProcessExpandedDay = null;
-  if (appState.dueProcessData) renderDueProcess(appState.dueProcessData);
+  renderDPCalendarOnly_();
 }
 
 function toggleDPDay(dateStr) {
   appState.dueProcessExpandedDay = (appState.dueProcessExpandedDay === dateStr) ? null : dateStr;
-  if (appState.dueProcessData) renderDueProcess(appState.dueProcessData);
+  renderDPCalendarOnly_();
 }
 
 // ── Section 3: Progress Reports ──
