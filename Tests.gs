@@ -1230,3 +1230,112 @@ function test_saveEvaluationItems_preservesFiles() {
     if (found) sheet.deleteRow(found.rowIndex);
   }
 }
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 9. CONTACT VALIDATION — sanitizeContacts_
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+function runAllContactTests() {
+  var tests = [
+    'test_contacts_dropsNameless',
+    'test_contacts_stripsInvalidEmail',
+    'test_contacts_normalizesPhone',
+    'test_contacts_enforcesSinglePrimary',
+    'test_contacts_handlesNonArray',
+    'test_contacts_preservesValidData'
+  ];
+
+  var testFns = {
+    test_contacts_dropsNameless: test_contacts_dropsNameless,
+    test_contacts_stripsInvalidEmail: test_contacts_stripsInvalidEmail,
+    test_contacts_normalizesPhone: test_contacts_normalizesPhone,
+    test_contacts_enforcesSinglePrimary: test_contacts_enforcesSinglePrimary,
+    test_contacts_handlesNonArray: test_contacts_handlesNonArray,
+    test_contacts_preservesValidData: test_contacts_preservesValidData
+  };
+
+  var passed = 0, failed = 0, errors = [];
+  tests.forEach(function(name) {
+    try {
+      testFns[name]();
+      passed++;
+      Logger.log('PASS: ' + name);
+    } catch(e) {
+      failed++;
+      errors.push(name + ': ' + e.message);
+      Logger.log('FAIL: ' + name + ' — ' + e.message);
+    }
+  });
+
+  Logger.log('');
+  Logger.log('Contact Validation Results: ' + passed + ' passed, ' + failed + ' failed');
+  if (errors.length > 0) {
+    Logger.log('Failures:');
+    errors.forEach(function(e) { Logger.log('  ' + e); });
+  }
+  return { passed: passed, failed: failed, errors: errors };
+}
+
+function test_contacts_dropsNameless() {
+  var result = sanitizeContacts_([
+    { name: 'Alice', email: 'a@b.com', phone: '1234567890', relationship: 'Parent', primary: false },
+    { name: '', email: 'no-name@b.com', phone: '9876543210', relationship: 'Teacher', primary: false },
+    { name: '  ', email: 'spaces@b.com', phone: '', relationship: '', primary: false }
+  ]);
+  assertEqual_(result.length, 1, 'Should drop contacts with empty/whitespace names');
+  assertEqual_(result[0].name, 'Alice', 'Should keep contact with name');
+}
+
+function test_contacts_stripsInvalidEmail() {
+  var result = sanitizeContacts_([
+    { name: 'Bob', email: 'notanemail', phone: '', relationship: '', primary: false },
+    { name: 'Carol', email: 'good@school.edu', phone: '', relationship: '', primary: false },
+    { name: 'Dave', email: 'bad@noext', phone: '', relationship: '', primary: false }
+  ]);
+  assertEqual_(result[0].email, '', 'Invalid email should be stripped');
+  assertEqual_(result[1].email, 'good@school.edu', 'Valid email should be preserved');
+  assertEqual_(result[2].email, '', 'Email without valid TLD should be stripped');
+}
+
+function test_contacts_normalizesPhone() {
+  var result = sanitizeContacts_([
+    { name: 'Eve', phone: '(612) 555-1234', email: '', relationship: '', primary: false },
+    { name: 'Frank', phone: '123', email: '', relationship: '', primary: false },
+    { name: 'Grace', phone: '6125551234', email: '', relationship: '', primary: false }
+  ]);
+  assertEqual_(result[0].phone, '6125551234', 'Phone with formatting should be normalized to digits');
+  assertEqual_(result[1].phone, '', 'Short phone should be stripped');
+  assertEqual_(result[2].phone, '6125551234', 'Valid 10-digit phone preserved');
+}
+
+function test_contacts_enforcesSinglePrimary() {
+  var result = sanitizeContacts_([
+    { name: 'A', primary: true, email: '', phone: '', relationship: '' },
+    { name: 'B', primary: true, email: '', phone: '', relationship: '' },
+    { name: 'C', primary: true, email: '', phone: '', relationship: '' }
+  ]);
+  var primaryCount = result.filter(function(c) { return c.primary; }).length;
+  assertEqual_(primaryCount, 1, 'Should enforce exactly one primary contact');
+  assert_(result[0].primary, 'First primary should win');
+  assert_(!result[1].primary, 'Second primary should be demoted');
+  assert_(!result[2].primary, 'Third primary should be demoted');
+}
+
+function test_contacts_handlesNonArray() {
+  assertEqual_(sanitizeContacts_(null).length, 0, 'null should return empty array');
+  assertEqual_(sanitizeContacts_(undefined).length, 0, 'undefined should return empty array');
+  assertEqual_(sanitizeContacts_('not an array').length, 0, 'string should return empty array');
+  assertEqual_(sanitizeContacts_(42).length, 0, 'number should return empty array');
+}
+
+function test_contacts_preservesValidData() {
+  var result = sanitizeContacts_([
+    { name: 'Jane Doe', relationship: 'Mother', email: 'jane@example.com', phone: '(612) 555-0000', primary: true }
+  ]);
+  assertEqual_(result.length, 1, 'Should preserve valid contact');
+  assertEqual_(result[0].name, 'Jane Doe', 'Name preserved');
+  assertEqual_(result[0].relationship, 'Mother', 'Relationship preserved');
+  assertEqual_(result[0].email, 'jane@example.com', 'Email preserved');
+  assertEqual_(result[0].phone, '6125550000', 'Phone normalized');
+  assert_(result[0].primary, 'Primary preserved');
+}

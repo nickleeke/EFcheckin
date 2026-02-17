@@ -4547,7 +4547,7 @@ function removeClass(btn) {
 
 // ─── Contact Validation ───
 
-var CONTACT_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+var CONTACT_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/;
 
 function isValidContactEmail(val) {
   return val === '' || CONTACT_EMAIL_RE.test(val);
@@ -4812,8 +4812,18 @@ function validateFormContacts_() {
   if (!container) return true;
   var valid = true;
   container.querySelectorAll('.contact-list-item').forEach(function(item) {
+    var nameInput = item.querySelector('.contact-name');
     var emailInput = item.querySelector('.contact-email');
     var phoneInput = item.querySelector('.contact-phone');
+    // Require name if any other field is filled
+    if (nameInput) {
+      var hasOtherData = (emailInput && emailInput.value.trim()) || (phoneInput && phoneInput.value.trim());
+      if (hasOtherData && !nameInput.value.trim()) {
+        if (!validateContactField(nameInput, function() { return false; }, 'Contact name is required')) valid = false;
+      } else {
+        validateContactField(nameInput, function() { return true; }, '');
+      }
+    }
     if (emailInput && !validateContactField(emailInput, isValidContactEmail, 'Please enter a valid email address')) valid = false;
     if (phoneInput && !validateContactField(phoneInput, isValidContactPhone, 'Phone number must have 10 digits')) valid = false;
   });
@@ -4849,6 +4859,9 @@ function saveStudentForm() {
     if (name) classes.push({ name: name, period: period });
   });
 
+  // Preserve goalsJson from existing student data so save doesn't erase it
+  var existingStudent = appState.currentStudentId ? getStudentById(appState.currentStudentId) : null;
+
   var profile = {
     id: appState.currentStudentId || null,
     firstName: document.getElementById('st-firstName').value.trim(),
@@ -4861,6 +4874,7 @@ function saveStudentForm() {
     notes: document.getElementById('st-notes').value.trim(),
     caseManagerEmail: document.getElementById('st-caseManager').value,
     online: document.getElementById('st-online').checked,
+    goalsJson: existingStudent ? (existingStudent.goalsJson || '') : '',
     classes: classes,
     contacts: collectFormContacts()
   };

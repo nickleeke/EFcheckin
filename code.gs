@@ -200,6 +200,34 @@ var VALID_QUARTERS = ['Q1', 'Q2', 'Q3', 'Q4'];
 
 var IEP_MEETING_HEADERS = ['id', 'studentId', 'meetingDate', 'meetingType', 'notes', 'createdAt', 'createdBy'];
 var VALID_MEETING_TYPES = ['Annual Review', 'Amendment', 'Progress Conference', 'Other'];
+var CONTACT_EMAIL_RE_ = /^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/;
+
+/**
+ * Sanitize contacts array: require name, validate email format, normalize phone,
+ * enforce single primary. Returns cleaned array (drops entries with empty name).
+ */
+function sanitizeContacts_(contacts) {
+  if (!Array.isArray(contacts)) return [];
+  var hasPrimary = false;
+  return contacts.map(function(c) {
+    var name = String(c.name || '').trim();
+    if (!name) return null;
+    var email = String(c.email || '').trim();
+    if (email && !CONTACT_EMAIL_RE_.test(email)) email = '';
+    var phone = String(c.phone || '').replace(/\D/g, '');
+    if (phone.length !== 10) phone = '';
+    var primary = !!c.primary;
+    if (primary && hasPrimary) primary = false;
+    if (primary) hasPrimary = true;
+    return {
+      name: name,
+      relationship: String(c.relationship || '').trim(),
+      email: email,
+      phone: phone,
+      primary: primary
+    };
+  }).filter(function(c) { return c !== null; });
+}
 
 function initializeSheets() {
   const ss = getSS_();
@@ -345,7 +373,7 @@ function saveStudent(profile) {
   const sheet = ss.getSheetByName(SHEET_STUDENTS);
   const now = new Date().toISOString();
   const classesJson = JSON.stringify(profile.classes || []);
-  const contactsJson = JSON.stringify(profile.contacts || []);
+  const contactsJson = JSON.stringify(sanitizeContacts_(profile.contacts));
 
   if (profile.id) {
     var found = findRowById_(sheet, profile.id);
@@ -408,10 +436,14 @@ function saveStudentContacts(studentId, contactsJson) {
   const sheet = ss.getSheetByName(SHEET_STUDENTS);
   const now = new Date().toISOString();
 
+  var contacts = [];
+  try { contacts = JSON.parse(contactsJson || '[]'); } catch(e) { contacts = []; }
+  var sanitized = JSON.stringify(sanitizeContacts_(contacts));
+
   var found = findRowById_(sheet, studentId);
   if (found) {
     batchSetValues_(sheet, found.rowIndex, found.colIdx, {
-      contactsJson: contactsJson || '',
+      contactsJson: sanitized,
       updatedAt: now
     });
     invalidateCache_();
