@@ -778,6 +778,31 @@ function updateRowHighlight(rows) {
   }
 }
 
+function toggleFabMenu() {
+  var container = document.getElementById('fab-container');
+  if (!container) return;
+  container.classList.toggle('fab-open');
+  if (container.classList.contains('fab-open')) {
+    // Close on outside click
+    setTimeout(function() {
+      document.addEventListener('click', _closeFabOnOutsideClick);
+    }, 0);
+  } else {
+    document.removeEventListener('click', _closeFabOnOutsideClick);
+  }
+}
+function closeFabMenu() {
+  var container = document.getElementById('fab-container');
+  if (container) container.classList.remove('fab-open');
+  document.removeEventListener('click', _closeFabOnOutsideClick);
+}
+function _closeFabOnOutsideClick(e) {
+  var container = document.getElementById('fab-container');
+  if (container && !container.contains(e.target)) {
+    closeFabMenu();
+  }
+}
+
 function toggleKeyboardHelp() {
   var existing = document.querySelector('.keyboard-help-overlay');
   if (existing) { existing.remove(); return; }
@@ -1041,6 +1066,7 @@ function renderDashboard(data, opts) {
     html += '<tr class="' + rowClass + '" data-student-id="' + s.id + '" data-row-index="' + index + '"' + delayStyle + ' onclick="openSidePanel(' + origIndex + ')" title="Click for quick view">';
     html += '<td><strong>' + esc(s.firstName + ' ' + s.lastName) + '</strong>';
     if (s.online) html += ' <span class="online-badge" title="Online">Online</span>';
+    html += buildBirthdayBadge_(s.birthday);
     if (s.evalType) {
       var evalLabel = getEvalTypeLabel(s.evalType);
       html += ' <span class="chip chip-clickable eval-badge" onclick="event.stopPropagation(); openEvalFromBadge(\'' + s.id + '\')" title="View ' + evalLabel + ' checklist">' + evalLabel + '</span>';
@@ -1131,9 +1157,11 @@ function renderNeedsAttention(data) {
     return false;
   });
 
+  var birthdayStudents = data.filter(function(s) { return isBirthdayToday_(s.birthday); });
+
   section.style.display = '';
 
-  if (flagged.length === 0) {
+  if (flagged.length === 0 && birthdayStudents.length === 0) {
     content.innerHTML = '<div class="needs-attention-empty">' +
       '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>' +
       'All students on track this week</div>';
@@ -1162,7 +1190,7 @@ function renderNeedsAttention(data) {
 
     var spIdx = (appState.dashboardData || []).indexOf(s);
     html += '<div class="needs-attention-card" role="button" tabindex="0" onclick="openSidePanel(' + spIdx + ')" onkeydown="if(event.key===\'Enter\')openSidePanel(' + spIdx + ')">';
-    html += '<div class="needs-attention-name">' + esc(s.firstName + ' ' + s.lastName) + (s.online ? ' <span class="online-badge" title="Online">Online</span>' : '') + '</div>';
+    html += '<div class="needs-attention-name">' + esc(s.firstName + ' ' + s.lastName) + (s.online ? ' <span class="online-badge" title="Online">Online</span>' : '') + buildBirthdayBadge_(s.birthday) + '</div>';
     html += '<div class="needs-attention-reasons">';
     reasons.forEach(function(r) {
       html += '<span class="needs-attention-reason">' + esc(r) + '</span>';
@@ -1171,6 +1199,17 @@ function renderNeedsAttention(data) {
     html += '<button class="needs-attention-action" onclick="event.stopPropagation(); startCheckIn(\'' + s.id + '\')">Check In &#x2192;</button>';
     html += '</div>';
   });
+
+  // Birthday cards for students whose birthday is today
+  data.forEach(function(s) {
+    if (!isBirthdayToday_(s.birthday)) return;
+    html += '<div class="needs-attention-card birthday-card" role="button" tabindex="0" onclick="editStudent(\'' + s.id + '\')" onkeydown="if(event.key===\'Enter\')editStudent(\'' + s.id + '\')">';
+    html += '<div class="needs-attention-name">&#x1F382; ' + esc(s.firstName + ' ' + s.lastName) + '</div>';
+    html += '<span class="chip-gold birthday-chip">Happy Birthday!</span>';
+    html += '<button class="needs-attention-action" onclick="event.stopPropagation(); editStudent(\'' + s.id + '\')">View Profile &#x2192;</button>';
+    html += '</div>';
+  });
+
   html += '</div>';
   content.innerHTML = html;
 }
@@ -1266,7 +1305,7 @@ function renderMissingAggregate(data) {
 
   studentsWithMissing.forEach(function(s) {
     html += '<div class="missing-agg-row" role="button" tabindex="0" onclick="event.stopPropagation(); showMissingAssignments(\'' + s.id + '\')" onkeydown="if(event.key===\'Enter\'){event.stopPropagation(); showMissingAssignments(\'' + s.id + '\')}">' +
-      '<span>' + esc(s.firstName + ' ' + s.lastName) + (s.online ? ' <span class="online-badge" title="Online">Online</span>' : '') + '</span>' +
+      '<span>' + esc(s.firstName + ' ' + s.lastName) + (s.online ? ' <span class="online-badge" title="Online">Online</span>' : '') + buildBirthdayBadge_(s.birthday) + '</span>' +
       '<span class="missing-agg-count">' + s.totalMissing + '</span>' +
     '</div>';
   });
@@ -1860,7 +1899,7 @@ function buildDPProgressSection_(data) {
   var studentOrder = [];
   assignments.forEach(function(a) {
     if (!studentGoals[a.studentId]) {
-      studentGoals[a.studentId] = { name: a.studentName, caseManager: a.caseManagerEmail, online: a.online, goals: [] };
+      studentGoals[a.studentId] = { name: a.studentName, caseManager: a.caseManagerEmail, online: a.online, birthday: a.birthday, goals: [] };
       studentOrder.push(a.studentId);
     }
     studentGoals[a.studentId].goals.push(a);
@@ -1879,7 +1918,7 @@ function buildDPProgressSection_(data) {
 
     // Header row: student name + status
     html += '<div class="dp-progress-card-header">';
-    html += '<span class="dp-progress-card-name">' + esc(info.name) + (info.online ? ' <span class="online-badge" title="Online">Online</span>' : '') + '</span>';
+    html += '<span class="dp-progress-card-name">' + esc(info.name) + (info.online ? ' <span class="online-badge" title="Online">Online</span>' : '') + buildBirthdayBadge_(info.birthday) + '</span>';
     if (comp.allDone) {
       html += '<span class="chip-green">Complete &#x2714;&#xFE0E;</span>';
     } else {
@@ -1956,7 +1995,7 @@ function renderRecentStudents() {
     var cmName = cmEmail ? getCaseManagerName(cmEmail) : '--';
 
     html += '<tr>';
-    html += '<td><strong>' + esc(s.firstName + ' ' + s.lastName) + '</strong>' + (s.online ? ' <span class="online-badge" title="Online">Online</span>' : '') + '</td>';
+    html += '<td><strong>' + esc(s.firstName + ' ' + s.lastName) + '</strong>' + (s.online ? ' <span class="online-badge" title="Online">Online</span>' : '') + buildBirthdayBadge_(s.birthday) + '</td>';
     html += '<td>' + esc(cmName) + '</td>';
     html += '<td>' + esc(s.grade || '--') + '</td>';
     html += '<td><div class="action-btns">';
@@ -2113,7 +2152,7 @@ function openSidePanel(index) {
   trackRecentStudent(s.id);
 
   var sidePanelTitle = document.getElementById('side-panel-title');
-  sidePanelTitle.innerHTML = esc(s.firstName + ' ' + s.lastName) + (s.online ? ' <span class="online-badge" title="Online">Online</span>' : '');
+  sidePanelTitle.innerHTML = esc(s.firstName + ' ' + s.lastName) + (s.online ? ' <span class="online-badge" title="Online">Online</span>' : '') + buildBirthdayBadge_(s.birthday);
 
   var content = '';
 
@@ -2373,7 +2412,7 @@ function startCheckIn(studentId, existingCheckIn) {
 
 function renderCheckInForm(student, checkIns, existingCheckIn) {
   document.getElementById('checkin-view-breadcrumb').textContent = 'Weekly Check-In';
-  document.getElementById('checkin-view-title').innerHTML = esc(student.firstName + ' ' + student.lastName) + (student.online ? ' <span class="online-badge" title="Online">Online</span>' : '');
+  document.getElementById('checkin-view-title').innerHTML = esc(student.firstName + ' ' + student.lastName) + (student.online ? ' <span class="online-badge" title="Online">Online</span>' : '') + buildBirthdayBadge_(student.birthday);
 
   var container = document.getElementById('checkin-form-container');
   var html = '';
@@ -3147,7 +3186,7 @@ function showMissingAssignments(studentId) {
   document.getElementById('missing-view-breadcrumb').innerHTML =
     '<button class="breadcrumb-link" onclick="editStudent(appState.missingViewStudentId)">Student Profile</button> <svg class="breadcrumb-chevron" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg> Missing Assignments';
   document.getElementById('missing-view-title').innerHTML =
-    esc(student.firstName + ' ' + student.lastName) + (student.online ? ' <span class="online-badge" title="Online">Online</span>' : '');
+    esc(student.firstName + ' ' + student.lastName) + (student.online ? ' <span class="online-badge" title="Online">Online</span>' : '') + buildBirthdayBadge_(student.birthday);
 
   renderMissingView(student);
   showView('missing-view');
@@ -3644,7 +3683,7 @@ function showStudentProfile(studentId) {
 
       try {
         document.getElementById('student-view-title').innerHTML =
-          esc(student.firstName + ' ' + student.lastName) + (student.online ? ' <span class="online-badge" title="Online">Online</span>' : '');
+          esc(student.firstName + ' ' + student.lastName) + (student.online ? ' <span class="online-badge" title="Online">Online</span>' : '') + buildBirthdayBadge_(student.birthday);
         renderStudentProfileDashboard(student);
         renderStudentMenu(studentId);
       } catch(e) { showToast('Render error: ' + e.message); return; }
@@ -4755,7 +4794,12 @@ function renderStudentForm(student) {
       '<div class="form-group"><label>Last Name</label>' +
         '<input type="text" id="st-lastName" value="' + esc(student.lastName || '') + '" placeholder="Last name"></div>' +
     '</div>' +
-    '<div class="form-group"><label>Grade Level</label>' + gradeHtml + '</div>';
+    '<div class="form-row">' +
+      '<div class="form-group"><label>Grade Level</label>' + gradeHtml + '</div>' +
+      '<div class="form-group"><label>Birthday</label>' +
+        '<input type="date" id="st-birthday" value="' + esc(student.birthday || '') + '">' +
+      '</div>' +
+    '</div>';
 
   // Case Manager dropdown
   var cmOptions = '<select id="st-caseManager">';
@@ -5256,6 +5300,7 @@ function saveStudentForm() {
     notes: document.getElementById('st-notes').value.trim(),
     caseManagerEmail: document.getElementById('st-caseManager').value,
     online: document.getElementById('st-online').checked,
+    birthday: document.getElementById('st-birthday').value,
     goalsJson: existingStudent ? (existingStudent.goalsJson || '') : '',
     classes: classes,
     contacts: collectFormContacts()
@@ -5283,6 +5328,7 @@ function saveStudentForm() {
         s.classes = profile.classes;
         s.caseManagerEmail = profile.caseManagerEmail;
         s.online = profile.online;
+        s.birthday = profile.birthday;
         s.contacts = profile.contacts;
         s.contactsJson = JSON.stringify(profile.contacts);
       }
@@ -5296,6 +5342,7 @@ function saveStudentForm() {
       classes: profile.classes,
       caseManagerEmail: profile.caseManagerEmail,
       online: profile.online,
+      birthday: profile.birthday,
       contacts: profile.contacts,
       contactsJson: JSON.stringify(profile.contacts),
       totalCheckIns: 0, latestWeek: null, latestMicroGoal: null,
@@ -6361,6 +6408,32 @@ function getStudentById(studentId) {
   return appState.dashboardData.find(function(s) { return s.id === studentId; });
 }
 
+function isBirthdayNear_(birthday) {
+  if (!birthday) return false;
+  var today = new Date();
+  today.setHours(0, 0, 0, 0);
+  var parts = birthday.split('-');
+  var bd = new Date(today.getFullYear(), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+  if (bd < today) bd.setFullYear(bd.getFullYear() + 1);
+  var diff = Math.round((bd - today) / 86400000);
+  return diff <= 7;
+}
+
+function isBirthdayToday_(birthday) {
+  if (!birthday) return false;
+  var today = new Date();
+  var parts = birthday.split('-');
+  return (today.getMonth() + 1) === parseInt(parts[1], 10) &&
+         today.getDate() === parseInt(parts[2], 10);
+}
+
+function buildBirthdayBadge_(birthday) {
+  if (!isBirthdayNear_(birthday)) return '';
+  return ' <span class="birthday-badge" title="Birthday ' +
+    (isBirthdayToday_(birthday) ? 'today!' : 'coming up!') +
+    '">&#x1F382;</span>';
+}
+
 function recalcTotalMissing(student) {
   student.totalMissing = (student.academicData || []).reduce(function(sum, c) {
     return sum + (Number(c.missing) || 0);
@@ -6664,6 +6737,7 @@ function renderMyCaseload() {
     html += '<tr onclick="openSidePanel(' + origIndex + ')" title="Click for quick view">';
     html += '<td><strong>' + esc(s.firstName + ' ' + s.lastName) + '</strong>';
     if (s.online) html += ' <span class="online-badge" title="Online">Online</span>';
+    html += buildBirthdayBadge_(s.birthday);
     if (s.evalType) {
       var evalLabel = getEvalTypeLabel(s.evalType);
       html += ' <span class="chip chip-clickable eval-badge" onclick="event.stopPropagation(); openEvalFromBadge(\'' + s.id + '\')" title="View ' + evalLabel + ' checklist">' + evalLabel + '</span>';
