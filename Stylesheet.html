@@ -783,6 +783,174 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   color: var(--md-on-surface);
 }
 
+/* ─── Header Search (expandable typeahead) ─── */
+.header-search-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.header-search-field {
+  display: flex;
+  align-items: center;
+  max-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-width var(--md-duration-medium2) var(--md-easing-emphasized-decelerate),
+              opacity var(--md-duration-short4) var(--md-easing-standard);
+}
+.header-search-container.header-search-open .header-search-field {
+  max-width: 280px;
+  opacity: 1;
+}
+.header-search-input {
+  width: 240px;
+  height: 40px;
+  padding: 0 36px 0 12px;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-full);
+  font-family: 'Roboto', sans-serif;
+  font-size: 14px;
+  line-height: 20px;
+  letter-spacing: 0.25px;
+  background: var(--md-surface-container-low);
+  color: var(--md-on-surface);
+  transition: border-color var(--md-duration-short4) var(--md-easing-standard),
+              background var(--md-duration-short4) var(--md-easing-standard);
+}
+.header-search-input::placeholder { color: var(--md-on-surface-variant); }
+.header-search-input:focus {
+  outline: none;
+  border-color: var(--md-primary);
+  background: var(--md-surface);
+}
+.header-search-close { margin-left: -36px; z-index: 1; }
+.header-search-container.header-search-open #header-search-btn { display: none; }
+
+/* Header search results dropdown */
+.header-search-results {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  min-width: 280px;
+  max-height: 0;
+  overflow: hidden;
+  background: var(--md-surface-container-lowest);
+  border-radius: var(--md-shape-md);
+  z-index: 100;
+  transition: max-height var(--md-duration-medium2) var(--md-easing-standard);
+}
+.header-search-results:not(:empty) {
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--md-outline-variant);
+  box-shadow: var(--md-elevation-2);
+}
+.header-search-result-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: 'Roboto', sans-serif;
+  font-size: 14px;
+  color: var(--md-on-surface);
+  text-align: left;
+  transition: background var(--md-duration-short3) var(--md-easing-standard);
+}
+.header-search-result-item:hover,
+.header-search-result-highlighted {
+  background: var(--md-surface-container);
+}
+.header-search-result-item:focus-visible {
+  outline: 2px solid var(--md-primary);
+  outline-offset: -2px;
+}
+.header-search-result-name { flex: 1; }
+.header-search-result-name strong { font-weight: 700; color: var(--md-primary); }
+.header-search-result-grade {
+  font-size: 12px;
+  color: var(--md-on-surface-variant);
+  flex-shrink: 0;
+}
+.header-search-empty {
+  padding: 12px 16px;
+  font-size: 13px;
+  color: var(--md-on-surface-variant);
+}
+
+/* ─── Header Filter Dropdown ─── */
+.header-filter-container { position: relative; }
+.header-filter-dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--md-shape-full);
+  background: var(--md-primary);
+  pointer-events: none;
+}
+.header-filter-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  min-width: 180px;
+  background: var(--md-surface-container-lowest);
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-md);
+  box-shadow: var(--md-elevation-2);
+  z-index: 100;
+  opacity: 0;
+  transform: translateY(-8px) scale(0.95);
+  pointer-events: none;
+  transition: opacity var(--md-duration-medium1) var(--md-easing-emphasized-decelerate),
+              transform var(--md-duration-medium1) var(--md-easing-emphasized-decelerate);
+}
+.header-filter-container.header-filter-open .header-filter-dropdown {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+.header-filter-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 16px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: 'Roboto', sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--md-on-surface);
+  text-align: left;
+  transition: background var(--md-duration-short3) var(--md-easing-standard);
+}
+.header-filter-option:first-child { border-radius: var(--md-shape-md) var(--md-shape-md) 0 0; }
+.header-filter-option:last-child { border-radius: 0 0 var(--md-shape-md) var(--md-shape-md); }
+.header-filter-option:hover { background: var(--md-surface-container); }
+.header-filter-option:focus-visible {
+  outline: 2px solid var(--md-primary);
+  outline-offset: -2px;
+}
+.header-filter-check {
+  color: transparent;
+  flex-shrink: 0;
+  transition: color var(--md-duration-short3) var(--md-easing-standard);
+}
+.header-filter-option-active .header-filter-check { color: var(--md-primary); }
+.header-filter-option-active {
+  font-weight: 500;
+  color: var(--md-primary);
+}
+
 /* ─── View Header Stack (Breadcrumb + Title hierarchy) ─── */
 .view-header-stack {
   margin-bottom: 20px;
@@ -2751,7 +2919,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 }
 
 /* ─── Button Ripple Effect ─── */
-.btn, .btn-icon, .btn-ghost, .btn-outlined, .action-btn, .rating-btn, .nav-drawer-item, .filter-chip, .goal-met-btn, .eval-filter-chip, .eval-nav-btn, .dp-cal-day, .fab-btn, .fab-menu-item {
+.btn, .btn-icon, .btn-ghost, .btn-outlined, .action-btn, .rating-btn, .nav-drawer-item, .goal-met-btn, .eval-filter-chip, .eval-nav-btn, .dp-cal-day, .fab-btn, .fab-menu-item, .header-search-result-item, .header-filter-option {
   position: relative;
   overflow: hidden;
 }
@@ -5919,29 +6087,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   gap: 8px;
 }
 
-/* ─── Check-In Progress Counter ─── */
-.checkin-progress {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--md-on-surface-variant);
-  white-space: nowrap;
-}
-.checkin-progress-bar {
-  width: 80px;
-  height: 4px;
-  background: var(--md-surface-container-high);
-  border-radius: var(--md-shape-full);
-  overflow: hidden;
-}
-.checkin-progress-fill {
-  height: 100%;
-  background: var(--md-primary);
-  border-radius: var(--md-shape-full);
-  transition: width var(--md-duration-medium2) var(--md-easing-standard);
-}
-
 /* ─── EF Sparkline ─── */
 .ef-sparkline-cell {
   display: inline-flex;
@@ -5951,40 +6096,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .ef-sparkline {
   display: inline-block;
   vertical-align: middle;
-}
-
-/* ─── Filter Chips ─── */
-.filter-chips {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-.filter-chip {
-  height: 32px;
-  padding: 0 16px;
-  border-radius: var(--md-shape-full);
-  border: 1px solid var(--md-outline);
-  background: transparent;
-  color: var(--md-on-surface);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background var(--md-duration-short3) var(--md-easing-standard),
-              border-color var(--md-duration-short3) var(--md-easing-standard),
-              color var(--md-duration-short3) var(--md-easing-standard);
-  white-space: nowrap;
-}
-.filter-chip:hover {
-  background: var(--md-surface-container-low);
-}
-.filter-chip-active {
-  background: var(--md-secondary-container);
-  color: var(--md-on-secondary-container);
-  border-color: transparent;
-}
-.filter-chip-active:hover {
-  background: var(--md-secondary-container);
-  filter: brightness(0.95);
 }
 
 /* ─── Row Highlight (keyboard nav) ─── */
@@ -6279,15 +6390,11 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 
 /* ─── Dashboard UX Responsive (≤600px) ─── */
 @media (max-width: 600px) {
-  .checkin-progress,
   .fab-container { display: none !important; }
   .ef-sparkline { display: none; }
-  .filter-chips { gap: 4px; }
-  .filter-chip {
-    height: 28px;
-    padding: 0 10px;
-    font-size: 12px;
-  }
+  .header-search-container.header-search-open .header-search-field { max-width: 180px; }
+  .header-search-input { width: 140px; }
+  .header-search-results { min-width: 220px; }
   .needs-attention-cards { gap: 8px; }
   .needs-attention-card { width: 160px; padding: 10px; }
   /* Due Process responsive */

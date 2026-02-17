@@ -53,6 +53,8 @@ var _evalAutosaveDirty = false;
 var _evalItemFilter = 'all'; // 'all' | 'remaining' | 'overdue' | 'completed'
 var _expandedEvalItemFiles = {}; // { itemId: true } — tracks expanded file lists per task
 var _searchDebounceTimer = null;
+var _headerSearchOpen = false;
+var _headerSearchHighlight = -1;
 var _evalFocusedIndex = -1;
 var _progressAutosaveTimer = null;
 var _progressAutosaveInFlight = false;
@@ -373,23 +375,71 @@ function applyFilter_(data) {
 
 function setCaseloadFilter(filter) {
   appState.caseloadFilter = filter;
-  var chipAll = document.getElementById('filter-chip-all');
-  var chipMy = document.getElementById('filter-chip-my');
-  if (chipAll) {
-    chipAll.classList.toggle('filter-chip-active', filter === 'all');
-    chipAll.setAttribute('aria-pressed', filter === 'all' ? 'true' : 'false');
-  }
-  if (chipMy) {
-    chipMy.classList.toggle('filter-chip-active', filter === 'my');
-    chipMy.setAttribute('aria-pressed', filter === 'my' ? 'true' : 'false');
-  }
+  updateFilterIndicator(filter);
   if (appState.dashboardData) {
     var filtered = applyFilter_(appState.dashboardData);
-    renderDashboard(filtered);
+    // Re-render whichever panel is currently active
+    var studentsPanel = document.getElementById('tab-panel-students');
+    if (studentsPanel && studentsPanel.classList.contains('active')) {
+      renderDashboard(filtered);
+    }
     renderNeedsAttention(filtered);
-    renderCheckInProgress(filtered);
     renderMissingAggregate(filtered);
     renderRecentStudents();
+  }
+}
+
+function updateFilterIndicator(filter) {
+  var optAll = document.getElementById('filter-opt-all');
+  var optMy = document.getElementById('filter-opt-my');
+  if (optAll) {
+    optAll.classList.toggle('header-filter-option-active', filter === 'all');
+    optAll.setAttribute('aria-checked', filter === 'all' ? 'true' : 'false');
+  }
+  if (optMy) {
+    optMy.classList.toggle('header-filter-option-active', filter === 'my');
+    optMy.setAttribute('aria-checked', filter === 'my' ? 'true' : 'false');
+  }
+  var dot = document.getElementById('header-filter-dot');
+  if (dot) dot.style.display = (filter === 'my') ? '' : 'none';
+}
+
+function showStudentList(filter) {
+  appState.caseloadFilter = filter;
+  updateFilterIndicator(filter);
+  closeFilterDropdown();
+  switchDashboardTab(filter === 'my' ? 'mycaseload' : 'caseload');
+}
+
+function toggleFilterDropdown() {
+  var container = document.getElementById('header-filter-container');
+  if (!container) return;
+  var isOpen = container.classList.contains('header-filter-open');
+  closeHeaderSearch();
+  if (isOpen) {
+    closeFilterDropdown();
+  } else {
+    container.classList.add('header-filter-open');
+    var btn = document.getElementById('header-filter-btn');
+    if (btn) btn.setAttribute('aria-expanded', 'true');
+    setTimeout(function() {
+      document.addEventListener('click', _closeFilterOnOutsideClick);
+    }, 0);
+  }
+}
+
+function closeFilterDropdown() {
+  var container = document.getElementById('header-filter-container');
+  if (container) container.classList.remove('header-filter-open');
+  var btn = document.getElementById('header-filter-btn');
+  if (btn) btn.setAttribute('aria-expanded', 'false');
+  document.removeEventListener('click', _closeFilterOnOutsideClick);
+}
+
+function _closeFilterOnOutsideClick(e) {
+  var container = document.getElementById('header-filter-container');
+  if (container && !container.contains(e.target)) {
+    closeFilterDropdown();
   }
 }
 
@@ -473,8 +523,8 @@ function enterApp() {
       if (isCM) {
         var myCaseloadItem = document.getElementById('drawer-mycaseload');
         if (myCaseloadItem) myCaseloadItem.style.display = '';
-        var filterChips = document.getElementById('caseload-filter-chips');
-        if (filterChips) filterChips.style.display = '';
+        var filterContainer = document.getElementById('header-filter-container');
+        if (filterContainer) filterContainer.style.display = '';
         appState.caseloadFilter = 'my';
         setCaseloadFilter('my');
       }
@@ -878,9 +928,7 @@ function loadDashboard() {
   // local optimistic state to avoid overwriting unsaved changes.
   if (Object.keys(_persistTimers).length > 0 || _persistInFlight > 0) {
     var cached = applyFilter_(appState.dashboardData);
-    renderDashboard(cached);
     renderNeedsAttention(cached);
-    renderCheckInProgress(cached);
     renderMissingAggregate(cached);
     renderRecentStudents();
     if (appState.evalSummary) renderEvalSummary(appState.evalSummary);
@@ -893,57 +941,82 @@ function loadDashboard() {
       try {
         appState.dashboardData = data || [];
         var filtered = applyFilter_(data);
-        renderDashboard(filtered);
         renderNeedsAttention(filtered);
-        renderCheckInProgress(filtered);
         renderMissingAggregate(filtered);
         renderRecentStudents();
       } catch(e) {
-        document.getElementById('dashboard-table-container').innerHTML =
-          renderErrorState(e.message || String(e));
+        showToast('Dashboard error: ' + (e.message || String(e)));
       }
     })
     .withFailureHandler(function(err) {
-      document.getElementById('dashboard-table-container').innerHTML =
-        renderErrorState(err && err.message ? err.message : String(err));
+      showToast('Error loading dashboard: ' + (err && err.message ? err.message : String(err)));
     })
     .getDashboardData();
+}
+
+function loadStudentList() {
+  if (!appState.dashboardData || appState.dashboardData.length === 0) {
+    // Data not loaded yet — load it first, then render
+    showDashboardSkeleton();
+    google.script.run
+      .withSuccessHandler(function(data) {
+        appState.dashboardData = data || [];
+        var filtered = applyFilter_(data);
+        renderDashboard(filtered);
+      })
+      .withFailureHandler(function(err) {
+        var container = document.getElementById('dashboard-table-container');
+        if (container) container.innerHTML = renderErrorState(err && err.message ? err.message : String(err));
+      })
+      .getDashboardData();
+  } else {
+    var filtered = applyFilter_(appState.dashboardData);
+    renderDashboard(filtered);
+  }
 }
 
 function switchDashboardTab(tabName) {
   // Ensure dashboard view is visible (handles clicks from child pages)
   showView('dashboard-view');
+  closeHeaderSearch();
+  closeFilterDropdown();
   // Deactivate all drawer child items and panels
   document.querySelectorAll('.nav-drawer-child').forEach(function(t) { t.classList.remove('active'); });
   document.querySelectorAll('.nav-drawer-items > .nav-drawer-item').forEach(function(t) { t.classList.remove('active'); });
   document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
-  // Activate selected (map 'dashboard' to 'caseload' panel — same content)
-  var panelName = (tabName === 'dashboard') ? 'caseload' : tabName;
+  // Map tab names to panels and drawer items
+  var isAdmin = (tabName === 'admin');
+  var isStudentList = (tabName === 'caseload' || tabName === 'mycaseload');
+  var panelName = isStudentList ? 'students' : (tabName === 'dashboard' ? 'caseload' : tabName);
   var item = document.getElementById('drawer-' + tabName);
   var panel = document.getElementById('tab-panel-' + panelName);
   if (item) item.classList.add('active');
   if (panel) panel.classList.add('active');
-  // Show/hide refresh button and add student button (not relevant for admin)
-  var isAdmin = (tabName === 'admin');
+  // For dashboard tab, also highlight the dashboard drawer item
+  if (tabName === 'dashboard') {
+    var dashItem = document.getElementById('drawer-dashboard');
+    if (dashItem) dashItem.classList.add('active');
+  }
+  // Show/hide header buttons
   var refreshBtn = document.getElementById('dashboard-refresh-btn');
   if (refreshBtn) refreshBtn.style.display = isAdmin ? 'none' : '';
   var addStudentBtn = document.getElementById('add-student-btn');
-  if (addStudentBtn) addStudentBtn.style.display = isAdmin ? 'none' : '';
-  var filterChips = document.getElementById('caseload-filter-chips');
-  if (filterChips) filterChips.style.display = isAdmin ? 'none' : '';
-  var checkinProgress = document.getElementById('checkin-progress');
-  if (checkinProgress) checkinProgress.style.display = isAdmin ? 'none' : '';
+  if (addStudentBtn) addStudentBtn.style.display = (isAdmin || tabName === 'dashboard') ? 'none' : '';
   // Close mobile submenu and drawer
   var openGroup = document.querySelector('.nav-drawer-group.submenu-open');
   if (openGroup) openGroup.classList.remove('submenu-open');
   closeNavDrawerIfMobile_();
   // Render tab content
-  if (tabName === 'caseload' || tabName === 'dashboard') {
+  if (tabName === 'dashboard') {
     loadDashboard();
+  } else if (tabName === 'caseload') {
+    appState.caseloadFilter = 'all';
+    updateFilterIndicator('all');
+    loadStudentList();
   } else if (tabName === 'mycaseload') {
-    setCaseloadFilter('my');
-    switchDashboardTab('caseload');
-    return;
+    appState.caseloadFilter = 'my';
+    updateFilterIndicator('my');
+    loadStudentList();
   } else if (tabName === 'admin') {
     loadAdminView();
   }
@@ -959,9 +1032,10 @@ function toggleSort(field) {
   renderDashboard(applyFilter_(appState.dashboardData));
 }
 
-function filterDashboardSearch(query) {
+// ─── Student List Search (in-table filter) ───
+function filterStudentListSearch(query) {
   if (_searchDebounceTimer) clearTimeout(_searchDebounceTimer);
-  var clearBtn = document.getElementById('dashboard-search-clear');
+  var clearBtn = document.getElementById('student-list-search-clear');
   if (clearBtn) clearBtn.style.display = query ? '' : 'none';
   _searchDebounceTimer = setTimeout(function() {
     appState.searchQuery = query.trim().toLowerCase();
@@ -969,13 +1043,149 @@ function filterDashboardSearch(query) {
   }, 200);
 }
 
-function clearDashboardSearch() {
-  var input = document.getElementById('dashboard-search-input');
+function clearStudentListSearch() {
+  var input = document.getElementById('student-list-search-input');
   if (input) input.value = '';
   appState.searchQuery = '';
-  var clearBtn = document.getElementById('dashboard-search-clear');
+  var clearBtn = document.getElementById('student-list-search-clear');
   if (clearBtn) clearBtn.style.display = 'none';
   renderDashboard(applyFilter_(appState.dashboardData), { skipAnimation: true });
+}
+
+// ─── Header Search (expandable typeahead) ───
+function toggleHeaderSearch() {
+  if (_headerSearchOpen) {
+    closeHeaderSearch();
+  } else {
+    openHeaderSearch();
+  }
+}
+
+function openHeaderSearch() {
+  var container = document.getElementById('header-search-container');
+  var input = document.getElementById('header-search-input');
+  if (!container) return;
+  closeFilterDropdown();
+  _headerSearchOpen = true;
+  _headerSearchHighlight = -1;
+  container.classList.add('header-search-open');
+  if (input) { input.value = ''; input.focus(); }
+}
+
+function closeHeaderSearch() {
+  var container = document.getElementById('header-search-container');
+  var input = document.getElementById('header-search-input');
+  var results = document.getElementById('header-search-results');
+  if (!container) return;
+  _headerSearchOpen = false;
+  _headerSearchHighlight = -1;
+  container.classList.remove('header-search-open');
+  if (input) input.value = '';
+  if (results) results.innerHTML = '';
+  document.removeEventListener('click', _closeHeaderSearchOnOutsideClick);
+}
+
+function _closeHeaderSearchOnOutsideClick(e) {
+  var container = document.getElementById('header-search-container');
+  if (container && !container.contains(e.target)) {
+    closeHeaderSearch();
+  }
+}
+
+function handleHeaderSearchInput(query) {
+  if (_searchDebounceTimer) clearTimeout(_searchDebounceTimer);
+  _headerSearchHighlight = -1;
+  _searchDebounceTimer = setTimeout(function() {
+    renderHeaderSearchResults(query.trim().toLowerCase());
+  }, 150);
+}
+
+function renderHeaderSearchResults(query) {
+  var results = document.getElementById('header-search-results');
+  if (!results) return;
+  if (!query) { results.innerHTML = ''; return; }
+  var data = appState.dashboardData || [];
+  var startsWithMatches = [];
+  var containsMatches = [];
+  for (var i = 0; i < data.length; i++) {
+    var s = data[i];
+    var first = (s.firstName || '').toLowerCase();
+    var last = (s.lastName || '').toLowerCase();
+    var full = first + ' ' + last;
+    if (first.indexOf(query) === 0 || last.indexOf(query) === 0) {
+      startsWithMatches.push(s);
+    } else if (full.indexOf(query) !== -1) {
+      containsMatches.push(s);
+    }
+  }
+  var matches = startsWithMatches.concat(containsMatches).slice(0, 5);
+  if (matches.length === 0) {
+    results.innerHTML = '<div class="header-search-empty">No matches</div>';
+    return;
+  }
+  var html = '';
+  for (var j = 0; j < matches.length; j++) {
+    var m = matches[j];
+    var boldedName = boldMatchedLetters(m.firstName + ' ' + m.lastName, query);
+    html += '<button class="header-search-result-item" data-student-id="' + esc(m.id) + '" ' +
+      'onclick="selectHeaderSearchResult(\'' + esc(m.id) + '\')" role="option">' +
+      '<span class="header-search-result-name">' + boldedName + '</span>' +
+      (m.grade ? '<span class="header-search-result-grade">Grade ' + esc(m.grade) + '</span>' : '') +
+    '</button>';
+  }
+  results.innerHTML = html;
+  // Start listening for outside clicks
+  setTimeout(function() {
+    document.addEventListener('click', _closeHeaderSearchOnOutsideClick);
+  }, 0);
+}
+
+function boldMatchedLetters(name, query) {
+  var escaped = esc(name);
+  var lowerEscaped = escaped.toLowerCase();
+  var lowerQuery = query.toLowerCase();
+  var idx = lowerEscaped.indexOf(lowerQuery);
+  if (idx === -1) return escaped;
+  var before = escaped.substring(0, idx);
+  var match = escaped.substring(idx, idx + query.length);
+  var after = escaped.substring(idx + query.length);
+  return before + '<strong>' + match + '</strong>' + after;
+}
+
+function selectHeaderSearchResult(studentId) {
+  closeHeaderSearch();
+  showStudentProfile(studentId);
+}
+
+function handleHeaderSearchKeydown(e) {
+  var results = document.getElementById('header-search-results');
+  if (!results) return;
+  var items = results.querySelectorAll('.header-search-result-item');
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    _headerSearchHighlight = Math.min(_headerSearchHighlight + 1, items.length - 1);
+    updateHeaderSearchHighlight(items);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    _headerSearchHighlight = Math.max(_headerSearchHighlight - 1, 0);
+    updateHeaderSearchHighlight(items);
+  } else if (e.key === 'Enter' && _headerSearchHighlight >= 0 && items[_headerSearchHighlight]) {
+    e.preventDefault();
+    var sid = items[_headerSearchHighlight].dataset.studentId;
+    if (sid) selectHeaderSearchResult(sid);
+  } else if (e.key === 'Escape') {
+    e.preventDefault();
+    closeHeaderSearch();
+  }
+}
+
+function updateHeaderSearchHighlight(items) {
+  for (var i = 0; i < items.length; i++) {
+    items[i].classList.toggle('header-search-result-highlighted', i === _headerSearchHighlight);
+  }
+  if (_headerSearchHighlight >= 0 && items[_headerSearchHighlight]) {
+    items[_headerSearchHighlight].scrollIntoView({ block: 'nearest' });
+  }
 }
 
 function sortIcon(field) {
@@ -997,7 +1207,7 @@ function renderDashboard(data, opts) {
   var skipAnimation = opts && opts.skipAnimation;
   appState.highlightedRowIndex = -1;
   var container = document.getElementById('dashboard-table-container');
-  var searchBar = document.getElementById('dashboard-search');
+  var searchBar = document.getElementById('student-list-search');
 
   if (!data || data.length === 0) {
     if (searchBar) searchBar.style.display = 'none';
@@ -1217,50 +1427,6 @@ function renderNeedsAttention(data) {
 
   html += '</div>';
   content.innerHTML = html;
-}
-
-// ─── Check-In Progress Counter (Feature 3) ───
-
-function renderCheckInProgress(data) {
-  var wrapper = document.getElementById('checkin-progress');
-  var textEl = document.getElementById('checkin-progress-text');
-  var fillEl = document.getElementById('checkin-progress-fill');
-  if (!wrapper || !textEl || !fillEl) return;
-
-  if (!data || data.length === 0) {
-    wrapper.style.display = 'none';
-    return;
-  }
-
-  // Calculate Monday of current week
-  var now = new Date();
-  var day = now.getDay();
-  var monday = new Date(now);
-  monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
-  monday.setHours(0, 0, 0, 0);
-  var mondayStr = monday.getFullYear() + '-' +
-    String(monday.getMonth() + 1).padStart(2, '0') + '-' +
-    String(monday.getDate()).padStart(2, '0');
-
-  var checkedIn = 0;
-  data.forEach(function(s) {
-    if (s.latestWeek && s.latestWeek >= mondayStr) checkedIn++;
-  });
-
-  var total = data.length;
-  var pct = total > 0 ? Math.round((checkedIn / total) * 100) : 0;
-
-  textEl.textContent = checkedIn + ' of ' + total + ' checked in';
-  fillEl.style.width = pct + '%';
-  var barEl = fillEl.parentElement;
-  if (barEl) {
-    barEl.setAttribute('role', 'progressbar');
-    barEl.setAttribute('aria-valuenow', pct);
-    barEl.setAttribute('aria-valuemin', '0');
-    barEl.setAttribute('aria-valuemax', '100');
-    barEl.setAttribute('aria-label', checkedIn + ' of ' + total + ' students checked in this week');
-  }
-  wrapper.style.display = '';
 }
 
 // ─── Missing Assignments Aggregate (Feature 7) ───
@@ -6097,9 +6263,11 @@ function refreshDashboard() {
       try {
         appState.dashboardData = data || [];
         var filtered = applyFilter_(data);
-        renderDashboard(filtered);
+        var studentsPanel = document.getElementById('tab-panel-students');
+        if (studentsPanel && studentsPanel.classList.contains('active')) {
+          renderDashboard(filtered);
+        }
         renderNeedsAttention(filtered);
-        renderCheckInProgress(filtered);
         renderMissingAggregate(filtered);
         renderRecentStudents();
         showToast('Dashboard refreshed');
@@ -8318,7 +8486,7 @@ function createRipple(target, clientX, clientY) {
   ripple.addEventListener('animationend', function() { ripple.remove(); });
 }
 document.addEventListener('click', function(e) {
-  var btn = e.target.closest('.btn, .btn-icon, .btn-ghost, .action-btn, .rating-btn, .nav-drawer-item');
+  var btn = e.target.closest('.btn, .btn-icon, .btn-ghost, .action-btn, .rating-btn, .nav-drawer-item, .header-search-result-item, .header-filter-option');
   if (btn) createRipple(btn, e.clientX, e.clientY);
 });
 </script>
