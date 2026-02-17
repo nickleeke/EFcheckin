@@ -463,6 +463,8 @@ function enterApp() {
   var navDrawer = document.getElementById('nav-drawer');
   if (navbar) navbar.style.display = '';
   if (navDrawer) navDrawer.style.display = '';
+  var actionBar = document.getElementById('persistent-action-bar');
+  if (actionBar) actionBar.style.display = '';
   // Load global case managers list
   google.script.run
     .withSuccessHandler(function(cms) {
@@ -833,6 +835,7 @@ var VIEW_ORDER = {
 var _currentViewId = 'auth-loading';
 
 function showView(viewId) {
+  closeHeaderSearch();
   var oldId = _currentViewId;
   _currentViewId = viewId;
 
@@ -963,11 +966,6 @@ function switchDashboardTab(tabName) {
     var studentsParent = document.querySelector('#nav-group-students .nav-drawer-parent');
     if (studentsParent) studentsParent.classList.add('active');
   }
-  // Show/hide header buttons
-  var refreshBtn = document.getElementById('dashboard-refresh-btn');
-  if (refreshBtn) refreshBtn.style.display = isAdmin ? 'none' : '';
-  var addStudentBtn = document.getElementById('add-student-btn');
-  if (addStudentBtn) addStudentBtn.style.display = (isAdmin || tabName === 'dashboard') ? 'none' : '';
   // Close mobile submenu and drawer
   var openGroup = document.querySelector('.nav-drawer-group.submenu-open');
   if (openGroup) openGroup.classList.remove('submenu-open');
@@ -6269,36 +6267,6 @@ function doLeaveTeam() {
       showToast('Error: ' + (err && err.message ? err.message : String(err)));
     })
     .leaveCoTeacherTeam();
-}
-
-// ─── Dashboard Refresh (for co-teacher data freshness) ───
-function refreshDashboard() {
-  if (Object.keys(_persistTimers).length > 0 || _persistInFlight > 0) {
-    renderDashboard(applyFilter_(appState.dashboardData));
-    showToast('Saving changes\u2026 refresh will complete shortly.');
-    return;
-  }
-  showDashboardSkeleton();
-  loadEvalSummary();
-  google.script.run
-    .withSuccessHandler(function(data) {
-      try {
-        appState.dashboardData = data || [];
-        var filtered = applyFilter_(data);
-        var studentsPanel = document.getElementById('tab-panel-students');
-        if (studentsPanel && studentsPanel.classList.contains('active')) {
-          renderDashboard(filtered);
-        }
-        renderNeedsAttention(filtered);
-        renderMissingAggregate(filtered);
-        renderRecentStudents();
-        showToast('Dashboard refreshed');
-      } catch(e) { showToast('Render error: ' + e.message); }
-    })
-    .withFailureHandler(function(err) {
-      showToast('Error: ' + (err && err.message ? err.message : String(err)));
-    })
-    .refreshDashboardData();
 }
 
 // ─── Skeleton Loading Functions ───

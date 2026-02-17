@@ -783,6 +783,26 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   color: var(--md-on-surface);
 }
 
+/* ─── Persistent Action Bar ─── */
+.persistent-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  padding: 8px 24px;
+  background: var(--md-surface);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+/* ─── Add Student Icon Button (in student list search bar) ─── */
+.add-student-icon-btn {
+  flex-shrink: 0;
+  margin-left: 4px;
+  color: var(--md-primary);
+}
+
 /* ─── Header Search (expandable typeahead) ─── */
 .header-search-container {
   position: relative;
@@ -3380,6 +3400,12 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 }
 
 /* Mobile: disable hover for submenu, rely on JS click toggle */
+@media (max-width: 840px) {
+  .persistent-action-bar {
+    top: 64px;
+    padding: 8px 16px;
+  }
+}
 @media (max-width: 840px) {
   .nav-drawer-group:hover .nav-drawer-submenu {
     max-height: 0;
