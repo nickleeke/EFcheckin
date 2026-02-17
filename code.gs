@@ -14,6 +14,7 @@ const SHEET_CHECKINS = 'CheckIns';
 const SHEET_COTEACHERS = 'CoTeachers';
 const SHEET_EVALUATIONS = 'Evaluations';
 const SHEET_PROGRESS = 'ProgressReporting';
+const SHEET_IEP_MEETINGS = 'IEPMeetings';
 
 const GPA_MAP = {
   'A':4.0, 'A-':3.7,
@@ -197,6 +198,9 @@ var PROGRESS_HEADERS = [
 var VALID_PROGRESS_RATINGS = ['No Progress', 'Adequate Progress', 'Objective Met'];
 var VALID_QUARTERS = ['Q1', 'Q2', 'Q3', 'Q4'];
 
+var IEP_MEETING_HEADERS = ['id', 'studentId', 'meetingDate', 'meetingType', 'notes', 'createdAt', 'createdBy'];
+var VALID_MEETING_TYPES = ['Annual Review', 'Amendment', 'Progress Conference', 'Other'];
+
 function initializeSheets() {
   const ss = getSS_();
 
@@ -231,6 +235,10 @@ function initializeSheets() {
   let progressSheet = ss.getSheetByName(SHEET_PROGRESS);
   if (!progressSheet) progressSheet = ss.insertSheet(SHEET_PROGRESS);
   ensureHeaders_(progressSheet, PROGRESS_HEADERS);
+
+  let meetingsSheet = ss.getSheetByName(SHEET_IEP_MEETINGS);
+  if (!meetingsSheet) meetingsSheet = ss.insertSheet(SHEET_IEP_MEETINGS);
+  ensureHeaders_(meetingsSheet, IEP_MEETING_HEADERS);
 
   return { success: true, feedbackLinks: getFeedbackLinks() };
 }
@@ -744,6 +752,7 @@ function invalidateCache_() {
     props.deleteProperty(CACHE_PREFIX + 'dashboard');
     props.deleteProperty(CACHE_PREFIX + 'eval_summary');
     props.deleteProperty(CACHE_PREFIX + 'progress');
+    props.deleteProperty(CACHE_PREFIX + 'due_process');
   } catch(e) {}
 }
 
@@ -885,6 +894,404 @@ function getEvalTaskSummary() {
 
   setCache_('eval_summary', result);
   return result;
+}
+
+// ───── IEP Meeting CRUD ─────
+
+function saveIEPMeeting(data) {
+  if (!data || !data.studentId || !data.meetingDate || !data.meetingType) {
+    return { success: false, error: 'studentId, meetingDate, and meetingType are required' };
+  }
+  if (VALID_MEETING_TYPES.indexOf(data.meetingType) === -1) {
+    return { success: false, error: 'Invalid meetingType. Valid: ' + VALID_MEETING_TYPES.join(', ') };
+  }
+
+  initializeSheetsIfNeeded_();
+  var ss = getSS_();
+  var sheet = ss.getSheetByName(SHEET_IEP_MEETINGS);
+  if (!sheet) return { success: false, error: 'IEPMeetings sheet not found' };
+
+  var lock = LockService.getUserLock();
+  try {
+    lock.waitLock(10000);
+  } catch(e) {
+    return { success: false, error: 'Could not acquire lock' };
+  }
+
+  try {
+    var now = new Date().toISOString();
+    var email = getCurrentUserEmail_();
+
+    if (data.id) {
+      // Update existing
+      var found = findRowById_(sheet, data.id);
+      if (!found) {
+        return { success: false, error: 'Meeting not found' };
+      }
+      var colIdx = found.colIdx;
+      batchSetValues_(sheet, found.rowIndex, colIdx, {
+        meetingDate: data.meetingDate,
+        meetingType: data.meetingType,
+        notes: data.notes || ''
+      });
+      invalidateCache_();
+      return { success: true, id: data.id, updated: true };
+    }
+
+    // Create new
+    var id = Utilities.getUuid();
+    sheet.appendRow([
+      id, data.studentId, data.meetingDate, data.meetingType,
+      data.notes || '', now, email
+    ]);
+    invalidateCache_();
+    return { success: true, id: id, updated: false };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function getIEPMeetings(studentId) {
+  initializeSheetsIfNeeded_();
+  var ss = getSS_();
+  var sheet = ss.getSheetByName(SHEET_IEP_MEETINGS);
+  if (!sheet || sheet.getLastRow() <= 1) return [];
+
+  var allData = sheet.getDataRange().getValues();
+  var headers = allData[0];
+  var results = [];
+  for (var i = 1; i < allData.length; i++) {
+    var row = {};
+    headers.forEach(function(h, idx) { row[h] = allData[i][idx]; });
+    if (!studentId || row.studentId === studentId) results.push(row);
+  }
+  return results;
+}
+
+function deleteIEPMeeting(meetingId) {
+  if (!meetingId) return { success: false, error: 'meetingId is required' };
+  initializeSheetsIfNeeded_();
+  var ss = getSS_();
+  var sheet = ss.getSheetByName(SHEET_IEP_MEETINGS);
+  if (!sheet) return { success: false, error: 'Sheet not found' };
+
+  var found = findRowById_(sheet, meetingId);
+  if (!found) return { success: false, error: 'Meeting not found' };
+
+  sheet.deleteRow(found.rowIndex);
+  invalidateCache_();
+  return { success: true };
+}
+
+// ───── Due Process Dashboard Data ─────
+
+function getDueProcessData() {
+  var cached = getCache_('due_process');
+  if (cached) return cached;
+
+  initializeSheetsIfNeeded_();
+  var email = (getCurrentUserEmail_() || '').toLowerCase();
+  var students = getStudents();
+  var quarter = getCurrentQuarter();
+
+  // 1. Eval summary with extended 30-day timeline
+  var evalSummary = getEvalTimelineExtended_(30);
+
+  // 2. Merged meetings from eval meetingDate + standalone IEPMeetings
+  var meetings = getAllMeetingsForCalendar_(students);
+
+  // 3. Progress responsibility: goals where current user is responsible
+  var progressAssignments = [];
+  students.forEach(function(s) {
+    var goals = [];
+    try { goals = JSON.parse(s.goalsJson || '[]'); } catch(e) {}
+    goals.forEach(function(goal) {
+      if ((goal.responsibleEmail || '').toLowerCase() === email) {
+        progressAssignments.push({
+          studentId: s.id,
+          studentName: s.firstName + ' ' + s.lastName,
+          goalId: goal.id,
+          goalArea: goal.goalArea || 'General',
+          goalText: goal.text || '',
+          caseManagerEmail: s.caseManagerEmail || '',
+          objectiveCount: (goal.objectives || []).length
+        });
+      }
+    });
+  });
+
+  // 4. Completion map: for each student, check if all assigned objectives have entries
+  var completionMap = buildCompletionMap_(email, students, quarter);
+
+  var result = {
+    evalSummary: evalSummary,
+    meetings: meetings,
+    progressAssignments: progressAssignments,
+    completionMap: completionMap,
+    currentQuarter: quarter
+  };
+
+  setCache_('due_process', result);
+  return result;
+}
+
+/**
+ * Extended eval timeline — same as getEvalTaskSummary() but builds N days instead of 7.
+ */
+function getEvalTimelineExtended_(numDays) {
+  initializeSheetsIfNeeded_();
+  var ss = getSS_();
+  var evalSheet = ss.getSheetByName(SHEET_EVALUATIONS);
+  if (!evalSheet || evalSheet.getLastRow() <= 1) {
+    return { dueThisWeekCount: 0, overdueCount: 0, timeline: [], activeEvals: [], overdueTasks: [], dueThisWeekTasks: [] };
+  }
+
+  var students = getStudents();
+  var studentMap = {};
+  students.forEach(function(s) {
+    studentMap[s.id] = { firstName: s.firstName, lastName: s.lastName };
+  });
+
+  var evalData = evalSheet.getDataRange().getValues();
+  var evalHeaders = evalData[0];
+  var evalColIdx = buildColIdx_(evalHeaders);
+
+  var now = new Date();
+  var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  var todayStr = formatDateValue_(today);
+
+  var dayAbbrs = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  var monthAbbrs = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  var timelineDays = [];
+  for (var d = 0; d < numDays; d++) {
+    var dayDate = new Date(today.getTime() + d * 86400000);
+    timelineDays.push({
+      date: formatDateValue_(dayDate),
+      dayOfWeek: dayDate.getDay(),
+      dayAbbr: dayAbbrs[dayDate.getDay()],
+      dayNum: dayDate.getDate(),
+      monthShort: monthAbbrs[dayDate.getMonth()],
+      tasks: []
+    });
+  }
+  var endDateStr = timelineDays[numDays - 1].date;
+
+  // Build date-to-index map for fast lookup
+  var dateToIdx = {};
+  timelineDays.forEach(function(td, idx) { dateToIdx[td.date] = idx; });
+
+  var overdueCount = 0;
+  var dueThisWeekCount = 0;
+  var activeEvals = [];
+  var overdueTasks = [];
+  var dueThisWeekTasks = [];
+
+  // Week boundary for "due this week" count (7 days from today)
+  var weekEndDate = new Date(today.getTime() + 6 * 86400000);
+  var weekEndStr = formatDateValue_(weekEndDate);
+
+  for (var i = 1; i < evalData.length; i++) {
+    var studentId = evalData[i][evalColIdx['studentId'] - 1];
+    var itemsRaw = evalData[i][evalColIdx['itemsJson'] - 1];
+    var evalType = evalData[i][evalColIdx['type'] - 1];
+    var evalId = evalData[i][evalColIdx['id'] - 1];
+    var items;
+    try { items = JSON.parse(itemsRaw || '[]'); } catch(e) { items = []; }
+
+    var studentInfo = studentMap[studentId] || { firstName: 'Unknown', lastName: '' };
+    var studentFullName = studentInfo.firstName + ' ' + studentInfo.lastName;
+
+    var evalDone = 0;
+    var evalOverdue = 0;
+    items.forEach(function(item) {
+      if (item.checked) { evalDone++; return; }
+      if (!item.dueDate) return;
+
+      if (item.dueDate < todayStr) {
+        overdueCount++;
+        evalOverdue++;
+        overdueTasks.push({
+          itemId: item.id, text: item.text, dueDate: item.dueDate,
+          studentId: studentId, evalId: evalId, studentName: studentFullName, evalType: evalType
+        });
+        return;
+      }
+
+      if (item.dueDate >= todayStr && item.dueDate <= weekEndStr) {
+        dueThisWeekCount++;
+        dueThisWeekTasks.push({
+          itemId: item.id, text: item.text, dueDate: item.dueDate,
+          studentId: studentId, evalId: evalId, studentName: studentFullName, evalType: evalType
+        });
+      }
+
+      // Map to timeline day if in range
+      var dayIdx = dateToIdx[item.dueDate];
+      if (dayIdx !== undefined) {
+        timelineDays[dayIdx].tasks.push({
+          itemId: item.id, text: item.text,
+          studentId: studentId, evalId: evalId, studentName: studentFullName, evalType: evalType
+        });
+      }
+    });
+
+    activeEvals.push({
+      evalId: evalId, studentId: studentId, studentName: studentFullName,
+      type: evalType, done: evalDone, total: items.length, overdueCount: evalOverdue
+    });
+  }
+
+  overdueTasks.sort(function(a, b) { return a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0; });
+  dueThisWeekTasks.sort(function(a, b) { return a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0; });
+
+  return {
+    dueThisWeekCount: dueThisWeekCount,
+    overdueCount: overdueCount,
+    timeline: timelineDays,
+    activeEvals: activeEvals,
+    overdueTasks: overdueTasks,
+    dueThisWeekTasks: dueThisWeekTasks
+  };
+}
+
+/**
+ * Merge eval meetingDate values with standalone IEPMeetings rows.
+ */
+/**
+ * Public endpoint: returns all meetings (eval + standalone) for calendar views.
+ */
+function getAllMeetings() {
+  initializeSheetsIfNeeded_();
+  var students = getStudents();
+  return getAllMeetingsForCalendar_(students);
+}
+
+function getAllMeetingsForCalendar_(students) {
+  var ss = getSS_();
+  var meetings = [];
+
+  // Student name lookup
+  var studentMap = {};
+  students.forEach(function(s) { studentMap[s.id] = s.firstName + ' ' + s.lastName; });
+
+  // Source 1: Eval meetingDate fields
+  var evalSheet = ss.getSheetByName(SHEET_EVALUATIONS);
+  if (evalSheet && evalSheet.getLastRow() > 1) {
+    var evalData = evalSheet.getDataRange().getValues();
+    var evalHeaders = evalData[0];
+    var evalColIdx = buildColIdx_(evalHeaders);
+
+    for (var i = 1; i < evalData.length; i++) {
+      var md = evalData[i][evalColIdx['meetingDate'] - 1];
+      if (md) {
+        var sid = evalData[i][evalColIdx['studentId'] - 1];
+        var evalType = evalData[i][evalColIdx['type'] - 1];
+        meetings.push({
+          date: formatDateValue_(md),
+          studentId: sid,
+          studentName: studentMap[sid] || 'Unknown',
+          meetingType: getEvalMeetingLabel_(evalType),
+          source: 'eval'
+        });
+      }
+    }
+  }
+
+  // Source 2: IEPMeetings sheet
+  var meetSheet = ss.getSheetByName(SHEET_IEP_MEETINGS);
+  if (meetSheet && meetSheet.getLastRow() > 1) {
+    var meetData = meetSheet.getDataRange().getValues();
+    var meetHeaders = meetData[0];
+    for (var j = 1; j < meetData.length; j++) {
+      var row = {};
+      meetHeaders.forEach(function(h, idx) { row[h] = meetData[j][idx]; });
+      meetings.push({
+        id: row.id,
+        date: formatDateValue_(row.meetingDate),
+        studentId: row.studentId,
+        studentName: studentMap[row.studentId] || 'Unknown',
+        meetingType: row.meetingType || 'Other',
+        notes: row.notes || '',
+        source: 'standalone'
+      });
+    }
+  }
+
+  return meetings;
+}
+
+function getEvalMeetingLabel_(evalType) {
+  if (evalType === 'annual-iep') return 'Annual IEP Meeting';
+  if (evalType === '3-year-reeval' || evalType === 'reeval') return 'Re-Eval Meeting';
+  if (evalType === 'initial-eval' || evalType === 'eval') return 'Initial Eval Meeting';
+  return 'Eval Meeting';
+}
+
+/**
+ * Build completion map: for each student with goals assigned to the user,
+ * count total objectives vs objectives with progress entries for the quarter.
+ */
+function buildCompletionMap_(email, students, quarter) {
+  var ss = getSS_();
+  var progressSheet = ss.getSheetByName(SHEET_PROGRESS);
+  var allEntries = [];
+
+  if (progressSheet && progressSheet.getLastRow() > 1) {
+    var pData = progressSheet.getDataRange().getValues();
+    var pHeaders = pData[0];
+    for (var i = 1; i < pData.length; i++) {
+      var entry = {};
+      pHeaders.forEach(function(h, idx) { entry[h] = pData[i][idx]; });
+      if (entry.quarter === quarter) allEntries.push(entry);
+    }
+  }
+
+  // Build lookup set: "studentId|goalId|objectiveId" → true
+  var entrySet = {};
+  allEntries.forEach(function(e) {
+    if (e.progressRating) {
+      entrySet[e.studentId + '|' + e.goalId + '|' + e.objectiveId] = true;
+    }
+  });
+
+  var completionMap = {};
+
+  students.forEach(function(s) {
+    var goals = [];
+    try { goals = JSON.parse(s.goalsJson || '[]'); } catch(e) {}
+
+    var myGoals = goals.filter(function(g) {
+      return (g.responsibleEmail || '').toLowerCase() === email;
+    });
+
+    if (myGoals.length === 0) return;
+
+    var total = 0;
+    var completed = 0;
+    myGoals.forEach(function(goal) {
+      var objectives = goal.objectives || [];
+      if (objectives.length === 0) {
+        // Goal with no objectives counts as 1 item
+        total++;
+        if (entrySet[s.id + '|' + goal.id + '|']) completed++;
+      } else {
+        objectives.forEach(function(obj) {
+          total++;
+          if (entrySet[s.id + '|' + goal.id + '|' + obj.id]) completed++;
+        });
+      }
+    });
+
+    completionMap[s.id] = {
+      total: total,
+      completed: completed,
+      allDone: total > 0 && completed >= total
+    };
+  });
+
+  return completionMap;
 }
 
 // ───── Teacher Feedback Links (per-user) ─────
@@ -2203,7 +2610,7 @@ function formatDateValue_(val) {
 
 function initializeSheetsIfNeeded_() {
   const ss = getSS_();
-  if (!ss.getSheetByName(SHEET_STUDENTS) || !ss.getSheetByName(SHEET_CHECKINS) || !ss.getSheetByName(SHEET_COTEACHERS)) {
+  if (!ss.getSheetByName(SHEET_STUDENTS) || !ss.getSheetByName(SHEET_CHECKINS) || !ss.getSheetByName(SHEET_COTEACHERS) || !ss.getSheetByName(SHEET_IEP_MEETINGS)) {
     initializeSheets();
   }
 }

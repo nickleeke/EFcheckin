@@ -905,3 +905,264 @@ function test_getQuarterLabel_formatsCorrectly() {
   var label2 = getQuarterLabel('Q2');
   assertContains_(label2, 'Q2', 'Q2 label should contain Q2');
 }
+
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 7. DUE PROCESS — IEP Meetings & Completion Map
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+function runAllDueProcessTests() {
+  var tests = [
+    'test_iepMeeting_savesAndRetrieves',
+    'test_iepMeeting_validatesRequiredFields',
+    'test_iepMeeting_validatesMeetingType',
+    'test_iepMeeting_deletesById',
+    'test_goalResponsible_persistsViaGoalsJson',
+    'test_completionMap_allDoneWhenComplete',
+    'test_completionMap_notDoneWhenMissing',
+    'test_completionMap_ignoresOtherUsersGoals'
+  ];
+
+  var testFns = {
+    test_iepMeeting_savesAndRetrieves: test_iepMeeting_savesAndRetrieves,
+    test_iepMeeting_validatesRequiredFields: test_iepMeeting_validatesRequiredFields,
+    test_iepMeeting_validatesMeetingType: test_iepMeeting_validatesMeetingType,
+    test_iepMeeting_deletesById: test_iepMeeting_deletesById,
+    test_goalResponsible_persistsViaGoalsJson: test_goalResponsible_persistsViaGoalsJson,
+    test_completionMap_allDoneWhenComplete: test_completionMap_allDoneWhenComplete,
+    test_completionMap_notDoneWhenMissing: test_completionMap_notDoneWhenMissing,
+    test_completionMap_ignoresOtherUsersGoals: test_completionMap_ignoresOtherUsersGoals
+  };
+
+  var passed = 0, failed = 0, errors = [];
+  tests.forEach(function(name) {
+    try {
+      testFns[name]();
+      passed++;
+      Logger.log('PASS: ' + name);
+    } catch(e) {
+      failed++;
+      errors.push(name + ': ' + e.message);
+      Logger.log('FAIL: ' + name + ' — ' + e.message);
+    }
+  });
+
+  Logger.log('');
+  Logger.log('Due Process Results: ' + passed + ' passed, ' + failed + ' failed');
+  if (errors.length > 0) {
+    Logger.log('Failures:');
+    errors.forEach(function(e) { Logger.log('  ' + e); });
+  }
+  return { passed: passed, failed: failed, errors: errors };
+}
+
+function test_iepMeeting_savesAndRetrieves() {
+  var meetingId = null;
+  try {
+    var result = saveIEPMeeting({
+      studentId: 'stu-test-001',
+      meetingDate: '2026-03-15',
+      meetingType: 'Annual Review',
+      notes: 'Test meeting for IEP review'
+    });
+    assert_(result.success, 'Meeting should save successfully');
+    assertNotNull_(result.id, 'Should return an ID');
+    meetingId = result.id;
+
+    var meetings = getIEPMeetings('stu-test-001');
+    var found = meetings.filter(function(m) { return m.id === meetingId; });
+    assertEqual_(found.length, 1, 'Should find the saved meeting');
+    assertEqual_(found[0].meetingType, 'Annual Review', 'Meeting type should match');
+    assertEqual_(found[0].notes, 'Test meeting for IEP review', 'Notes should match');
+  } finally {
+    if (meetingId) try { deleteIEPMeeting(meetingId); } catch(e) {}
+  }
+}
+
+function test_iepMeeting_validatesRequiredFields() {
+  var result1 = saveIEPMeeting({});
+  assert_(!result1.success, 'Should fail without required fields');
+
+  var result2 = saveIEPMeeting({ studentId: 'stu-test-001' });
+  assert_(!result2.success, 'Should fail without meetingDate');
+
+  var result3 = saveIEPMeeting({ studentId: 'stu-test-001', meetingDate: '2026-03-15' });
+  assert_(!result3.success, 'Should fail without meetingType');
+}
+
+function test_iepMeeting_validatesMeetingType() {
+  var result = saveIEPMeeting({
+    studentId: 'stu-test-001',
+    meetingDate: '2026-03-15',
+    meetingType: 'Invalid Type'
+  });
+  assert_(!result.success, 'Should reject invalid meeting type');
+  assertContains_(result.error, 'Invalid', 'Error should mention invalid type');
+}
+
+function test_iepMeeting_deletesById() {
+  var meetingId = null;
+  try {
+    var result = saveIEPMeeting({
+      studentId: 'stu-test-001',
+      meetingDate: '2026-04-01',
+      meetingType: 'Amendment',
+      notes: 'To be deleted'
+    });
+    assert_(result.success, 'Meeting should save');
+    meetingId = result.id;
+
+    var delResult = deleteIEPMeeting(meetingId);
+    assert_(delResult.success, 'Delete should succeed');
+    meetingId = null; // Already deleted
+
+    var meetings = getIEPMeetings('stu-test-001');
+    var found = meetings.filter(function(m) { return m.id === result.id; });
+    assertEqual_(found.length, 0, 'Meeting should no longer exist after delete');
+  } finally {
+    if (meetingId) try { deleteIEPMeeting(meetingId); } catch(e) {}
+  }
+}
+
+function test_goalResponsible_persistsViaGoalsJson() {
+  // Verify that responsibleEmail survives round-trip through saveStudentGoals
+  var goalsWithResponsible = JSON.stringify([{
+    id: 'goal-resp-test',
+    text: 'Test goal with responsibility',
+    goalArea: 'Math Calculation',
+    responsibleEmail: 'teacher@rpsmn.org',
+    objectives: [{ id: 'obj-resp-1', text: 'Test objective' }]
+  }]);
+
+  var result = saveStudentGoals('stu-test-001', goalsWithResponsible);
+  assert_(result.success, 'Should save goals with responsibleEmail');
+
+  var students = getStudents();
+  var student = null;
+  for (var i = 0; i < students.length; i++) {
+    if (students[i].id === 'stu-test-001') { student = students[i]; break; }
+  }
+
+  if (student) {
+    var goals = JSON.parse(student.goalsJson || '[]');
+    assert_(goals.length > 0, 'Should have at least one goal');
+    assertEqual_(goals[0].responsibleEmail, 'teacher@rpsmn.org', 'responsibleEmail should persist');
+  }
+}
+
+function test_completionMap_allDoneWhenComplete() {
+  // When all objectives have entries, allDone should be true
+  var email = 'teacher@rpsmn.org';
+  var students = [buildMockStudent_({
+    goalsJson: JSON.stringify([{
+      id: 'goal-comp-1',
+      text: 'Goal 1',
+      goalArea: 'Math',
+      responsibleEmail: email,
+      objectives: [
+        { id: 'obj-c1', text: 'Obj 1' },
+        { id: 'obj-c2', text: 'Obj 2' }
+      ]
+    }])
+  })];
+
+  // Create entries for both objectives
+  var createdIds = [];
+  try {
+    var e1 = saveProgressEntry({
+      studentId: 'stu-test-001', goalId: 'goal-comp-1', objectiveId: 'obj-c1',
+      quarter: 'Q2', progressRating: 'Adequate Progress', anecdotalNotes: 'Good work on this objective test.'
+    });
+    if (e1.id) createdIds.push(e1.id);
+
+    var e2 = saveProgressEntry({
+      studentId: 'stu-test-001', goalId: 'goal-comp-1', objectiveId: 'obj-c2',
+      quarter: 'Q2', progressRating: 'Objective Met', anecdotalNotes: 'Excellent work on this objective.'
+    });
+    if (e2.id) createdIds.push(e2.id);
+
+    var map = buildCompletionMap_(email, students, 'Q2');
+    assertNotNull_(map['stu-test-001'], 'Should have entry for test student');
+    assert_(map['stu-test-001'].allDone, 'Should be allDone when both objectives have entries');
+    assertEqual_(map['stu-test-001'].total, 2, 'Total should be 2');
+    assertEqual_(map['stu-test-001'].completed, 2, 'Completed should be 2');
+  } finally {
+    createdIds.forEach(function(id) { try { deleteProgressEntry_(id); } catch(e) {} });
+  }
+}
+
+function test_completionMap_notDoneWhenMissing() {
+  // When one objective is missing an entry, allDone should be false
+  var email = 'teacher@rpsmn.org';
+  var students = [buildMockStudent_({
+    goalsJson: JSON.stringify([{
+      id: 'goal-inc-1',
+      text: 'Goal incomplete',
+      goalArea: 'Reading',
+      responsibleEmail: email,
+      objectives: [
+        { id: 'obj-i1', text: 'Obj 1' },
+        { id: 'obj-i2', text: 'Obj 2' }
+      ]
+    }])
+  })];
+
+  var createdIds = [];
+  try {
+    // Only create entry for one objective
+    var e1 = saveProgressEntry({
+      studentId: 'stu-test-001', goalId: 'goal-inc-1', objectiveId: 'obj-i1',
+      quarter: 'Q2', progressRating: 'No Progress', anecdotalNotes: 'Needs more support on this skill.'
+    });
+    if (e1.id) createdIds.push(e1.id);
+
+    var map = buildCompletionMap_(email, students, 'Q2');
+    assertNotNull_(map['stu-test-001'], 'Should have entry for test student');
+    assert_(!map['stu-test-001'].allDone, 'Should NOT be allDone when one objective missing');
+    assertEqual_(map['stu-test-001'].total, 2, 'Total should be 2');
+    assertEqual_(map['stu-test-001'].completed, 1, 'Completed should be 1');
+  } finally {
+    createdIds.forEach(function(id) { try { deleteProgressEntry_(id); } catch(e) {} });
+  }
+}
+
+function test_completionMap_ignoresOtherUsersGoals() {
+  // Goals assigned to a different user should not appear in the map
+  var myEmail = 'teacher@rpsmn.org';
+  var students = [buildMockStudent_({
+    goalsJson: JSON.stringify([
+      {
+        id: 'goal-mine',
+        text: 'My goal',
+        goalArea: 'Math',
+        responsibleEmail: myEmail,
+        objectives: [{ id: 'obj-m1', text: 'My obj' }]
+      },
+      {
+        id: 'goal-theirs',
+        text: 'Their goal',
+        goalArea: 'Reading',
+        responsibleEmail: 'other@rpsmn.org',
+        objectives: [{ id: 'obj-t1', text: 'Their obj' }]
+      }
+    ])
+  })];
+
+  var createdIds = [];
+  try {
+    var e1 = saveProgressEntry({
+      studentId: 'stu-test-001', goalId: 'goal-mine', objectiveId: 'obj-m1',
+      quarter: 'Q2', progressRating: 'Adequate Progress', anecdotalNotes: 'Making good progress on this.'
+    });
+    if (e1.id) createdIds.push(e1.id);
+
+    // Only my goal has entry — should be complete for me
+    var map = buildCompletionMap_(myEmail, students, 'Q2');
+    assertNotNull_(map['stu-test-001'], 'Should have entry for test student');
+    assertEqual_(map['stu-test-001'].total, 1, 'Total should only count MY goals (1)');
+    assertEqual_(map['stu-test-001'].completed, 1, 'Completed should be 1');
+    assert_(map['stu-test-001'].allDone, 'Should be allDone — only my goal counts');
+  } finally {
+    createdIds.forEach(function(id) { try { deleteProgressEntry_(id); } catch(e) {} });
+  }
+}
