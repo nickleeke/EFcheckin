@@ -10,9 +10,10 @@ var appState = {
   currentStudentId: null,
   currentCheckIns: [],
   editingCheckIn: null,
-  sortField: 'priority',
+  sortField: 'name',
   sortAsc: true,
   caseloadFilter: 'all',
+  caseManagerFilter: '',
   highlightedRowIndex: -1,
   missingViewStudentId: null,
   feedbackLinks: null,
@@ -375,7 +376,6 @@ function applyFilter_(data) {
 
 function setCaseloadFilter(filter) {
   appState.caseloadFilter = filter;
-  updateFilterIndicator(filter);
   if (appState.dashboardData) {
     var filtered = applyFilter_(appState.dashboardData);
     // Re-render whichever panel is currently active
@@ -389,58 +389,9 @@ function setCaseloadFilter(filter) {
   }
 }
 
-function updateFilterIndicator(filter) {
-  var optAll = document.getElementById('filter-opt-all');
-  var optMy = document.getElementById('filter-opt-my');
-  if (optAll) {
-    optAll.classList.toggle('header-filter-option-active', filter === 'all');
-    optAll.setAttribute('aria-checked', filter === 'all' ? 'true' : 'false');
-  }
-  if (optMy) {
-    optMy.classList.toggle('header-filter-option-active', filter === 'my');
-    optMy.setAttribute('aria-checked', filter === 'my' ? 'true' : 'false');
-  }
-  var dot = document.getElementById('header-filter-dot');
-  if (dot) dot.style.display = (filter === 'my') ? '' : 'none';
-}
-
-function showStudentList(filter) {
-  appState.caseloadFilter = filter;
-  updateFilterIndicator(filter);
-  closeFilterDropdown();
-  switchDashboardTab(filter === 'my' ? 'mycaseload' : 'caseload');
-}
-
-function toggleFilterDropdown() {
-  var container = document.getElementById('header-filter-container');
-  if (!container) return;
-  var isOpen = container.classList.contains('header-filter-open');
-  closeHeaderSearch();
-  if (isOpen) {
-    closeFilterDropdown();
-  } else {
-    container.classList.add('header-filter-open');
-    var btn = document.getElementById('header-filter-btn');
-    if (btn) btn.setAttribute('aria-expanded', 'true');
-    setTimeout(function() {
-      document.addEventListener('click', _closeFilterOnOutsideClick);
-    }, 0);
-  }
-}
-
-function closeFilterDropdown() {
-  var container = document.getElementById('header-filter-container');
-  if (container) container.classList.remove('header-filter-open');
-  var btn = document.getElementById('header-filter-btn');
-  if (btn) btn.setAttribute('aria-expanded', 'false');
-  document.removeEventListener('click', _closeFilterOnOutsideClick);
-}
-
-function _closeFilterOnOutsideClick(e) {
-  var container = document.getElementById('header-filter-container');
-  if (container && !container.contains(e.target)) {
-    closeFilterDropdown();
-  }
+function setCaseManagerFilter(email) {
+  appState.caseManagerFilter = email;
+  renderDashboard(applyFilter_(appState.dashboardData), { skipAnimation: true });
 }
 
 // ─── Preloaded Options ───
@@ -535,15 +486,7 @@ function enterApp() {
     .withFailureHandler(function() {})
     .getCaseManagers();
   // Render greeting with date context
-  var greetingEl = document.getElementById('dashboard-greeting');
-  if (greetingEl) {
-    var firstName = getFirstNameFromEmail(appState.currentUserEmail);
-    var today = new Date();
-    var dateStr = today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-    greetingEl.innerHTML =
-      '<div class="greeting-text">' + esc(firstName ? 'Hi, ' + firstName + '!' : 'Welcome!') + '</div>' +
-      '<div class="greeting-date">' + esc(dateStr) + '</div>';
-  }
+  updateGreetingForTab('dashboard');
   showView('dashboard-view');
   showDashboardSkeleton();
 
@@ -973,11 +916,30 @@ function loadStudentList() {
   }
 }
 
+function updateGreetingForTab(tabName) {
+  var greetingEl = document.getElementById('dashboard-greeting');
+  if (!greetingEl) return;
+  var today = new Date();
+  var dateStr = today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  var titleText;
+  if (tabName === 'caseload') {
+    titleText = 'All Students';
+  } else if (tabName === 'mycaseload') {
+    titleText = 'My Caseload';
+  } else {
+    var firstName = getFirstNameFromEmail(appState.currentUserEmail);
+    titleText = firstName ? 'Hi, ' + firstName + '!' : 'Welcome!';
+  }
+  greetingEl.innerHTML =
+    '<div class="greeting-text">' + esc(titleText) + '</div>' +
+    '<div class="greeting-date">' + esc(dateStr) + '</div>';
+}
+
 function switchDashboardTab(tabName) {
   // Ensure dashboard view is visible (handles clicks from child pages)
   showView('dashboard-view');
   closeHeaderSearch();
-  closeFilterDropdown();
+  updateGreetingForTab(tabName);
   // Deactivate all drawer child items, parent items, and panels
   document.querySelectorAll('.nav-drawer-child').forEach(function(t) { t.classList.remove('active'); });
   document.querySelectorAll('.nav-drawer-items > .nav-drawer-item').forEach(function(t) { t.classList.remove('active'); });
@@ -1006,9 +968,6 @@ function switchDashboardTab(tabName) {
   if (refreshBtn) refreshBtn.style.display = isAdmin ? 'none' : '';
   var addStudentBtn = document.getElementById('add-student-btn');
   if (addStudentBtn) addStudentBtn.style.display = (isAdmin || tabName === 'dashboard') ? 'none' : '';
-  // Show filter button only on student list tabs
-  var filterContainer = document.getElementById('header-filter-container');
-  if (filterContainer) filterContainer.style.display = isStudentList ? '' : 'none';
   // Close mobile submenu and drawer
   var openGroup = document.querySelector('.nav-drawer-group.submenu-open');
   if (openGroup) openGroup.classList.remove('submenu-open');
@@ -1018,11 +977,11 @@ function switchDashboardTab(tabName) {
     loadDashboard();
   } else if (tabName === 'caseload') {
     appState.caseloadFilter = 'all';
-    updateFilterIndicator('all');
+    appState.caseManagerFilter = '';
     loadStudentList();
   } else if (tabName === 'mycaseload') {
     appState.caseloadFilter = 'my';
-    updateFilterIndicator('my');
+    appState.caseManagerFilter = '';
     loadStudentList();
   } else if (tabName === 'admin') {
     loadAdminView();
@@ -1072,7 +1031,6 @@ function openHeaderSearch() {
   var container = document.getElementById('header-search-container');
   var input = document.getElementById('header-search-input');
   if (!container) return;
-  closeFilterDropdown();
   _headerSearchOpen = true;
   _headerSearchHighlight = -1;
   container.classList.add('header-search-open');
@@ -1245,10 +1203,17 @@ function renderDashboard(data, opts) {
     });
   }
 
+  // Apply case manager filter
+  if (appState.caseManagerFilter) {
+    filtered = filtered.filter(function(s) {
+      return (s.caseManagerEmail || '') === appState.caseManagerFilter;
+    });
+  }
+
   if (filtered.length === 0) {
     container.innerHTML =
       '<div class="empty-state">' +
-        '<p>No students match "' + esc(appState.searchQuery) + '"</p>' +
+        '<p>No students match your current filters.</p>' +
       '</div>';
     return;
   }
@@ -1274,11 +1239,32 @@ function renderDashboard(data, opts) {
     return appState.sortAsc ? cmp : -cmp;
   });
 
-  var html = '<table class="dashboard-table"><thead><tr>' +
-    '<th><span class="th-sortable">' + sortIcon('priority') + sortIcon('name') + 'Name</span></th>' +
+  // Build case manager filter dropdown
+  var cmEmails = {};
+  data.forEach(function(s) {
+    if (s.caseManagerEmail) cmEmails[s.caseManagerEmail] = true;
+  });
+  var cmOptions = Object.keys(cmEmails).sort(function(a, b) {
+    return getCaseManagerName(a).localeCompare(getCaseManagerName(b));
+  });
+  var cmFilterHtml = '';
+  if (cmOptions.length > 1) {
+    cmFilterHtml = '<div class="cm-filter-bar">' +
+      '<label class="cm-filter-label" for="cm-filter-select">Case Manager:</label>' +
+      '<select id="cm-filter-select" class="cm-filter-select" onchange="setCaseManagerFilter(this.value)">' +
+      '<option value=""' + (!appState.caseManagerFilter ? ' selected' : '') + '>All</option>';
+    cmOptions.forEach(function(email) {
+      var sel = appState.caseManagerFilter === email ? ' selected' : '';
+      cmFilterHtml += '<option value="' + esc(email) + '"' + sel + '>' + esc(getCaseManagerName(email)) + '</option>';
+    });
+    cmFilterHtml += '</select></div>';
+  }
+
+  var html = cmFilterHtml + '<table class="dashboard-table"><thead><tr>' +
+    '<th><span class="th-sortable">' + sortIcon('name') + 'Name</span></th>' +
     '<th><span class="th-sortable">' + sortIcon('grade') + 'Grade</span></th>' +
     '<th>EF Avg</th><th>Trend</th><th>GPA</th>' +
-    '<th>Missing</th><th>Last Check-In</th><th style="text-align:left">Actions</th>' +
+    '<th>Missing</th><th>Last Check-In</th><th>Case Manager</th><th style="text-align:left">Actions</th>' +
     '</tr></thead><tbody>';
 
   sorted.forEach(function(s, index) {
@@ -1338,6 +1324,10 @@ function renderDashboard(data, opts) {
     } else {
       html += '<td><span class="chip chip-gray">--</span></td>';
     }
+
+    // Case Manager
+    var cmName = s.caseManagerEmail ? getCaseManagerName(s.caseManagerEmail) : '';
+    html += '<td>' + esc(cmName || '--') + '</td>';
 
     // Action buttons (icon-only)
     html += '<td><div class="action-btns">' +
@@ -8493,7 +8483,7 @@ function createRipple(target, clientX, clientY) {
   ripple.addEventListener('animationend', function() { ripple.remove(); });
 }
 document.addEventListener('click', function(e) {
-  var btn = e.target.closest('.btn, .btn-icon, .btn-ghost, .action-btn, .rating-btn, .nav-drawer-item, .header-search-result-item, .header-filter-option');
+  var btn = e.target.closest('.btn, .btn-icon, .btn-ghost, .action-btn, .rating-btn, .nav-drawer-item, .header-search-result-item');
   if (btn) createRipple(btn, e.clientX, e.clientY);
 });
 </script>

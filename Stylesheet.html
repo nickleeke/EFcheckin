@@ -886,72 +886,34 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   color: var(--md-on-surface-variant);
 }
 
-/* ─── Header Filter Dropdown ─── */
-.header-filter-container { position: relative; }
-.header-filter-dot {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 8px;
-  height: 8px;
-  border-radius: var(--md-shape-full);
-  background: var(--md-primary);
-  pointer-events: none;
-}
-.header-filter-dropdown {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  margin-top: 4px;
-  min-width: 180px;
-  background: var(--md-surface-container-lowest);
-  border: 1px solid var(--md-outline-variant);
-  border-radius: var(--md-shape-md);
-  box-shadow: var(--md-elevation-2);
-  z-index: 100;
-  opacity: 0;
-  transform: translateY(-8px) scale(0.95);
-  pointer-events: none;
-  transition: opacity var(--md-duration-medium1) var(--md-easing-emphasized-decelerate),
-              transform var(--md-duration-medium1) var(--md-easing-emphasized-decelerate);
-}
-.header-filter-container.header-filter-open .header-filter-dropdown {
-  opacity: 1;
-  transform: translateY(0) scale(1);
-  pointer-events: auto;
-}
-.header-filter-option {
+/* ─── Case Manager Filter Bar ─── */
+.cm-filter-bar {
   display: flex;
   align-items: center;
-  gap: 12px;
-  width: 100%;
-  padding: 10px 16px;
-  border: none;
-  background: none;
-  cursor: pointer;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.cm-filter-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--md-on-surface-variant);
+  white-space: nowrap;
+}
+.cm-filter-select {
   font-family: 'Roboto', sans-serif;
   font-size: 14px;
-  font-weight: 400;
+  padding: 6px 12px;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-sm);
+  background: var(--md-surface);
   color: var(--md-on-surface);
-  text-align: left;
-  transition: background var(--md-duration-short3) var(--md-easing-standard);
+  cursor: pointer;
+  transition: border-color var(--md-duration-short3) var(--md-easing-standard);
 }
-.header-filter-option:first-child { border-radius: var(--md-shape-md) var(--md-shape-md) 0 0; }
-.header-filter-option:last-child { border-radius: 0 0 var(--md-shape-md) var(--md-shape-md); }
-.header-filter-option:hover { background: var(--md-surface-container); }
-.header-filter-option:focus-visible {
-  outline: 2px solid var(--md-primary);
-  outline-offset: -2px;
-}
-.header-filter-check {
-  color: transparent;
-  flex-shrink: 0;
-  transition: color var(--md-duration-short3) var(--md-easing-standard);
-}
-.header-filter-option-active .header-filter-check { color: var(--md-primary); }
-.header-filter-option-active {
-  font-weight: 500;
-  color: var(--md-primary);
+.cm-filter-select:focus {
+  outline: none;
+  border-color: var(--md-primary);
+  box-shadow: 0 0 0 1px var(--md-primary);
 }
 
 /* ─── View Header Stack (Breadcrumb + Title hierarchy) ─── */
@@ -2922,7 +2884,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 }
 
 /* ─── Button Ripple Effect ─── */
-.btn, .btn-icon, .btn-ghost, .btn-outlined, .action-btn, .rating-btn, .nav-drawer-item, .goal-met-btn, .eval-filter-chip, .eval-nav-btn, .dp-cal-day, .fab-btn, .fab-menu-item, .header-search-result-item, .header-filter-option {
+.btn, .btn-icon, .btn-ghost, .btn-outlined, .action-btn, .rating-btn, .nav-drawer-item, .goal-met-btn, .eval-filter-chip, .eval-nav-btn, .dp-cal-day, .fab-btn, .fab-menu-item, .header-search-result-item {
   position: relative;
   overflow: hidden;
 }
