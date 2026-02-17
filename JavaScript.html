@@ -34,7 +34,9 @@ var appState = {
   dueProcessExpandedDay: null,
   currentGoals: [],
   editingGoalId: null,
-  expandedGoalIds: {}
+  expandedGoalIds: {},
+  expandedProgressGoalIds: {},
+  editingProgressGoalId: null
 };
 var _persistTimers = {};
 var _persistInFlight = 0;
@@ -73,6 +75,11 @@ var PROGRESS_RATINGS = [
   { value: 'Adequate Progress', label: 'Adequate Progress', color: 'yellow' },
   { value: 'Objective Met', label: 'Objective Met', color: 'green' }
 ];
+var PROGRESS_RATING_BADGES = {
+  'No Progress': { label: 'Insufficient Progress', bg: '#FFDAD6', text: 'var(--md-on-error-container)', emoji: '' },
+  'Adequate Progress': { label: 'Adequate Progress', bg: 'var(--md-surface-container-high)', text: 'var(--md-on-surface-variant)', emoji: '' },
+  'Objective Met': { label: 'Objective Met', bg: '#FFDEAB', text: '#2A1800', emoji: '&#x1F3C6; ' }
+};
 
 // ─── Eval Type Definitions ───
 var EVAL_TYPES = [
@@ -3614,6 +3621,10 @@ function showStudentProfile(studentId) {
   appState.expandedGoalIds = {};
   appState.currentGoals = [];
 
+  // Clean up progress edit state
+  appState.expandedProgressGoalIds = {};
+  appState.editingProgressGoalId = null;
+
   appState.currentStudentId = studentId;
   trackRecentStudent(studentId);
   document.getElementById('student-view-breadcrumb').textContent = 'Student Profile';
@@ -4156,79 +4167,9 @@ function renderProgressSection(studentId, goals, quarter, allEntries) {
   var currentIdx = qOrder.indexOf(quarter);
   var priorQuarters = currentIdx > 0 ? qOrder.slice(0, currentIdx) : [];
 
-  // Group goals by goalArea
-  var areaMap = {};
-  var areaOrder = [];
+  // Render each goal as an expandable card
   goals.forEach(function(goal) {
-    var area = goal.goalArea || 'General';
-    if (!areaMap[area]) {
-      areaMap[area] = [];
-      areaOrder.push(area);
-    }
-    areaMap[area].push(goal);
-  });
-
-  // Render each goal area group
-  areaOrder.forEach(function(area) {
-    html += '<div class="progress-goal-group">';
-    html += '<h4 class="progress-area-heading">' + esc(area) + '</h4>';
-
-    areaMap[area].forEach(function(goal) {
-      html += '<div class="progress-goal-block">';
-      html += '<p class="progress-goal-text">' + esc(goal.text || '') + '</p>';
-
-      var objectives = goal.objectives || [];
-      objectives.forEach(function(obj) {
-        var entryKey = goal.id + '|' + obj.id + '|' + quarter;
-        var entry = entryMap[entryKey] || null;
-        var currentRating = entry ? entry.progressRating : '';
-        var currentNotes = entry ? entry.anecdotalNotes : '';
-
-        html += '<div class="progress-objective-row" data-goal-id="' + esc(goal.id) + '" data-obj-id="' + esc(obj.id) + '">';
-        html += '<p class="progress-obj-text">' + esc(obj.text || '') + '</p>';
-
-        // Prior quarter timeline chips
-        if (priorQuarters.length > 0) {
-          html += '<div class="progress-timeline-row">';
-          priorQuarters.forEach(function(pq) {
-            var pKey = goal.id + '|' + obj.id + '|' + pq;
-            var pEntry = entryMap[pKey];
-            if (pEntry) {
-              var chipClass = pEntry.progressRating === 'Objective Met' ? 'progress-chip-met' :
-                              pEntry.progressRating === 'Adequate Progress' ? 'progress-chip-adequate' : 'progress-chip-none';
-              html += '<span class="progress-timeline-chip ' + chipClass + '">' + pq + ': ' + esc(pEntry.progressRating) + '</span>';
-            } else {
-              html += '<span class="progress-timeline-chip progress-chip-empty">' + pq + ': \u2014</span>';
-            }
-          });
-          html += '</div>';
-        }
-
-        // Rating buttons (3-option segmented)
-        html += '<div class="progress-rating-group">';
-        PROGRESS_RATINGS.forEach(function(r) {
-          var selected = currentRating === r.value ? ' progress-rating-selected progress-rating-' + r.color : '';
-          html += '<button type="button" class="btn btn-sm progress-rating-btn' + selected + '" ' +
-            'data-rating="' + esc(r.value) + '" ' +
-            'onclick="selectProgressRating(this, \'' + esc(studentId) + '\', \'' + esc(goal.id) + '\', \'' + esc(obj.id) + '\')">' +
-            esc(r.label) + '</button>';
-        });
-        html += '</div>';
-
-        // Anecdotal notes textarea
-        html += '<textarea class="progress-notes-input" ' +
-          'data-goal-id="' + esc(goal.id) + '" data-obj-id="' + esc(obj.id) + '" ' +
-          'placeholder="Anecdotal notes (required, minimum 10 characters)..." ' +
-          'oninput="scheduleProgressAutosave(\'' + esc(studentId) + '\')">' +
-          esc(currentNotes) + '</textarea>';
-
-        html += '</div>'; // objective-row
-      });
-
-      html += '</div>'; // goal-block
-    });
-
-    html += '</div>'; // goal-group
+    html += renderProgressCard(goal, studentId, quarter, entryMap, priorQuarters);
   });
 
   // Overall teacher summary for report
@@ -4246,12 +4187,215 @@ function renderProgressSection(studentId, goals, quarter, allEntries) {
   html += '</div>';
 
   container.innerHTML = html;
+
+  // Escape key exits progress edit mode
+  container.onkeydown = function(e) {
+    if (e.key === 'Escape' && appState.editingProgressGoalId) {
+      e.stopPropagation();
+      exitProgressEditMode(studentId);
+    }
+  };
+}
+
+// ─── Progress Card Rendering (Expandable) ───
+
+function buildProgressRatingBadge(rating) {
+  var badge = PROGRESS_RATING_BADGES[rating];
+  if (!badge) return '';
+  return '<span class="progress-rating-badge" style="background:' + badge.bg + ';color:' + badge.text + ';">' +
+    badge.emoji + esc(badge.label) + '</span>';
+}
+
+function renderProgressCard(goal, studentId, quarter, entryMap, priorQuarters) {
+  var isEditing = appState.editingProgressGoalId === goal.id;
+  var isExpanded = !!appState.expandedProgressGoalIds[goal.id];
+  var objectives = goal.objectives || [];
+  var goalArea = goal.goalArea || '';
+  var goalText = goal.text || '';
+
+  // Count rated objectives for summary badge
+  var ratedCount = 0;
+  objectives.forEach(function(obj) {
+    var key = goal.id + '|' + obj.id + '|' + quarter;
+    if (entryMap[key] && entryMap[key].progressRating) ratedCount++;
+  });
+  var totalObj = objectives.length;
+
+  // Truncate preview text
+  var previewText = goalText.length > 80 ? goalText.substring(0, 80) + '\u2026' : goalText;
+  if (!previewText) previewText = 'No goal text';
+
+  var html = '<div class="progress-card' + (isEditing ? ' progress-card-editing' : '') + '" data-goal-id="' + esc(goal.id) + '">';
+
+  // ── Card Header (always visible) ──
+  html += '<div class="progress-card-header" role="button" tabindex="0" ' +
+    'onclick="toggleProgressExpand(\'' + esc(goal.id) + '\')" ' +
+    'onkeydown="if(event.key===\'Enter\')toggleProgressExpand(\'' + esc(goal.id) + '\')">';
+
+  html += '<div class="progress-card-header-left">';
+  if (goalArea) {
+    html += '<span class="goal-card-area-chip">' + esc(goalArea) + '</span>';
+  }
+  if (!isExpanded && !isEditing) {
+    html += '<span class="goal-card-text-preview">' + esc(previewText) + '</span>';
+  }
+  html += '</div>';
+
+  html += '<div class="progress-card-header-right">';
+  if (totalObj > 0) {
+    var badgeClass = ratedCount === totalObj ? 'progress-count-badge-complete' : 'progress-count-badge';
+    html += '<span class="' + badgeClass + '">' + ratedCount + '/' + totalObj + ' rated</span>';
+  }
+  html += '<svg class="goal-card-chevron' + (isExpanded || isEditing ? ' rotated' : '') + '" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>';
+  if (!isEditing) {
+    html += '<button class="btn-icon btn-icon-sm" onclick="event.stopPropagation();enterProgressEditMode(\'' + esc(goal.id) + '\', \'' + esc(studentId) + '\')" title="Edit progress">' +
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>' +
+    '</button>';
+  } else {
+    html += '<button class="btn-icon btn-icon-sm" onclick="event.stopPropagation();exitProgressEditMode(\'' + esc(studentId) + '\')" title="Done editing">' +
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>' +
+    '</button>';
+  }
+  html += '</div>';
+  html += '</div>';
+
+  // ── Card Body (collapsible) ──
+  html += '<div class="progress-card-body' + (isExpanded || isEditing ? ' progress-card-body-open' : '') + '">';
+
+  // Full goal text
+  if (goalText) {
+    html += '<div class="progress-card-goal-text">' + esc(goalText) + '</div>';
+  }
+
+  // Each objective
+  objectives.forEach(function(obj) {
+    var entryKey = goal.id + '|' + obj.id + '|' + quarter;
+    var entry = entryMap[entryKey] || null;
+    var currentRating = entry ? entry.progressRating : '';
+    var currentNotes = entry ? entry.anecdotalNotes : '';
+
+    html += '<div class="progress-objective-row" data-goal-id="' + esc(goal.id) + '" data-obj-id="' + esc(obj.id) + '">';
+
+    // Objective subheading + rating badge
+    html += '<div class="progress-obj-heading">';
+    html += '<p class="progress-obj-text">' + esc(obj.text || '') + '</p>';
+    if (currentRating) {
+      html += buildProgressRatingBadge(currentRating);
+    }
+    html += '</div>';
+
+    // Prior quarter timeline chips (always visible)
+    if (priorQuarters.length > 0) {
+      html += '<div class="progress-timeline-row">';
+      priorQuarters.forEach(function(pq) {
+        var pKey = goal.id + '|' + obj.id + '|' + pq;
+        var pEntry = entryMap[pKey];
+        if (pEntry) {
+          var chipClass = pEntry.progressRating === 'Objective Met' ? 'progress-chip-met' :
+                          pEntry.progressRating === 'Adequate Progress' ? 'progress-chip-adequate' : 'progress-chip-none';
+          html += '<span class="progress-timeline-chip ' + chipClass + '">' + pq + ': ' + esc(pEntry.progressRating) + '</span>';
+        } else {
+          html += '<span class="progress-timeline-chip progress-chip-empty">' + pq + ': \u2014</span>';
+        }
+      });
+      html += '</div>';
+    }
+
+    // Edit mode: rating buttons + notes textarea
+    if (isEditing) {
+      html += '<div class="progress-rating-group">';
+      PROGRESS_RATINGS.forEach(function(r) {
+        var selected = currentRating === r.value ? ' progress-rating-selected progress-rating-' + r.color : '';
+        html += '<button type="button" class="btn btn-sm progress-rating-btn' + selected + '" ' +
+          'data-rating="' + esc(r.value) + '" ' +
+          'onclick="selectProgressRating(this, \'' + esc(studentId) + '\', \'' + esc(goal.id) + '\', \'' + esc(obj.id) + '\')">' +
+          esc(r.label) + '</button>';
+      });
+      html += '</div>';
+
+      html += '<textarea class="progress-notes-input" ' +
+        'data-goal-id="' + esc(goal.id) + '" data-obj-id="' + esc(obj.id) + '" ' +
+        'placeholder="Anecdotal notes (required, minimum 10 characters)..." ' +
+        'oninput="scheduleProgressAutosave(\'' + esc(studentId) + '\')">' +
+        esc(currentNotes) + '</textarea>';
+    }
+
+    html += '</div>'; // objective-row
+  });
+
+  if (objectives.length === 0) {
+    html += '<p style="color:var(--md-on-surface-variant);font-size:13px;font-style:italic;">No objectives defined for this goal.</p>';
+  }
+
+  html += '</div>'; // card body
+  html += '</div>'; // card
+  return html;
+}
+
+// ─── Progress Card Interaction ───
+
+function toggleProgressExpand(goalId) {
+  if (appState.editingProgressGoalId === goalId) return;
+  if (appState.expandedProgressGoalIds[goalId]) {
+    delete appState.expandedProgressGoalIds[goalId];
+  } else {
+    appState.expandedProgressGoalIds[goalId] = true;
+  }
+  rerenderProgressCard(goalId);
+}
+
+function enterProgressEditMode(goalId, studentId) {
+  if (appState.editingProgressGoalId && appState.editingProgressGoalId !== goalId) {
+    var prevId = appState.editingProgressGoalId;
+    appState.editingProgressGoalId = null;
+    rerenderProgressCard(prevId);
+  }
+  appState.editingProgressGoalId = goalId;
+  appState.expandedProgressGoalIds[goalId] = true;
+  rerenderProgressCard(goalId);
+}
+
+function exitProgressEditMode(studentId) {
+  var goalId = appState.editingProgressGoalId;
+  if (!goalId) return;
+  appState.editingProgressGoalId = null;
+  rerenderProgressCard(goalId);
+  scheduleProgressAutosave(studentId);
+}
+
+function rerenderProgressCard(goalId) {
+  var container = document.getElementById('progress-section-container');
+  if (!container) return;
+  var el = container.querySelector('.progress-card[data-goal-id="' + goalId + '"]');
+  if (!el) return;
+
+  var studentId = appState.currentStudentId;
+  var quarter = appState.currentProgressQuarter;
+  var allEntries = appState.progressEntries || [];
+  var entryMap = {};
+  allEntries.forEach(function(e) {
+    var key = e.goalId + '|' + e.objectiveId + '|' + e.quarter;
+    entryMap[key] = e;
+  });
+  var qOrder = ['Q1', 'Q2', 'Q3', 'Q4'];
+  var currentIdx = qOrder.indexOf(quarter);
+  var priorQuarters = currentIdx > 0 ? qOrder.slice(0, currentIdx) : [];
+
+  var goal = null;
+  var goals = appState.currentGoals || [];
+  for (var i = 0; i < goals.length; i++) {
+    if (goals[i].id === goalId) { goal = goals[i]; break; }
+  }
+  if (!goal) return;
+
+  el.outerHTML = renderProgressCard(goal, studentId, quarter, entryMap, priorQuarters);
 }
 
 function switchProgressQuarter(studentId, quarter) {
   // Cancel any pending autosave from the previous quarter
   if (_progressAutosaveTimer) { clearTimeout(_progressAutosaveTimer); _progressAutosaveTimer = null; }
   _progressAutosaveDirty = false;
+  appState.editingProgressGoalId = null;
 
   appState.currentProgressQuarter = quarter;
   var goals = [];
