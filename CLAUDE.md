@@ -71,7 +71,9 @@ Definitions: `EVAL_TYPES` array + `EVAL_TYPE_ALIASES` map (frontend), `VALID_EVA
 
 ### Caching
 
-Read-through cache in UserProperties with 2-minute TTL. Invalidated on writes. Cache keys: `cache_students`, `cache_dashboard`, `cache_progress`.
+**Backend (UserProperties):** Read-through cache with 2-minute TTL. Cache keys: `cache_students`, `cache_dashboard`, `cache_eval_summary`, `cache_progress`, `cache_due_process`. Uses targeted invalidation — each write only clears affected caches (see Backend rules below).
+
+**Frontend (appState):** In-memory cache with 30-second staleness window (`DATA_FRESH_MS`). Timestamps `_lastDashboardFetch`, `_lastEvalSummaryFetch`, `_lastDueProcessFetch` track when data was last fetched. Navigation between views renders from `appState` if data is fresh, avoiding redundant server calls. Post-write handlers render optimistically from `appState` and reset the timestamp to mark data stale for the next navigation.
 
 ## Key Patterns
 
@@ -82,6 +84,7 @@ Read-through cache in UserProperties with 2-minute TTL. Invalidated on writes. C
 - **Caseload filter:** `appState.caseloadFilter` ('all' or 'my') controls which students are displayed. All dashboard renderers receive pre-filtered data via `applyFilter_()`. The My Caseload drawer item redirects to `setCaseloadFilter('my')` rather than rendering a separate panel.
 - **Dashboard enrichment:** `getDashboardData()` returns `daysSinceCheckIn` and `efHistory` (up to 6 weekly EF averages, oldest first) per student, used for urgency scoring and sparkline rendering.
 - **Keyboard shortcuts:** Dashboard supports arrow keys, Enter (side panel), `n` (check-in), `p` (profile), `?` (help). Guards against input/textarea/select focus. `highlightedRowIndex` resets on every `renderDashboard` call.
+- **Frontend staleness guard:** `loadDashboard(force)`, `loadEvalSummary(force)`, and `showDueProcess()` skip server calls if data was fetched within `DATA_FRESH_MS` (30s). Pass `force=true` after writes that need guaranteed fresh data (e.g., `doDeleteStudent`). Post-write success handlers should use `renderDashboardFromState(); _lastDashboardFetch = 0;` instead of `loadDashboard()` to avoid skeleton flash and redundant re-fetch.
 
 ## Helper Functions
 
@@ -102,6 +105,12 @@ Read-through cache in UserProperties with 2-minute TTL. Invalidated on writes. C
 | `generateProgressReport(studentId, quarter, summary)` | Public endpoint: single student report |
 | `generateBatchReports(quarter, summaries)` | Public endpoint: reports for entire caseload |
 | `getCurrentQuarter()` | Returns Q1-Q4 based on current date |
+| `invalidateStudentCaches_()` | Clear `cache_students` + `cache_dashboard` (student writes) |
+| `invalidateCheckInCaches_()` | Clear `cache_dashboard` (check-in writes) |
+| `invalidateEvalCaches_()` | Clear `cache_eval_summary` + `cache_dashboard` + `cache_due_process` (eval writes) |
+| `invalidateMeetingCaches_()` | Clear `cache_eval_summary` + `cache_due_process` (meeting writes) |
+| `invalidateProgressCaches_()` | Clear `cache_progress` + `cache_due_process` (progress writes) |
+| `invalidateCache_()` | Nuclear: clear all 5 caches (deleteStudent, team ops, force-refresh only) |
 
 ### Frontend — General Utilities (JavaScript.html)
 
@@ -131,6 +140,9 @@ Read-through cache in UserProperties with 2-minute TTL. Invalidated on writes. C
 | `renderCheckInProgress(data)` | "X of Y checked in this week" with progress bar |
 | `renderMissingAggregate(data)` | Total missing metric card with expandable student list |
 | `toggleKeyboardHelp()` | Show/hide keyboard shortcut overlay |
+| `renderDashboardFromState()` | Render dashboard cards from `appState` without server call |
+| `loadDashboard(force)` | Fetch + render dashboard; skips fetch if fresh unless `force=true` |
+| `loadEvalSummary(force)` | Fetch + render eval summary; skips fetch if fresh unless `force=true` |
 
 ### Frontend — Eval Helpers
 
@@ -289,7 +301,7 @@ For sheet upsert operations (read-check-write patterns), wrap in `LockService.ge
 
 - **Summary endpoints** should return all data the frontend needs for visibility decisions, not just aggregate counts.
 - Private functions use trailing underscore convention (`getSS_()`, `findRowById_()`).
-- `invalidateCache_()` must be called after any write operation.
+- **Targeted cache invalidation:** After writes, call the narrowest invalidation helper (`invalidateStudentCaches_()`, `invalidateCheckInCaches_()`, `invalidateEvalCaches_()`, `invalidateMeetingCaches_()`, `invalidateProgressCaches_()`). Only use nuclear `invalidateCache_()` for operations that affect all data (deleteStudent, team changes, force-refresh).
 - **Validate inputs at public endpoints:** Check `VALID_QUARTERS`, `VALID_PROGRESS_RATINGS`, student existence, and anecdotal note length before writing.
 
 ## Development Notes
