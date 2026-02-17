@@ -105,11 +105,63 @@ function updateEvalBreadcrumb_(typeLabel) {
 
 function buildEvalTypeDropdown_(evalId, currentType) {
   var resolved = EVAL_TYPE_ALIASES[currentType] || currentType;
-  var html = '<select class="eval-type-select" onchange="updateEvalType(\'' + esc(evalId) + '\', this.value)">';
+  var label = getEvalTypeLabel(currentType);
+  var html = '<div class="eval-type-picker">' +
+    '<button class="eval-type-ghost-btn" onclick="toggleEvalTypePicker(event)" aria-haspopup="listbox" aria-expanded="false">' +
+      esc(label) +
+      ' <svg class="eval-type-chevron" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>' +
+    '</button>' +
+    '<div class="eval-type-menu" role="listbox">';
   EVAL_TYPES.forEach(function(t) {
-    html += '<option value="' + esc(t.value) + '"' + (resolved === t.value ? ' selected' : '') + '>' + esc(t.label) + '</option>';
+    var selected = resolved === t.value;
+    html += '<div class="eval-type-menu-item' + (selected ? ' eval-type-menu-item-selected' : '') + '" role="option" aria-selected="' + selected + '" ' +
+      'onclick="selectEvalType(\'' + esc(evalId) + '\', \'' + esc(t.value) + '\')" ' +
+      'onkeydown="if(event.key===\'Enter\')selectEvalType(\'' + esc(evalId) + '\', \'' + esc(t.value) + '\')" tabindex="0">' +
+      esc(t.label) + '</div>';
   });
-  return html + '</select>';
+  html += '</div></div>';
+  return html;
+}
+
+function toggleEvalTypePicker(e) {
+  e.stopPropagation();
+  var picker = e.currentTarget.closest('.eval-type-picker');
+  var menu = picker.querySelector('.eval-type-menu');
+  var btn = picker.querySelector('.eval-type-ghost-btn');
+  var open = menu.classList.contains('eval-type-menu-open');
+  // Close any other open pickers first
+  document.querySelectorAll('.eval-type-menu-open').forEach(function(m) { m.classList.remove('eval-type-menu-open'); });
+  document.querySelectorAll('.eval-type-ghost-btn[aria-expanded="true"]').forEach(function(b) { b.setAttribute('aria-expanded', 'false'); });
+  if (!open) {
+    menu.classList.add('eval-type-menu-open');
+    btn.setAttribute('aria-expanded', 'true');
+    // Close on outside click
+    setTimeout(function() {
+      document.addEventListener('click', closeEvalTypePicker_, { once: true });
+    }, 0);
+  }
+}
+
+function closeEvalTypePicker_() {
+  document.querySelectorAll('.eval-type-menu-open').forEach(function(m) { m.classList.remove('eval-type-menu-open'); });
+  document.querySelectorAll('.eval-type-ghost-btn[aria-expanded="true"]').forEach(function(b) { b.setAttribute('aria-expanded', 'false'); });
+}
+
+function selectEvalType(evalId, newType) {
+  closeEvalTypePicker_();
+  // Update button label
+  var picker = document.querySelector('.eval-type-picker');
+  if (picker) {
+    var btn = picker.querySelector('.eval-type-ghost-btn');
+    btn.innerHTML = esc(getEvalTypeLabel(newType)) + ' <svg class="eval-type-chevron" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>';
+    // Update selected state
+    picker.querySelectorAll('.eval-type-menu-item').forEach(function(item) {
+      var isMatch = item.textContent.trim() === getEvalTypeLabel(newType);
+      item.classList.toggle('eval-type-menu-item-selected', isMatch);
+      item.setAttribute('aria-selected', isMatch);
+    });
+  }
+  updateEvalType(evalId, newType);
 }
 
 // ─── Eval Navigation (Prev/Next Student) ───

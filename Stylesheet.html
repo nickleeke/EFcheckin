@@ -4529,27 +4529,89 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   font-weight: 500;
   color: var(--md-on-surface);
 }
-.eval-type-select {
+.eval-type-picker {
+  position: relative;
+  display: inline-block;
+}
+.eval-type-ghost-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   font-size: 16px;
   font-weight: 500;
   color: var(--md-on-surface);
-  background: var(--md-surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='%23857373'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E") no-repeat right 6px center;
-  border: 1px solid var(--md-outline-variant);
+  background: transparent;
+  border: none;
   border-radius: var(--md-shape-sm);
-  padding: 6px 28px 6px 12px;
+  padding: 4px 4px 4px 0;
   cursor: pointer;
-  appearance: none;
-  -webkit-appearance: none;
-  transition: border-color var(--md-duration-short3) var(--md-easing-standard);
+  transition: color var(--md-duration-short3) var(--md-easing-standard),
+              background var(--md-duration-short3) var(--md-easing-standard);
 }
-.eval-type-select:hover {
-  border-color: var(--md-on-surface);
+.eval-type-ghost-btn:hover {
+  color: var(--md-primary);
+  background: rgba(196, 30, 58, 0.08);
 }
-.eval-type-select:focus {
-  outline: none;
-  border-color: var(--md-primary);
-  border-width: 2px;
-  padding: 5px 27px 5px 11px;
+.eval-type-ghost-btn:focus-visible {
+  outline: 2px solid var(--md-primary);
+  outline-offset: 2px;
+}
+.eval-type-ghost-btn[aria-expanded="true"] {
+  color: var(--md-primary);
+}
+.eval-type-ghost-btn[aria-expanded="true"] .eval-type-chevron {
+  transform: rotate(180deg);
+}
+.eval-type-chevron {
+  transition: transform var(--md-duration-short3) var(--md-easing-standard);
+  opacity: 0.5;
+}
+.eval-type-ghost-btn:hover .eval-type-chevron {
+  opacity: 1;
+}
+.eval-type-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 20;
+  min-width: 180px;
+  background: var(--md-surface-container);
+  border-radius: var(--md-shape-sm);
+  box-shadow: var(--md-elevation-2);
+  padding: 4px 0;
+  opacity: 0;
+  transform: scaleY(0.8) translateY(-4px);
+  transform-origin: top left;
+  pointer-events: none;
+  transition: opacity var(--md-duration-short3) var(--md-easing-standard),
+              transform var(--md-duration-short3) var(--md-easing-standard);
+}
+.eval-type-menu-open {
+  opacity: 1;
+  transform: scaleY(1) translateY(0);
+  pointer-events: auto;
+}
+.eval-type-menu-item {
+  padding: 8px 16px;
+  font-size: 14px;
+  color: var(--md-on-surface);
+  cursor: pointer;
+  transition: background var(--md-duration-short2) var(--md-easing-standard);
+}
+.eval-type-menu-item:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+.eval-type-menu-item:focus-visible {
+  outline: 2px solid var(--md-primary);
+  outline-offset: -2px;
+}
+.eval-type-menu-item-selected {
+  color: var(--md-primary);
+  font-weight: 500;
+  background: rgba(196, 30, 58, 0.06);
+}
+.eval-type-menu-item-selected:hover {
+  background: rgba(196, 30, 58, 0.12);
 }
 .eval-summary-progress {
   font-size: 14px;
@@ -5381,7 +5443,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .ct-role-select:focus-visible,
 .admin-add-form input:focus-visible,
 .admin-assign-table select:focus-visible,
-.eval-type-select:focus-visible,
 .eval-meeting-date-input:focus-visible,
 .eval-item-due-date:focus-visible,
 .eval-add-task-input:focus-visible,
