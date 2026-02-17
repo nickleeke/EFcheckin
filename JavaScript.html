@@ -974,6 +974,7 @@ function renderDashboard(data) {
     var delay = Math.min(index * 50, 400);
     html += '<tr class="stagger-row" data-student-id="' + s.id + '" data-row-index="' + index + '" style="animation-delay:' + delay + 'ms" onclick="openSidePanel(' + origIndex + ')" title="Click for quick view">';
     html += '<td><strong>' + esc(s.firstName + ' ' + s.lastName) + '</strong>';
+    if (s.online) html += ' <span class="online-badge" title="Online">Online</span>';
     if (s.evalType) {
       var evalLabel = getEvalTypeLabel(s.evalType);
       html += ' <span class="chip chip-clickable eval-badge" onclick="event.stopPropagation(); openEvalFromBadge(\'' + s.id + '\')" title="View ' + evalLabel + ' checklist">' + evalLabel + '</span>';
@@ -1095,7 +1096,7 @@ function renderNeedsAttention(data) {
 
     var spIdx = (appState.dashboardData || []).indexOf(s);
     html += '<div class="needs-attention-card" role="button" tabindex="0" onclick="openSidePanel(' + spIdx + ')" onkeydown="if(event.key===\'Enter\')openSidePanel(' + spIdx + ')">';
-    html += '<div class="needs-attention-name">' + esc(s.firstName + ' ' + s.lastName) + '</div>';
+    html += '<div class="needs-attention-name">' + esc(s.firstName + ' ' + s.lastName) + (s.online ? ' <span class="online-badge" title="Online">Online</span>' : '') + '</div>';
     html += '<div class="needs-attention-reasons">';
     reasons.forEach(function(r) {
       html += '<span class="needs-attention-reason">' + esc(r) + '</span>';
@@ -1199,7 +1200,7 @@ function renderMissingAggregate(data) {
 
   studentsWithMissing.forEach(function(s) {
     html += '<div class="missing-agg-row" role="button" tabindex="0" onclick="event.stopPropagation(); showMissingAssignments(\'' + s.id + '\')" onkeydown="if(event.key===\'Enter\'){event.stopPropagation(); showMissingAssignments(\'' + s.id + '\')}">' +
-      '<span>' + esc(s.firstName + ' ' + s.lastName) + '</span>' +
+      '<span>' + esc(s.firstName + ' ' + s.lastName) + (s.online ? ' <span class="online-badge" title="Online">Online</span>' : '') + '</span>' +
       '<span class="missing-agg-count">' + s.totalMissing + '</span>' +
     '</div>';
   });
@@ -1793,7 +1794,7 @@ function buildDPProgressSection_(data) {
   var studentOrder = [];
   assignments.forEach(function(a) {
     if (!studentGoals[a.studentId]) {
-      studentGoals[a.studentId] = { name: a.studentName, caseManager: a.caseManagerEmail, goals: [] };
+      studentGoals[a.studentId] = { name: a.studentName, caseManager: a.caseManagerEmail, online: a.online, goals: [] };
       studentOrder.push(a.studentId);
     }
     studentGoals[a.studentId].goals.push(a);
@@ -1812,7 +1813,7 @@ function buildDPProgressSection_(data) {
 
     // Header row: student name + status
     html += '<div class="dp-progress-card-header">';
-    html += '<span class="dp-progress-card-name">' + esc(info.name) + '</span>';
+    html += '<span class="dp-progress-card-name">' + esc(info.name) + (info.online ? ' <span class="online-badge" title="Online">Online</span>' : '') + '</span>';
     if (comp.allDone) {
       html += '<span class="chip-green">Complete &#x2714;&#xFE0E;</span>';
     } else {
@@ -1889,7 +1890,7 @@ function renderRecentStudents() {
     var cmName = cmEmail ? getCaseManagerName(cmEmail) : '--';
 
     html += '<tr>';
-    html += '<td><strong>' + esc(s.firstName + ' ' + s.lastName) + '</strong></td>';
+    html += '<td><strong>' + esc(s.firstName + ' ' + s.lastName) + '</strong>' + (s.online ? ' <span class="online-badge" title="Online">Online</span>' : '') + '</td>';
     html += '<td>' + esc(cmName) + '</td>';
     html += '<td>' + esc(s.grade || '--') + '</td>';
     html += '<td><div class="action-btns">';
@@ -2039,7 +2040,8 @@ function openSidePanel(index) {
   if (!s) return;
   trackRecentStudent(s.id);
 
-  document.getElementById('side-panel-title').textContent = s.firstName + ' ' + s.lastName;
+  var sidePanelTitle = document.getElementById('side-panel-title');
+  sidePanelTitle.innerHTML = esc(s.firstName + ' ' + s.lastName) + (s.online ? ' <span class="online-badge" title="Online">Online</span>' : '');
 
   var content = '';
 
@@ -2299,7 +2301,7 @@ function startCheckIn(studentId, existingCheckIn) {
 
 function renderCheckInForm(student, checkIns, existingCheckIn) {
   document.getElementById('checkin-view-breadcrumb').textContent = 'Weekly Check-In';
-  document.getElementById('checkin-view-title').textContent = student.firstName + ' ' + student.lastName;
+  document.getElementById('checkin-view-title').innerHTML = esc(student.firstName + ' ' + student.lastName) + (student.online ? ' <span class="online-badge" title="Online">Online</span>' : '');
 
   var container = document.getElementById('checkin-form-container');
   var html = '';
@@ -2968,8 +2970,8 @@ function showMissingAssignments(studentId) {
 
   document.getElementById('missing-view-breadcrumb').innerHTML =
     '<button class="breadcrumb-link" onclick="editStudent(appState.missingViewStudentId)">Student Profile</button> <svg class="breadcrumb-chevron" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg> Missing Assignments';
-  document.getElementById('missing-view-title').textContent =
-    student.firstName + ' ' + student.lastName;
+  document.getElementById('missing-view-title').innerHTML =
+    esc(student.firstName + ' ' + student.lastName) + (student.online ? ' <span class="online-badge" title="Online">Online</span>' : '');
 
   renderMissingView(student);
   showView('missing-view');
@@ -3454,8 +3456,8 @@ function showStudentProfile(studentId) {
       appState.currentStudent = student;
 
       try {
-        document.getElementById('student-view-title').textContent =
-          student.firstName + ' ' + student.lastName;
+        document.getElementById('student-view-title').innerHTML =
+          esc(student.firstName + ' ' + student.lastName) + (student.online ? ' <span class="online-badge" title="Online">Online</span>' : '');
         renderStudentProfileDashboard(student);
         renderStudentMenu(studentId);
       } catch(e) { showToast('Render error: ' + e.message); return; }
@@ -4360,6 +4362,15 @@ function renderStudentForm(student) {
       '<textarea id="st-iepGoal" placeholder="Enter the student\'s current IEP goal">' + esc(student.iepGoal || '') + '</textarea></div>' +
   '</div>';
 
+  // Online status
+  html += '<div class="form-section">' +
+    '<div class="form-section-title">Online Status</div>' +
+    '<div class="form-group"><label class="contact-primary-check">' +
+      '<input type="checkbox" id="st-online"' + (student.online ? ' checked' : '') + '> ' +
+      'Student attends online' +
+    '</label></div>' +
+  '</div>';
+
   // Classes
   html += '<div class="form-section">' +
     '<div class="form-section-title">Classes</div>' +
@@ -4794,6 +4805,7 @@ function saveStudentForm() {
     iepGoal: document.getElementById('st-iepGoal').value.trim(),
     notes: document.getElementById('st-notes').value.trim(),
     caseManagerEmail: document.getElementById('st-caseManager').value,
+    online: document.getElementById('st-online').checked,
     classes: classes,
     contacts: collectFormContacts()
   };
@@ -4819,6 +4831,7 @@ function saveStudentForm() {
         s.iepGoal = profile.iepGoal;
         s.classes = profile.classes;
         s.caseManagerEmail = profile.caseManagerEmail;
+        s.online = profile.online;
         s.contacts = profile.contacts;
         s.contactsJson = JSON.stringify(profile.contacts);
       }
@@ -4831,6 +4844,7 @@ function saveStudentForm() {
       focusGoal: profile.focusGoal, iepGoal: profile.iepGoal,
       classes: profile.classes,
       caseManagerEmail: profile.caseManagerEmail,
+      online: profile.online,
       contacts: profile.contacts,
       contactsJson: JSON.stringify(profile.contacts),
       totalCheckIns: 0, latestWeek: null, latestMicroGoal: null,
@@ -6198,6 +6212,7 @@ function renderMyCaseload() {
     var origIndex = appState.dashboardData.indexOf(s);
     html += '<tr onclick="openSidePanel(' + origIndex + ')" title="Click for quick view">';
     html += '<td><strong>' + esc(s.firstName + ' ' + s.lastName) + '</strong>';
+    if (s.online) html += ' <span class="online-badge" title="Online">Online</span>';
     if (s.evalType) {
       var evalLabel = getEvalTypeLabel(s.evalType);
       html += ' <span class="chip chip-clickable eval-badge" onclick="event.stopPropagation(); openEvalFromBadge(\'' + s.id + '\')" title="View ' + evalLabel + ' checklist">' + evalLabel + '</span>';
