@@ -27,7 +27,11 @@ var appState = {
   recentStudents: [],
   searchQuery: '',
   currentProgressQuarter: null,
-  progressEntries: []
+  progressEntries: [],
+  dashboardMeetings: [],
+  dueProcessData: null,
+  dueProcessCalendarDays: 7,
+  dueProcessExpandedDay: null
 };
 var _persistTimers = {};
 var _persistInFlight = 0;
@@ -45,6 +49,7 @@ var _searchDebounceTimer = null;
 var _evalFocusedIndex = -1;
 var _progressAutosaveTimer = null;
 var _progressAutosaveInFlight = false;
+var _progressCompletionFiredFor = {};
 var _progressAutosaveDirty = false;
 
 var onboardingState = {
@@ -742,8 +747,8 @@ function closeConfirmDialog(overlayEl) {
 // ─── View Management ───
 var VIEW_ORDER = {
   'auth-loading': -1, 'onboarding-view': -1,
-  'dashboard-view': 0, 'coteacher-view': 1,
-  'student-view': 2, 'missing-view': 3, 'eval-checklist-view': 3, 'checkin-view': 4
+  'dashboard-view': 0, 'dueprocess-view': 1, 'coteacher-view': 2,
+  'student-view': 3, 'missing-view': 4, 'eval-checklist-view': 4, 'checkin-view': 5
 };
 var _currentViewId = 'auth-loading';
 
@@ -1219,6 +1224,23 @@ function loadEvalSummary() {
       hideEvalSections_();
     })
     .getEvalTaskSummary();
+
+  // Also fetch meetings for timeline meeting-day highlights
+  google.script.run
+    .withSuccessHandler(function(meetings) {
+      appState.dashboardMeetings = meetings || [];
+      // Re-render timeline if eval summary already loaded
+      if (appState.evalSummary) {
+        var atAGlanceContent = document.getElementById('at-a-glance-content');
+        if (atAGlanceContent && atAGlanceContent.innerHTML) {
+          renderEvalSummary(appState.evalSummary);
+        }
+      }
+    })
+    .withFailureHandler(function() {
+      appState.dashboardMeetings = [];
+    })
+    .getAllMeetings();
 }
 
 function hideEvalSections_() {
@@ -1331,16 +1353,28 @@ function buildTimelineHtml_(summary) {
 
   html += '<div class="eval-timeline-days">';
 
+  // Build meeting date lookup for tertiary highlights
+  var meetingsByDate = {};
+  (appState.dashboardMeetings || []).forEach(function(m) {
+    if (m.date) {
+      if (!meetingsByDate[m.date]) meetingsByDate[m.date] = [];
+      meetingsByDate[m.date].push(m);
+    }
+  });
+
   summary.timeline.forEach(function(day, idx) {
     var isToday = (idx === 0);
     var isWeekend = (day.dayOfWeek === 0 || day.dayOfWeek === 6);
     var isExpanded = (appState.timelineExpandedDay === idx);
     var hasTasks = day.tasks.length > 0;
+    var dayMeetings = meetingsByDate[day.date] || [];
+    var hasMeeting = dayMeetings.length > 0;
 
     var dayClass = 'eval-timeline-day';
     if (isToday) dayClass += ' eval-timeline-today';
     if (isWeekend) dayClass += ' eval-timeline-weekend';
     if (isExpanded) dayClass += ' eval-timeline-day-expanded';
+    if (hasMeeting) dayClass += ' eval-timeline-meeting';
 
     html += '<button class="' + dayClass + '" onclick="toggleTimelineDay(' + idx + ')">';
     html += '<span class="eval-timeline-day-abbr">' + (isToday ? 'Today' : esc(day.dayAbbr)) + '</span>';
@@ -1357,6 +1391,11 @@ function buildTimelineHtml_(summary) {
       }
       html += '</div>';
     }
+
+    if (hasMeeting) {
+      html += '<span class="eval-timeline-meeting-badge" title="IEP Meeting">' + dayMeetings.length + '</span>';
+    }
+
     html += '</button>';
   });
   html += '</div>';
@@ -1447,6 +1486,369 @@ function renderEvalSummary(summary) {
       evalsEl.style.display = 'none';
     }
   }
+}
+
+// ─── Due Process View ───
+
+function showDueProcess() {
+  document.querySelectorAll('.nav-drawer-item').forEach(function(t) { t.classList.remove('active'); });
+  document.querySelectorAll('.nav-drawer-child').forEach(function(t) { t.classList.remove('active'); });
+  var dpItem = document.getElementById('drawer-dueprocess');
+  if (dpItem) dpItem.classList.add('active');
+  closeNavDrawerIfMobile_();
+
+  appState.dueProcessExpandedDay = null;
+  appState.dueProcessCalendarDays = 7;
+
+  showView('dueprocess-view');
+  var container = document.getElementById('dueprocess-content');
+  if (container) container.innerHTML = buildDueProcessSkeleton_();
+
+  google.script.run
+    .withSuccessHandler(function(data) {
+      if (_currentViewId !== 'dueprocess-view') return;
+      appState.dueProcessData = data;
+      try { renderDueProcess(data); }
+      catch(e) { showToast('Error rendering Due Process: ' + e.message); }
+    })
+    .withFailureHandler(function(err) {
+      var container = document.getElementById('dueprocess-content');
+      if (container) container.innerHTML = renderErrorState(err && err.message ? err.message : String(err));
+    })
+    .getDueProcessData();
+}
+
+function refreshDueProcess() {
+  showDueProcess();
+}
+
+function buildDueProcessSkeleton_() {
+  return '<div class="dp-section"><div class="skeleton skeleton-title" style="width:180px;margin-bottom:12px;"></div>' +
+    '<div style="display:flex;gap:12px;">' +
+    '<div class="skeleton" style="width:200px;height:100px;border-radius:12px;"></div>' +
+    '<div class="skeleton" style="width:200px;height:100px;border-radius:12px;"></div>' +
+    '<div class="skeleton" style="width:200px;height:100px;border-radius:12px;"></div></div></div>' +
+    '<div class="dp-section"><div class="skeleton skeleton-title" style="width:140px;margin-bottom:12px;"></div>' +
+    '<div class="skeleton" style="width:100%;height:80px;border-radius:12px;"></div></div>' +
+    '<div class="dp-section"><div class="skeleton skeleton-title" style="width:160px;margin-bottom:12px;"></div>' +
+    '<div class="skeleton" style="width:100%;height:120px;border-radius:12px;"></div></div>';
+}
+
+function renderDueProcess(data) {
+  var container = document.getElementById('dueprocess-content');
+  if (!container) return;
+  var html = '';
+  html += buildDPEvalsSection_(data.evalSummary);
+  html += buildDPCalendarSection_(data);
+  html += buildDPProgressSection_(data);
+  container.innerHTML = html;
+  animateContentIn(container);
+}
+
+// ── Section 1: Evaluations in Progress ──
+
+function buildDPEvalsSection_(evalSummary) {
+  var activeEvals = (evalSummary && evalSummary.activeEvals) || [];
+  var overdueCount = (evalSummary && evalSummary.overdueCount) || 0;
+  var dueThisWeekCount = (evalSummary && evalSummary.dueThisWeekCount) || 0;
+
+  var html = '<div class="dp-section">';
+  html += '<h2 class="dp-section-header">Evaluations in Progress</h2>';
+
+  if (activeEvals.length === 0) {
+    html += '<p class="dp-empty-state">No active evaluations.</p>';
+    html += '</div>';
+    return html;
+  }
+
+  // Summary chips
+  if (overdueCount > 0 || dueThisWeekCount > 0) {
+    html += '<div class="dp-eval-chips">';
+    if (overdueCount > 0) {
+      html += '<span class="chip-red">' + overdueCount + ' overdue task' + (overdueCount !== 1 ? 's' : '') + '</span>';
+    }
+    if (dueThisWeekCount > 0) {
+      html += '<span class="chip-yellow">' + dueThisWeekCount + ' due this week</span>';
+    }
+    html += '</div>';
+  }
+
+  html += buildEvalCarouselHtml_(activeEvals);
+  html += '</div>';
+  return html;
+}
+
+// ── Section 2: Calendar (Week / Month at a Glance) ──
+
+function buildDPCalendarSection_(data) {
+  var numDays = appState.dueProcessCalendarDays;
+  var meetings = data.meetings || [];
+  var evalSummary = data.evalSummary || {};
+  var timeline = evalSummary.timeline || [];
+
+  // Build day objects
+  var now = new Date();
+  var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  var todayStr = today.getFullYear() + '-' +
+    String(today.getMonth() + 1).padStart(2, '0') + '-' +
+    String(today.getDate()).padStart(2, '0');
+  var dayAbbrs = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  var monthAbbrs = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  var days = [];
+  for (var d = 0; d < numDays; d++) {
+    var dayDate = new Date(today.getTime() + d * 86400000);
+    var dateStr = dayDate.getFullYear() + '-' +
+      String(dayDate.getMonth() + 1).padStart(2, '0') + '-' +
+      String(dayDate.getDate()).padStart(2, '0');
+    days.push({
+      date: dateStr,
+      dayOfWeek: dayDate.getDay(),
+      dayAbbr: dayAbbrs[dayDate.getDay()],
+      dayNum: dayDate.getDate(),
+      monthShort: monthAbbrs[dayDate.getMonth()],
+      isToday: dateStr === todayStr,
+      tasks: [],
+      meetings: []
+    });
+  }
+
+  // Map timeline tasks to days
+  var dateMap = {};
+  days.forEach(function(day, idx) { dateMap[day.date] = idx; });
+
+  timeline.forEach(function(tDay) {
+    var idx = dateMap[tDay.date];
+    if (idx !== undefined) {
+      days[idx].tasks = tDay.tasks || [];
+    }
+  });
+
+  // Map meetings to days
+  meetings.forEach(function(m) {
+    var idx = dateMap[m.date];
+    if (idx !== undefined) {
+      days[idx].meetings.push(m);
+    }
+  });
+
+  var html = '<div class="dp-section">';
+  html += '<div class="dp-calendar-header">';
+  html += '<h2 class="dp-section-header" style="margin-bottom:0;">At a Glance</h2>';
+  html += '<button class="btn btn-sm" onclick="toggleDPCalendarRange()">' +
+    (numDays === 7 ? 'Show 30 Days' : 'Show 7 Days') + '</button>';
+  html += '</div>';
+
+  if (numDays <= 7) {
+    html += '<div class="dp-calendar-strip">';
+    html += '<div class="dp-calendar-days">';
+    html += buildDPCalendarDaysHtml_(days);
+    html += '</div>';
+    html += '</div>';
+  } else {
+    html += '<div class="dp-calendar-strip dp-calendar-30">';
+    for (var w = 0; w < Math.ceil(numDays / 7); w++) {
+      var weekDays = days.slice(w * 7, (w + 1) * 7);
+      // Month label if first day of week is in a new month or first week
+      if (w === 0 || weekDays[0].dayNum <= 7) {
+        html += '<div class="dp-calendar-month-label">' + esc(weekDays[0].monthShort) + '</div>';
+      }
+      html += '<div class="dp-calendar-days">';
+      html += buildDPCalendarDaysHtml_(weekDays);
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+
+  // Expanded day details
+  if (appState.dueProcessExpandedDay !== null) {
+    var expandedIdx = dateMap[appState.dueProcessExpandedDay];
+    if (expandedIdx !== undefined) {
+      html += buildDPExpandedDayHtml_(days[expandedIdx]);
+    }
+  }
+
+  html += '</div>';
+  return html;
+}
+
+function buildDPCalendarDaysHtml_(days) {
+  var html = '';
+  days.forEach(function(day) {
+    var hasMeeting = day.meetings.length > 0;
+    var hasTasks = day.tasks.length > 0;
+    var isWeekend = (day.dayOfWeek === 0 || day.dayOfWeek === 6);
+    var isExpanded = (appState.dueProcessExpandedDay === day.date);
+
+    var dayClass = 'dp-cal-day';
+    if (day.isToday) dayClass += ' dp-cal-today';
+    if (isWeekend) dayClass += ' dp-cal-weekend';
+    if (hasMeeting) dayClass += ' dp-cal-meeting';
+    if (isExpanded) dayClass += ' dp-cal-expanded';
+
+    html += '<button class="' + dayClass + '" onclick="toggleDPDay(\'' + day.date + '\')" ' +
+      'aria-label="' + esc(day.dayAbbr) + ' ' + day.dayNum + (hasMeeting ? ', IEP meeting' : '') +
+      (hasTasks ? ', ' + day.tasks.length + ' task' + (day.tasks.length !== 1 ? 's' : '') : '') + '">';
+    html += '<span class="dp-cal-day-abbr">' + (day.isToday ? 'Today' : esc(day.dayAbbr)) + '</span>';
+    html += '<span class="dp-cal-day-num">' + day.dayNum + '</span>';
+
+    if (hasTasks) {
+      html += '<div class="dp-cal-dots">';
+      var dotCount = Math.min(day.tasks.length, 3);
+      for (var i = 0; i < dotCount; i++) {
+        html += '<span class="eval-timeline-dot"></span>';
+      }
+      if (day.tasks.length > 3) {
+        html += '<span class="eval-timeline-dot-more">+' + (day.tasks.length - 3) + '</span>';
+      }
+      html += '</div>';
+    }
+
+    if (hasMeeting) {
+      html += '<span class="dp-cal-meeting-badge" title="IEP Meeting">' + day.meetings.length + '</span>';
+    }
+
+    html += '</button>';
+  });
+  return html;
+}
+
+function buildDPExpandedDayHtml_(day) {
+  if (!day) return '';
+  var hasTasks = day.tasks.length > 0;
+  var hasMeetings = day.meetings.length > 0;
+
+  if (!hasTasks && !hasMeetings) {
+    var emptyLabel = day.isToday ? 'today' : (esc(day.dayAbbr) + ', ' + esc(day.monthShort) + ' ' + day.dayNum);
+    return '<div class="dp-expanded-day dp-expanded-day-empty"><span>Nothing scheduled ' + emptyLabel + '</span></div>';
+  }
+
+  var dayLabel = day.isToday ? 'Today' : (esc(day.dayAbbr) + ', ' + esc(day.monthShort) + ' ' + day.dayNum);
+  var html = '<div class="dp-expanded-day">';
+  html += '<div class="dp-expanded-day-header">' + dayLabel + '</div>';
+
+  // Meetings first
+  if (hasMeetings) {
+    day.meetings.forEach(function(m) {
+      html += '<div class="dp-expanded-meeting">' +
+        '<span class="dp-expanded-meeting-badge">IEP</span>' +
+        '<div class="dp-expanded-meeting-info">' +
+          '<span class="dp-expanded-meeting-type">' + esc(m.meetingType) + '</span>' +
+          '<span class="dp-expanded-meeting-student">' + esc(m.studentName) +
+          (m.notes ? ' &middot; ' + esc(m.notes) : '') + '</span>' +
+        '</div>' +
+      '</div>';
+    });
+  }
+
+  // Tasks
+  if (hasTasks) {
+    day.tasks.forEach(function(task) {
+      var typeLabel = getEvalTypeLabel(task.evalType);
+      html += '<div class="dp-expanded-task" role="button" tabindex="0" ' +
+        'onclick="navigateToEvalTask(\'' + esc(task.studentId) + '\', \'' + esc(task.itemId || '') + '\')" ' +
+        'onkeydown="if(event.key===\'Enter\')navigateToEvalTask(\'' + esc(task.studentId) + '\', \'' + esc(task.itemId || '') + '\')">' +
+        '<span class="eval-timeline-task-dot"></span>' +
+        '<div class="dp-expanded-task-info">' +
+          '<span class="dp-expanded-task-text">' + esc(task.text) + '</span>' +
+          '<span class="dp-expanded-task-student">' + esc(task.studentName) + ' &middot; ' + esc(typeLabel) + '</span>' +
+        '</div>' +
+      '</div>';
+    });
+  }
+
+  html += '</div>';
+  return html;
+}
+
+function toggleDPCalendarRange() {
+  appState.dueProcessCalendarDays = (appState.dueProcessCalendarDays === 7) ? 30 : 7;
+  appState.dueProcessExpandedDay = null;
+  if (appState.dueProcessData) renderDueProcess(appState.dueProcessData);
+}
+
+function toggleDPDay(dateStr) {
+  appState.dueProcessExpandedDay = (appState.dueProcessExpandedDay === dateStr) ? null : dateStr;
+  if (appState.dueProcessData) renderDueProcess(appState.dueProcessData);
+}
+
+// ── Section 3: Progress Reports ──
+
+function buildDPProgressSection_(data) {
+  var assignments = data.progressAssignments || [];
+  var completionMap = data.completionMap || {};
+  var quarter = data.currentQuarter || '';
+
+  var html = '<div class="dp-section">';
+  html += '<h2 class="dp-section-header">Progress Reports (' + esc(quarter) + ')</h2>';
+
+  if (assignments.length === 0) {
+    html += '<p class="dp-empty-state">No goals assigned to you. Mark yourself as responsible in student profiles.</p>';
+    html += '</div>';
+    return html;
+  }
+
+  // Group by studentId
+  var studentGoals = {};
+  var studentOrder = [];
+  assignments.forEach(function(a) {
+    if (!studentGoals[a.studentId]) {
+      studentGoals[a.studentId] = { name: a.studentName, caseManager: a.caseManagerEmail, goals: [] };
+      studentOrder.push(a.studentId);
+    }
+    studentGoals[a.studentId].goals.push(a);
+  });
+
+  html += '<div class="dp-progress-list">';
+
+  studentOrder.forEach(function(sid) {
+    var info = studentGoals[sid];
+    var comp = completionMap[sid] || { total: 0, completed: 0, allDone: false };
+    var cardClass = 'dp-progress-card' + (comp.allDone ? ' dp-progress-complete' : '');
+
+    html += '<div class="' + cardClass + '" role="button" tabindex="0" ' +
+      'onclick="showStudentProfile(\'' + esc(sid) + '\')" ' +
+      'onkeydown="if(event.key===\'Enter\')showStudentProfile(\'' + esc(sid) + '\')">';
+
+    // Header row: student name + status
+    html += '<div class="dp-progress-card-header">';
+    html += '<span class="dp-progress-card-name">' + esc(info.name) + '</span>';
+    if (comp.allDone) {
+      html += '<span class="chip-green">Complete &#x2714;&#xFE0E;</span>';
+    } else {
+      html += '<span class="chip-yellow">' + comp.completed + '/' + comp.total + '</span>';
+    }
+    html += '</div>';
+
+    // Goal areas
+    html += '<div class="dp-progress-card-goals">';
+    info.goals.forEach(function(g) {
+      html += '<span class="dp-progress-goal-chip">' + esc(g.goalArea) + '</span>';
+    });
+    html += '</div>';
+
+    // Case manager
+    html += '<div class="dp-progress-card-cm">';
+    html += '<span class="dp-progress-cm-label">Case Manager:</span> ';
+    html += '<span>' + esc(info.caseManager || 'Not assigned') + '</span>';
+    html += '</div>';
+
+    html += '</div>';
+
+    // Fire confetti for newly-complete students on initial render
+    if (comp.allDone && !_progressCompletionFiredFor[sid + quarter]) {
+      _progressCompletionFiredFor[sid + quarter] = true;
+      // Defer confetti to after DOM render
+      setTimeout(function() {
+        var card = document.querySelector('.dp-progress-card[onclick*="' + sid + '"]');
+        if (card) launchConfetti(card);
+      }, 400);
+    }
+  });
+
+  html += '</div>';
+  html += '</div>';
+  return html;
 }
 
 // ─── Recent Students ───
@@ -2465,6 +2867,8 @@ function collectGoalsData() {
     var text = goalText ? goalText.value : '';
     var goalAreaInput = goalEl.querySelector('[data-field="goal-area"]');
     var goalArea = goalAreaInput ? goalAreaInput.value : '';
+    var responsibleSelect = goalEl.querySelector('[data-field="goal-responsible"]');
+    var responsibleEmail = responsibleSelect ? responsibleSelect.value : '';
 
     var objectives = [];
     var objItems = goalEl.querySelectorAll('.profile-objective-item');
@@ -2481,6 +2885,7 @@ function collectGoalsData() {
       id: goalId,
       text: text,
       goalArea: goalArea,
+      responsibleEmail: responsibleEmail,
       objectives: objectives
     });
   });
@@ -3368,6 +3773,25 @@ function renderGoalItem(goal) {
     'placeholder="e.g., Math Calculation, Reading Comprehension, Behavior..." ' +
     'value="' + esc(goal.goalArea || '') + '" />';
   html += '</div>';
+  // Responsibility selector
+  html += '<div class="profile-goal-responsible-row">';
+  html += '<label class="profile-goal-responsible-label">Progress Reporter:</label>';
+  html += '<select class="profile-goal-responsible-select" data-field="goal-responsible">';
+  html += '<option value="">Not assigned</option>';
+  var currentEmail = (appState.currentUserEmail || '').toLowerCase();
+  var respEmail = (goal.responsibleEmail || '').toLowerCase();
+  html += '<option value="' + esc(appState.currentUserEmail) + '"' +
+    (respEmail === currentEmail && respEmail ? ' selected' : '') + '>Me</option>';
+  // Add team members from caseManagers
+  (appState.caseManagers || []).forEach(function(cm) {
+    var cmEmail = (cm.email || '').toLowerCase();
+    if (cmEmail && cmEmail !== currentEmail) {
+      html += '<option value="' + esc(cm.email) + '"' +
+        (respEmail === cmEmail ? ' selected' : '') + '>' + esc(cm.email) + '</option>';
+    }
+  });
+  html += '</select>';
+  html += '</div>';
   html += '<textarea class="profile-goal-textarea" data-field="goal-text" placeholder="Enter IEP goal...">' + esc(goal.text || '') + '</textarea>';
 
   // Objectives
@@ -3668,6 +4092,7 @@ function performProgressAutosave(studentId) {
             google.script.run
               .withSuccessHandler(function(fresh) {
                 appState.progressEntries = fresh || [];
+                checkProgressCompletion_(studentId);
               })
               .getAllProgressForStudent(studentId);
 
@@ -3690,6 +4115,51 @@ function performProgressAutosave(studentId) {
       })
       .saveProgressEntry(entry);
   });
+}
+
+function checkProgressCompletion_(studentId) {
+  var student = getStudentById(studentId);
+  if (!student) return;
+  var goals = [];
+  try { goals = JSON.parse(student.goalsJson || '[]'); } catch(e) { return; }
+
+  var email = (appState.currentUserEmail || '').toLowerCase();
+  var myGoals = goals.filter(function(g) {
+    return (g.responsibleEmail || '').toLowerCase() === email;
+  });
+  if (myGoals.length === 0) return;
+
+  var quarter = appState.currentProgressQuarter;
+  var entries = appState.progressEntries || [];
+  var allComplete = true;
+  var totalObjectives = 0;
+
+  myGoals.forEach(function(goal) {
+    var objectives = goal.objectives || [];
+    if (objectives.length === 0) {
+      totalObjectives++;
+      var hasEntry = entries.some(function(e) {
+        return e.goalId === goal.id && !e.objectiveId && e.quarter === quarter && e.progressRating;
+      });
+      if (!hasEntry) allComplete = false;
+    } else {
+      objectives.forEach(function(obj) {
+        totalObjectives++;
+        var hasEntry = entries.some(function(e) {
+          return e.goalId === goal.id && e.objectiveId === obj.id && e.quarter === quarter && e.progressRating;
+        });
+        if (!hasEntry) allComplete = false;
+      });
+    }
+  });
+
+  if (allComplete && totalObjectives > 0 && !_progressCompletionFiredFor[studentId + quarter]) {
+    _progressCompletionFiredFor[studentId + quarter] = true;
+    var originEl = document.getElementById('progress-section-container') ||
+                   document.getElementById('student-form-container');
+    launchConfetti(originEl);
+    showToast('All progress reports complete for ' + esc(student.firstName) + '!');
+  }
 }
 
 function saveAllProgress(studentId) {
@@ -4644,7 +5114,7 @@ function printStudentReport() {
   var html = '<!DOCTYPE html><html><head><title>Report - ' + esc(name) + '</title>' +
     '<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">' +
     '<style>' +
-    'body { font-family: "Roboto", Arial, sans-serif; color: #1C1B1F; margin: 0; padding: 24px 32px; font-size: 13px; -webkit-font-smoothing: antialiased; }' +
+    'body { font-family: "Roboto", sans-serif; color: #1C1B1F; margin: 0; padding: 24px 32px; font-size: 13px; -webkit-font-smoothing: antialiased; }' +
     '.report-logo { text-align: center; margin-bottom: 16px; }' +
     '.report-logo img { height: 48px; }' +
     'h1 { font-size: 20px; margin: 0 0 4px; }' +

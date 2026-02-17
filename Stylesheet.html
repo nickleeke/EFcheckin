@@ -132,6 +132,7 @@
 
 /* ─── Reset & Base Typography ─── */
 * { margin: 0; padding: 0; box-sizing: border-box; }
+button, input, select, textarea { font-family: inherit; }
 button { appearance: none; -webkit-appearance: none; }
 
 body {
@@ -2513,7 +2514,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 }
 
 /* ─── Button Ripple Effect ─── */
-.btn, .btn-icon, .btn-ghost, .btn-outlined, .action-btn, .rating-btn, .nav-drawer-item, .filter-chip, .goal-met-btn, .eval-filter-chip, .eval-nav-btn {
+.btn, .btn-icon, .btn-ghost, .btn-outlined, .action-btn, .rating-btn, .nav-drawer-item, .filter-chip, .goal-met-btn, .eval-filter-chip, .eval-nav-btn, .dp-cal-day {
   position: relative;
   overflow: hidden;
 }
@@ -3930,6 +3931,31 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   box-shadow: var(--md-elevation-1);
 }
 
+.eval-timeline-meeting {
+  border: 2px solid var(--md-tertiary);
+  background: rgba(117, 90, 47, 0.08);
+}
+.eval-timeline-meeting:hover {
+  background: rgba(117, 90, 47, 0.14);
+}
+.eval-timeline-meeting.eval-timeline-today {
+  border-color: var(--md-tertiary);
+  background: rgba(117, 90, 47, 0.12);
+}
+.eval-timeline-meeting-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--md-tertiary);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  margin-top: 2px;
+}
+
 .eval-timeline-day-abbr {
   font-size: 11px;
   font-weight: 500;
@@ -4046,6 +4072,350 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .eval-timeline-task-student {
   font-size: 12px;
   color: var(--md-on-surface-variant);
+}
+
+/* ─── Due Process View ─── */
+
+.dp-section {
+  margin-bottom: 24px;
+}
+.dp-section-header {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--md-on-surface);
+  margin-bottom: 12px;
+}
+.dp-empty-state {
+  color: var(--md-on-surface-variant);
+  font-size: 14px;
+  padding: 16px 0;
+}
+.dp-eval-chips {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+/* ── Calendar ── */
+
+.dp-calendar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.dp-calendar-strip {
+  background: var(--md-surface);
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-md);
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+.dp-calendar-30 {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dp-calendar-month-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--md-on-surface-variant);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 8px 0 4px;
+}
+.dp-calendar-month-label:first-child {
+  margin-top: 0;
+}
+.dp-calendar-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+.dp-cal-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 4px;
+  border: 1px solid transparent;
+  border-radius: var(--md-shape-sm);
+  background: var(--md-surface-container-low);
+  cursor: pointer;
+  transition: background var(--md-duration-short3) var(--md-easing-standard),
+              border-color var(--md-duration-short3) var(--md-easing-standard),
+              box-shadow var(--md-duration-short3) var(--md-easing-standard);
+  min-height: 52px;
+  font-family: inherit;
+  color: inherit;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.dp-cal-day:hover {
+  background: var(--md-surface-container);
+  box-shadow: var(--md-elevation-1);
+}
+.dp-cal-day:focus-visible {
+  outline: 2px solid var(--md-primary);
+  outline-offset: 2px;
+}
+.dp-cal-today {
+  border-color: var(--md-primary);
+  background: var(--md-primary-container);
+}
+.dp-cal-today:hover {
+  background: var(--md-primary-container);
+  box-shadow: var(--md-elevation-1);
+}
+.dp-cal-weekend {
+  opacity: 0.6;
+}
+.dp-cal-expanded {
+  border-color: var(--md-primary);
+  background: var(--md-surface-container);
+  box-shadow: var(--md-elevation-1);
+}
+.dp-cal-expanded:hover {
+  background: var(--md-surface-container);
+  box-shadow: var(--md-elevation-1);
+}
+.dp-cal-day-abbr {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  color: var(--md-on-surface-variant);
+  text-transform: uppercase;
+}
+.dp-cal-today .dp-cal-day-abbr {
+  color: var(--md-primary);
+}
+.dp-cal-day-num {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--md-on-surface);
+}
+.dp-cal-today .dp-cal-day-num {
+  color: var(--md-primary);
+  font-weight: 700;
+}
+.dp-cal-dots {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  margin-top: 1px;
+}
+
+/* ── IEP Meeting Day Highlight ── */
+
+.dp-cal-meeting {
+  border: 2px solid var(--md-tertiary);
+  background: rgba(117, 90, 47, 0.08);
+}
+.dp-cal-meeting:hover {
+  background: rgba(117, 90, 47, 0.14);
+}
+.dp-cal-meeting.dp-cal-today {
+  border-color: var(--md-tertiary);
+  background: rgba(117, 90, 47, 0.12);
+}
+.dp-cal-meeting-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--md-tertiary);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  margin-top: 1px;
+}
+
+/* ── Expanded Day Detail ── */
+
+.dp-expanded-day {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--md-outline-variant);
+  animation: fadeIn var(--md-duration-medium1) var(--md-easing-emphasized-decelerate);
+}
+.dp-expanded-day-header {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--md-on-surface);
+  margin-bottom: 8px;
+}
+.dp-expanded-day-empty {
+  color: var(--md-on-surface-variant);
+  font-size: 13px;
+  font-style: italic;
+}
+.dp-expanded-meeting {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--md-shape-sm);
+  background: rgba(117, 90, 47, 0.06);
+  margin-bottom: 4px;
+}
+.dp-expanded-meeting-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: var(--md-shape-full);
+  background: var(--md-tertiary);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.dp-expanded-meeting-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.dp-expanded-meeting-type {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--md-on-surface);
+}
+.dp-expanded-meeting-student {
+  font-size: 12px;
+  color: var(--md-on-surface-variant);
+}
+.dp-expanded-task {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--md-shape-sm);
+  cursor: pointer;
+  transition: background var(--md-duration-short3) var(--md-easing-standard);
+}
+.dp-expanded-task:hover {
+  background: var(--md-surface-container);
+}
+.dp-expanded-task-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.dp-expanded-task-text {
+  font-size: 14px;
+  color: var(--md-on-surface);
+}
+.dp-expanded-task-student {
+  font-size: 12px;
+  color: var(--md-on-surface-variant);
+}
+
+/* ── Progress Reports Section ── */
+
+.dp-progress-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dp-progress-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-md);
+  background: var(--md-surface);
+  cursor: pointer;
+  transition: background var(--md-duration-short3) var(--md-easing-standard),
+              box-shadow var(--md-duration-short3) var(--md-easing-standard);
+}
+.dp-progress-card:hover {
+  background: var(--md-surface-container-low);
+  box-shadow: var(--md-elevation-1);
+}
+.dp-progress-card:focus-visible {
+  outline: 2px solid var(--md-primary);
+  outline-offset: 2px;
+}
+.dp-progress-complete {
+  border-color: #4CAF50;
+  background: #f0faf0;
+}
+.dp-progress-complete:hover {
+  background: #e5f5e5;
+}
+.dp-progress-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.dp-progress-card-name {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--md-on-surface);
+}
+.dp-progress-card-goals {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.dp-progress-goal-chip {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: var(--md-shape-full);
+  background: var(--md-surface-container-high);
+  color: var(--md-on-surface-variant);
+  font-size: 12px;
+  font-weight: 500;
+}
+.dp-progress-card-cm {
+  font-size: 12px;
+  color: var(--md-on-surface-variant);
+}
+.dp-progress-cm-label {
+  font-weight: 500;
+}
+
+/* ── Responsibility Toggle (Student Profile) ── */
+
+.profile-goal-responsible-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 8px;
+  padding: 0;
+}
+.profile-goal-responsible-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--md-on-surface-variant);
+  white-space: nowrap;
+}
+.profile-goal-responsible-select {
+  flex: 1;
+  max-width: 280px;
+  padding: 6px 8px;
+  font-size: 13px;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-xs);
+  background: var(--md-surface);
+  color: var(--md-on-surface);
+  font-family: 'Roboto', sans-serif;
+  transition: border-color var(--md-duration-short3) var(--md-easing-standard);
+}
+.profile-goal-responsible-select:focus {
+  border-color: var(--md-primary);
+  outline: none;
 }
 
 /* ─── Eval Checklist: Profile Task List ─── */
@@ -5302,7 +5672,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   background: var(--md-surface-container-high);
   border: 1px solid var(--md-outline-variant);
   border-radius: 3px;
-  font-family: 'Roboto', monospace;
+  font-family: 'Roboto', sans-serif;
   font-size: 11px;
   font-weight: 500;
   line-height: 1;
@@ -5344,7 +5714,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   background: var(--md-surface-container-high);
   border: 1px solid var(--md-outline-variant);
   border-radius: 3px;
-  font-family: 'Roboto', monospace;
+  font-family: 'Roboto', sans-serif;
   font-size: 12px;
   font-weight: 500;
   min-width: 24px;
@@ -5398,6 +5768,11 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   }
   .needs-attention-cards { gap: 8px; }
   .needs-attention-card { width: 160px; padding: 10px; }
+  /* Due Process responsive */
+  .dp-calendar-30 .dp-cal-day { padding: 4px 2px; min-height: 40px; }
+  .dp-calendar-30 .dp-cal-day-abbr { font-size: 8px; }
+  .dp-calendar-30 .dp-cal-day-num { font-size: 12px; }
+  .dp-progress-card-header { flex-wrap: wrap; }
 }
 
 /* ─── Reduced Motion ─── */
