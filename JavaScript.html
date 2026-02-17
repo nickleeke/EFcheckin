@@ -924,10 +924,15 @@ function switchDashboardTab(tabName) {
   if (item) item.classList.add('active');
   if (panel) panel.classList.add('active');
   // Show/hide refresh button and add student button (not relevant for admin)
+  var isAdmin = (tabName === 'admin');
   var refreshBtn = document.getElementById('dashboard-refresh-btn');
-  if (refreshBtn) refreshBtn.style.display = (tabName === 'admin') ? 'none' : '';
+  if (refreshBtn) refreshBtn.style.display = isAdmin ? 'none' : '';
   var addStudentBtn = document.getElementById('add-student-btn');
-  if (addStudentBtn) addStudentBtn.style.display = (tabName === 'admin') ? 'none' : '';
+  if (addStudentBtn) addStudentBtn.style.display = isAdmin ? 'none' : '';
+  var filterChips = document.getElementById('caseload-filter-chips');
+  if (filterChips) filterChips.style.display = isAdmin ? 'none' : '';
+  var checkinProgress = document.getElementById('checkin-progress');
+  if (checkinProgress) checkinProgress.style.display = isAdmin ? 'none' : '';
   // Close mobile submenu and drawer
   var openGroup = document.querySelector('.nav-drawer-group.submenu-open');
   if (openGroup) openGroup.classList.remove('submenu-open');
