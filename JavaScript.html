@@ -6829,6 +6829,11 @@ function handleEvalMeetingDateClick() {
     inputEl.style.display = '';
     labelEl.style.display = 'none';
     inputEl.focus();
+    inputEl.onblur = function() {
+      inputEl.style.display = 'none';
+      labelEl.style.display = '';
+      inputEl.onblur = null;
+    };
   } else {
     inputEl.style.display = 'none';
     labelEl.style.display = '';
