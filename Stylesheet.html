@@ -912,6 +912,11 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   height: 40px;
   padding: 0;
 }
+.btn-icon.btn-icon-sm {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
 
 /* ─── Ghost Button (M3 Text Button) ─── */
 .btn-ghost {
@@ -1969,27 +1974,138 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   white-space: nowrap;
 }
 
-/* ─── Goals & Objectives ─── */
-.profile-goal-item {
+/* ─── Goals & Objectives — Card Layout ─── */
+.goal-card {
   border: 1px solid var(--md-outline-variant);
   border-radius: var(--md-shape-md);
-  padding: 16px;
   margin-bottom: 12px;
   background: var(--md-surface);
+  transition: border-color var(--md-duration-short3) var(--md-easing-standard),
+              box-shadow var(--md-duration-short3) var(--md-easing-standard);
 }
-.profile-goal-header {
+.goal-card-editing {
+  border-color: var(--md-primary);
+  box-shadow: var(--md-elevation-1);
+}
+.goal-card-header {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: flex-start;
   gap: 8px;
-  margin-bottom: 8px;
+  padding: 12px 8px 12px 16px;
+  cursor: pointer;
+  border-radius: var(--md-shape-md);
+  transition: background var(--md-duration-short3) var(--md-easing-standard);
+  user-select: none;
 }
-.profile-goal-label {
+.goal-card-header:hover {
+  background: color-mix(in srgb, var(--md-on-surface) 5%, transparent);
+}
+.goal-card-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+.goal-card-header-right {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.goal-card-area-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: var(--md-shape-full);
+  background: var(--md-secondary-container);
+  color: var(--md-on-secondary-container);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.goal-card-text-preview {
+  font-size: 14px;
+  color: var(--md-on-surface-variant);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.goal-card-obj-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--md-shape-full);
+  background: var(--md-surface-container-high);
+  color: var(--md-on-surface-variant);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.goal-card-chevron {
+  transition: transform var(--md-duration-short3) var(--md-easing-standard);
+  color: var(--md-on-surface-variant);
+  flex-shrink: 0;
+}
+.goal-card-chevron.rotated {
+  transform: rotate(180deg);
+}
+.goal-card-body {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height var(--md-duration-medium2) var(--md-easing-standard),
+              padding var(--md-duration-medium2) var(--md-easing-standard);
+  padding: 0 16px;
+}
+.goal-card-body-open {
+  max-height: 800px;
+  padding: 0 16px 16px;
+}
+
+/* Display mode fields */
+.goal-card-field {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.goal-card-field-label {
   font-size: 12px;
   font-weight: 500;
   color: var(--md-on-surface-variant);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+.goal-card-field-value {
+  font-size: 14px;
+  color: var(--md-on-surface);
+}
+.goal-card-goal-text {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--md-on-surface);
+  white-space: pre-wrap;
+  margin-top: 8px;
+}
+.goal-card-objectives-list {
+  list-style: decimal;
+  padding-left: 20px;
+  margin: 6px 0 0;
+}
+.goal-card-objectives-item {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--md-on-surface);
+  padding: 2px 0;
+}
+.goal-card-empty-state {
+  text-align: center;
+  padding: 24px 16px;
+  color: var(--md-on-surface-variant);
+  font-size: 14px;
 }
 .profile-goal-textarea {
   width: 100%;

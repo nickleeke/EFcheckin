@@ -31,7 +31,10 @@ var appState = {
   dashboardMeetings: [],
   dueProcessData: null,
   dueProcessCalendarDays: 7,
-  dueProcessExpandedDay: null
+  dueProcessExpandedDay: null,
+  currentGoals: [],
+  editingGoalId: null,
+  expandedGoalIds: {}
 };
 var _persistTimers = {};
 var _persistInFlight = 0;
@@ -924,7 +927,7 @@ function filterDashboardSearch(query) {
   if (clearBtn) clearBtn.style.display = query ? '' : 'none';
   _searchDebounceTimer = setTimeout(function() {
     appState.searchQuery = query.trim().toLowerCase();
-    renderDashboard(appState.dashboardData, { skipAnimation: true });
+    renderDashboard(applyFilter_(appState.dashboardData), { skipAnimation: true });
   }, 200);
 }
 
@@ -934,7 +937,7 @@ function clearDashboardSearch() {
   appState.searchQuery = '';
   var clearBtn = document.getElementById('dashboard-search-clear');
   if (clearBtn) clearBtn.style.display = 'none';
-  renderDashboard(appState.dashboardData, { skipAnimation: true });
+  renderDashboard(applyFilter_(appState.dashboardData), { skipAnimation: true });
 }
 
 function sortIcon(field) {
@@ -2849,6 +2852,12 @@ function setupGoalsAutosave() {
 
   container.addEventListener('input', function() { scheduleGoalsAutosave(); });
   container.addEventListener('change', function() { scheduleGoalsAutosave(); });
+  container.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && appState.editingGoalId) {
+      e.stopPropagation();
+      exitGoalEditMode();
+    }
+  });
 
   _goalsAutosaveDirty = false;
   _goalsAutosaveInFlight = false;
@@ -2895,6 +2904,10 @@ function performGoalsAutosave() {
           appState.currentStudent.goalsJson = goalsJson;
           appState.currentStudent.goals = goalsData;
         }
+        // Sync in-memory goals from saved data (if still on same student)
+        if (studentId === appState.currentStudentId) {
+          appState.currentGoals = goalsData;
+        }
 
         if (_goalsAutosaveDirty) {
           scheduleGoalsAutosave();
@@ -2913,74 +2926,168 @@ function performGoalsAutosave() {
 }
 
 function collectGoalsData() {
-  var container = document.getElementById('goals-autosave-container');
-  if (!container) return [];
-
-  var goals = [];
-  var goalItems = container.querySelectorAll('.profile-goal-item');
-  goalItems.forEach(function(goalEl) {
-    var goalId = goalEl.getAttribute('data-goal-id') || '';
-    var goalText = goalEl.querySelector('[data-field="goal-text"]');
-    var text = goalText ? goalText.value : '';
-    var goalAreaInput = goalEl.querySelector('[data-field="goal-area"]');
-    var goalArea = goalAreaInput ? goalAreaInput.value : '';
-    var responsibleSelect = goalEl.querySelector('[data-field="goal-responsible"]');
-    var responsibleEmail = responsibleSelect ? responsibleSelect.value : '';
-
-    var objectives = [];
-    var objItems = goalEl.querySelectorAll('.profile-objective-item');
-    objItems.forEach(function(objEl) {
-      var objId = objEl.getAttribute('data-obj-id') || '';
-      var objText = objEl.querySelector('[data-field="obj-text"]');
-      objectives.push({
-        id: objId,
-        text: objText ? objText.value : ''
-      });
-    });
-
-    goals.push({
-      id: goalId,
-      text: text,
-      goalArea: goalArea,
-      responsibleEmail: responsibleEmail,
-      objectives: objectives
-    });
+  // Hybrid: read from appState.currentGoals, but for the editing goal read from DOM
+  saveEditingGoalToState_();
+  return appState.currentGoals.map(function(g) {
+    return { id: g.id, text: g.text, goalArea: g.goalArea || '', responsibleEmail: g.responsibleEmail || '', objectives: (g.objectives || []).map(function(o) { return { id: o.id, text: o.text }; }) };
   });
+}
 
-  return goals;
+function saveEditingGoalToState_() {
+  var editId = appState.editingGoalId;
+  if (!editId) return;
+  var container = document.getElementById('goals-autosave-container');
+  if (!container) return;
+  var goalEl = container.querySelector('.goal-card[data-goal-id="' + editId + '"]');
+  if (!goalEl) return;
+
+  var goalText = goalEl.querySelector('[data-field="goal-text"]');
+  var goalAreaInput = goalEl.querySelector('[data-field="goal-area"]');
+  var responsibleSelect = goalEl.querySelector('[data-field="goal-responsible"]');
+
+  for (var i = 0; i < appState.currentGoals.length; i++) {
+    if (appState.currentGoals[i].id === editId) {
+      if (goalText) appState.currentGoals[i].text = goalText.value;
+      if (goalAreaInput) appState.currentGoals[i].goalArea = goalAreaInput.value;
+      if (responsibleSelect) appState.currentGoals[i].responsibleEmail = responsibleSelect.value;
+
+      // Read objectives from DOM
+      var objItems = goalEl.querySelectorAll('.profile-objective-item');
+      var objectives = [];
+      objItems.forEach(function(objEl) {
+        var objId = objEl.getAttribute('data-obj-id') || '';
+        var objText = objEl.querySelector('[data-field="obj-text"]');
+        objectives.push({ id: objId, text: objText ? objText.value : '' });
+      });
+      appState.currentGoals[i].objectives = objectives;
+      break;
+    }
+  }
 }
 
 function updateGoalsAutosaveIndicator(state) {
   updateAutosaveIndicator(state, 'goals-autosave-status');
 }
 
+// ─── Goal Mode Toggle Functions ───
+
+function enterGoalEditMode(goalId) {
+  // Save + exit previous editing goal
+  if (appState.editingGoalId && appState.editingGoalId !== goalId) {
+    saveEditingGoalToState_();
+    var prevId = appState.editingGoalId;
+    appState.editingGoalId = null;
+    rerenderGoalCard(prevId);
+  }
+  appState.editingGoalId = goalId;
+  appState.expandedGoalIds[goalId] = true;
+  rerenderGoalCard(goalId);
+  // Focus goal text
+  var container = document.getElementById('goals-autosave-container');
+  if (container) {
+    var textarea = container.querySelector('.goal-card[data-goal-id="' + goalId + '"] [data-field="goal-text"]');
+    if (textarea) textarea.focus();
+  }
+}
+
+function exitGoalEditMode() {
+  var goalId = appState.editingGoalId;
+  if (!goalId) return;
+  saveEditingGoalToState_();
+  appState.editingGoalId = null;
+  rerenderGoalCard(goalId);
+  scheduleGoalsAutosave();
+  showToast('Goal saved');
+}
+
+function toggleGoalExpand(goalId) {
+  // Don't collapse if currently editing this goal
+  if (appState.editingGoalId === goalId) return;
+  if (appState.expandedGoalIds[goalId]) {
+    delete appState.expandedGoalIds[goalId];
+  } else {
+    appState.expandedGoalIds[goalId] = true;
+  }
+  rerenderGoalCard(goalId);
+}
+
+function rerenderGoalCard(goalId) {
+  var container = document.getElementById('goals-autosave-container');
+  if (!container) return;
+  var el = container.querySelector('.goal-card[data-goal-id="' + goalId + '"]');
+  if (!el) return;
+  var goal = null;
+  for (var i = 0; i < appState.currentGoals.length; i++) {
+    if (appState.currentGoals[i].id === goalId) { goal = appState.currentGoals[i]; break; }
+  }
+  if (!goal) { el.remove(); return; }
+  el.outerHTML = renderGoalCard(goal);
+}
+
 function addGoal() {
   var container = document.getElementById('goals-autosave-container');
   if (!container) return;
+
+  // Exit any currently editing goal first
+  if (appState.editingGoalId) {
+    saveEditingGoalToState_();
+    var prevId = appState.editingGoalId;
+    appState.editingGoalId = null;
+    rerenderGoalCard(prevId);
+  }
+
   var goalId = 'goal-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5);
-  var goal = { id: goalId, text: '', objectives: [] };
+  var goal = { id: goalId, text: '', goalArea: '', responsibleEmail: '', objectives: [] };
+  appState.currentGoals.push(goal);
+
+  // Remove empty state if present
+  var emptyState = container.querySelector('.goal-card-empty-state');
+  if (emptyState) emptyState.remove();
+
+  // Set editing and expanded
+  appState.editingGoalId = goalId;
+  appState.expandedGoalIds[goalId] = true;
+
   var div = document.createElement('div');
-  div.innerHTML = renderGoalItem(goal);
+  div.innerHTML = renderGoalCard(goal);
   var goalEl = div.firstChild;
   container.appendChild(goalEl);
-  // Focus the new goal textarea
-  var textarea = goalEl.querySelector('[data-field="goal-text"]');
-  if (textarea) textarea.focus();
+
+  // Focus goal area input
+  var areaInput = goalEl.querySelector('[data-field="goal-area"]');
+  if (areaInput) areaInput.focus();
   scheduleGoalsAutosave();
 }
 
 function removeGoal(goalId) {
+  showConfirmDialog({
+    title: 'Delete Goal',
+    body: 'Are you sure you want to delete this goal and all its objectives? This cannot be undone.',
+    confirmLabel: 'Delete',
+    onConfirm: 'confirmRemoveGoal(\'' + esc(goalId) + '\')'
+  });
+}
+
+function confirmRemoveGoal(goalId) {
+  appState.currentGoals = appState.currentGoals.filter(function(g) { return g.id !== goalId; });
+  if (appState.editingGoalId === goalId) appState.editingGoalId = null;
+  delete appState.expandedGoalIds[goalId];
+
   var container = document.getElementById('goals-autosave-container');
-  if (!container) return;
-  var goalEl = container.querySelector('[data-goal-id="' + goalId + '"]');
-  if (goalEl) goalEl.remove();
+  if (container) {
+    var el = container.querySelector('.goal-card[data-goal-id="' + goalId + '"]');
+    if (el) el.remove();
+    if (appState.currentGoals.length === 0) {
+      container.innerHTML = '<div class="goal-card-empty-state">No goals added yet</div>';
+    }
+  }
   scheduleGoalsAutosave();
 }
 
 function addObjective(goalId) {
   var container = document.getElementById('goals-autosave-container');
   if (!container) return;
-  var goalEl = container.querySelector('[data-goal-id="' + goalId + '"]');
+  var goalEl = container.querySelector('.goal-card[data-goal-id="' + goalId + '"]');
   if (!goalEl) return;
   var objList = goalEl.querySelector('.profile-objectives-list');
   if (!objList) return;
@@ -3000,7 +3107,6 @@ function addObjective(goalId) {
   var objEl = div.firstChild;
   objList.insertBefore(objEl, addBtn);
 
-  // Focus the new objective textarea
   var textarea = objEl.querySelector('[data-field="obj-text"]');
   if (textarea) textarea.focus();
   scheduleGoalsAutosave();
@@ -3009,7 +3115,7 @@ function addObjective(goalId) {
 function removeObjective(goalId, objId) {
   var container = document.getElementById('goals-autosave-container');
   if (!container) return;
-  var goalEl = container.querySelector('[data-goal-id="' + goalId + '"]');
+  var goalEl = container.querySelector('.goal-card[data-goal-id="' + goalId + '"]');
   if (!goalEl) return;
   var objEl = goalEl.querySelector('[data-obj-id="' + objId + '"]');
   if (objEl) objEl.remove();
@@ -3493,6 +3599,14 @@ function showStudentProfile(studentId) {
   if (_progressAutosaveTimer) { clearTimeout(_progressAutosaveTimer); _progressAutosaveTimer = null; }
   _progressAutosaveInFlight = false;
   _progressAutosaveDirty = false;
+  if (_goalsAutosaveTimer) { clearTimeout(_goalsAutosaveTimer); _goalsAutosaveTimer = null; }
+  _goalsAutosaveInFlight = false;
+  _goalsAutosaveDirty = false;
+
+  // Clean up goal edit state
+  appState.editingGoalId = null;
+  appState.expandedGoalIds = {};
+  appState.currentGoals = [];
 
   appState.currentStudentId = studentId;
   trackRecentStudent(studentId);
@@ -3779,10 +3893,17 @@ function renderStudentProfileDashboard(student) {
     goals = [{ id: 'migrated-' + Date.now(), text: student.iepGoal, objectives: [] }];
   }
 
+  // Store in appState and reset edit state
+  appState.currentGoals = goals;
+  appState.editingGoalId = null;
+  appState.expandedGoalIds = {};
+
   if (goals.length > 0) {
     goals.forEach(function(goal) {
-      html += renderGoalItem(goal);
+      html += renderGoalCard(goal);
     });
+  } else {
+    html += '<div class="goal-card-empty-state">No goals added yet</div>';
   }
 
   html += '</div>';
@@ -3816,30 +3937,117 @@ function renderStudentProfileDashboard(student) {
   loadEvalCardState(student.id);
 }
 
-function renderGoalItem(goal) {
-  var html = '<div class="profile-goal-item" data-goal-id="' + esc(goal.id) + '">';
-  html += '<div class="profile-goal-header">' +
-    '<span class="profile-goal-label">IEP Goal</span>' +
-    '<button class="goal-remove-btn" onclick="removeGoal(\'' + esc(goal.id) + '\')" title="Remove goal">' +
-      '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>' +
-    '</button>' +
-  '</div>';
+function renderGoalCard(goal) {
+  var isEditing = appState.editingGoalId === goal.id;
+  var isExpanded = !!appState.expandedGoalIds[goal.id];
+  var objectives = goal.objectives || [];
+  var goalArea = goal.goalArea || '';
+  var goalText = goal.text || '';
+
+  // Truncate preview text
+  var previewText = goalText.length > 80 ? goalText.substring(0, 80) + '\u2026' : goalText;
+  if (!previewText) previewText = 'No goal text';
+
+  var html = '<div class="goal-card' + (isEditing ? ' goal-card-editing' : '') + '" data-goal-id="' + esc(goal.id) + '">';
+
+  // ── Card Header (always visible) ──
+  html += '<div class="goal-card-header" role="button" tabindex="0" onclick="toggleGoalExpand(\'' + esc(goal.id) + '\')" onkeydown="if(event.key===\'Enter\')toggleGoalExpand(\'' + esc(goal.id) + '\')">';
+  html += '<div class="goal-card-header-left">';
+  if (goalArea) {
+    html += '<span class="goal-card-area-chip">' + esc(goalArea) + '</span>';
+  }
+  if (!isExpanded && !isEditing) {
+    html += '<span class="goal-card-text-preview">' + esc(previewText) + '</span>';
+  }
+  html += '</div>';
+  html += '<div class="goal-card-header-right">';
+  if (objectives.length > 0) {
+    html += '<span class="goal-card-obj-badge">' + objectives.length + ' obj.</span>';
+  }
+  html += '<svg class="goal-card-chevron' + (isExpanded || isEditing ? ' rotated' : '') + '" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>';
+  // Edit button (stop propagation so it doesn't toggle expand)
+  if (!isEditing) {
+    html += '<button class="btn-icon btn-icon-sm" onclick="event.stopPropagation();enterGoalEditMode(\'' + esc(goal.id) + '\')" title="Edit goal">' +
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>' +
+    '</button>';
+  } else {
+    html += '<button class="btn-icon btn-icon-sm" onclick="event.stopPropagation();exitGoalEditMode()" title="Done editing">' +
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>' +
+    '</button>';
+  }
+  // Delete button
+  html += '<button class="btn-icon btn-icon-sm" onclick="event.stopPropagation();removeGoal(\'' + esc(goal.id) + '\')" title="Delete goal">' +
+    '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>' +
+  '</button>';
+  html += '</div>';
+  html += '</div>';
+
+  // ── Card Body (collapsible) ──
+  html += '<div class="goal-card-body' + (isExpanded || isEditing ? ' goal-card-body-open' : '') + '">';
+  if (isEditing) {
+    html += renderGoalEditMode_(goal);
+  } else {
+    html += renderGoalDisplayMode_(goal);
+  }
+  html += '</div>';
+
+  html += '</div>';
+  return html;
+}
+
+function renderGoalDisplayMode_(goal) {
+  var html = '';
+  var objectives = goal.objectives || [];
+  var goalArea = goal.goalArea || '';
+  var goalText = goal.text || '';
+  var respEmail = goal.responsibleEmail || '';
+
+  if (goalArea) {
+    html += '<div class="goal-card-field"><span class="goal-card-field-label">Goal Area</span><span class="goal-card-field-value">' + esc(goalArea) + '</span></div>';
+  }
+  if (respEmail) {
+    var displayName = respEmail;
+    if (respEmail.toLowerCase() === (appState.currentUserEmail || '').toLowerCase()) {
+      displayName = 'Me';
+    }
+    html += '<div class="goal-card-field"><span class="goal-card-field-label">Progress Reporter</span><span class="goal-card-field-value">' + esc(displayName) + '</span></div>';
+  }
+  html += '<div class="goal-card-goal-text">' + (goalText ? esc(goalText) : '<span style="color:var(--md-on-surface-variant);font-style:italic;">No goal text</span>') + '</div>';
+
+  if (objectives.length > 0) {
+    html += '<div class="goal-card-field-label" style="margin-top:12px;">Objectives</div>';
+    html += '<ol class="goal-card-objectives-list">';
+    objectives.forEach(function(obj) {
+      html += '<li class="goal-card-objectives-item">' + (obj.text ? esc(obj.text) : '<span style="color:var(--md-on-surface-variant);font-style:italic;">No text</span>') + '</li>';
+    });
+    html += '</ol>';
+  }
+  return html;
+}
+
+function renderGoalEditMode_(goal) {
+  var html = '';
+  var objectives = goal.objectives || [];
+  var goalArea = goal.goalArea || '';
+  var goalText = goal.text || '';
+  var respEmail = (goal.responsibleEmail || '').toLowerCase();
+  var currentEmail = (appState.currentUserEmail || '').toLowerCase();
+
+  // Goal area input
   html += '<div class="profile-goal-area-row">';
   html += '<label class="profile-goal-area-label">Goal Area:</label>';
   html += '<input type="text" class="profile-goal-area-input" data-field="goal-area" ' +
     'placeholder="e.g., Math Calculation, Reading Comprehension, Behavior..." ' +
-    'value="' + esc(goal.goalArea || '') + '" />';
+    'value="' + esc(goalArea) + '" />';
   html += '</div>';
+
   // Responsibility selector
   html += '<div class="profile-goal-responsible-row">';
   html += '<label class="profile-goal-responsible-label">Progress Reporter:</label>';
   html += '<select class="profile-goal-responsible-select" data-field="goal-responsible">';
   html += '<option value="">Not assigned</option>';
-  var currentEmail = (appState.currentUserEmail || '').toLowerCase();
-  var respEmail = (goal.responsibleEmail || '').toLowerCase();
   html += '<option value="' + esc(appState.currentUserEmail) + '"' +
     (respEmail === currentEmail && respEmail ? ' selected' : '') + '>Me</option>';
-  // Add team members from caseManagers
   (appState.caseManagers || []).forEach(function(cm) {
     var cmEmail = (cm.email || '').toLowerCase();
     if (cmEmail && cmEmail !== currentEmail) {
@@ -3849,25 +4057,23 @@ function renderGoalItem(goal) {
   });
   html += '</select>';
   html += '</div>';
-  html += '<textarea class="profile-goal-textarea" data-field="goal-text" placeholder="Enter IEP goal...">' + esc(goal.text || '') + '</textarea>';
+
+  // Goal text
+  html += '<textarea class="profile-goal-textarea" data-field="goal-text" placeholder="Enter IEP goal...">' + esc(goalText) + '</textarea>';
 
   // Objectives
   html += '<div class="profile-objectives-list">';
-  var objectives = goal.objectives || [];
-  if (objectives.length > 0) {
-    objectives.forEach(function(obj) {
-      html += '<div class="profile-objective-item" data-obj-id="' + esc(obj.id) + '">' +
-        '<textarea data-field="obj-text" placeholder="Enter objective...">' + esc(obj.text || '') + '</textarea>' +
-        '<button class="goal-remove-btn" onclick="removeObjective(\'' + esc(goal.id) + '\', \'' + esc(obj.id) + '\')" title="Remove objective">' +
-          '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>' +
-        '</button>' +
-      '</div>';
-    });
-  }
+  objectives.forEach(function(obj) {
+    html += '<div class="profile-objective-item" data-obj-id="' + esc(obj.id) + '">' +
+      '<textarea data-field="obj-text" placeholder="Enter objective...">' + esc(obj.text || '') + '</textarea>' +
+      '<button class="goal-remove-btn" onclick="removeObjective(\'' + esc(goal.id) + '\', \'' + esc(obj.id) + '\')" title="Remove objective">' +
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>' +
+      '</button>' +
+    '</div>';
+  });
   html += '<button type="button" class="btn-ghost btn-sm profile-add-objective-btn" onclick="addObjective(\'' + esc(goal.id) + '\')">+ Add Objective</button>';
   html += '</div>';
 
-  html += '</div>';
   return html;
 }
 
