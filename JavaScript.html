@@ -1235,6 +1235,14 @@ function renderDashboard(data, opts) {
       else if (!bg) return -1;
       else cmp = ag.localeCompare(bg);
       if (cmp === 0) cmp = String(a.firstName).localeCompare(String(b.firstName));
+    } else if (appState.sortField === 'caseManager') {
+      var acm = a.caseManagerEmail ? getCaseManagerName(a.caseManagerEmail) : '';
+      var bcm = b.caseManagerEmail ? getCaseManagerName(b.caseManagerEmail) : '';
+      if (!acm && !bcm) cmp = 0;
+      else if (!acm) return 1;
+      else if (!bcm) return -1;
+      else cmp = acm.localeCompare(bcm);
+      if (cmp === 0) cmp = String(a.firstName).localeCompare(String(b.firstName));
     }
     return appState.sortAsc ? cmp : -cmp;
   });
@@ -1264,7 +1272,7 @@ function renderDashboard(data, opts) {
     '<th><span class="th-sortable">' + sortIcon('name') + 'Name</span></th>' +
     '<th><span class="th-sortable">' + sortIcon('grade') + 'Grade</span></th>' +
     '<th>EF Avg</th><th>Trend</th><th>GPA</th>' +
-    '<th>Missing</th><th>Last Check-In</th><th>Case Manager</th><th style="text-align:left">Actions</th>' +
+    '<th>Missing</th><th>Last Check-In</th><th><span class="th-sortable">' + sortIcon('caseManager') + 'Case Manager</span></th><th style="text-align:left">Actions</th>' +
     '</tr></thead><tbody>';
 
   sorted.forEach(function(s, index) {

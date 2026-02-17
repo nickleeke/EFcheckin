@@ -890,30 +890,47 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .cm-filter-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   margin-bottom: 12px;
 }
 .cm-filter-label {
+  /* M3 Label Large */
   font-size: 14px;
   font-weight: 500;
+  letter-spacing: 0.1px;
   color: var(--md-on-surface-variant);
   white-space: nowrap;
 }
 .cm-filter-select {
   font-family: 'Roboto', sans-serif;
+  /* M3 Body Medium */
   font-size: 14px;
-  padding: 6px 12px;
-  border: 1px solid var(--md-outline-variant);
-  border-radius: var(--md-shape-sm);
+  line-height: 20px;
+  letter-spacing: 0.25px;
+  padding: 8px 36px 8px 12px;
+  border: 1px solid var(--md-outline);
+  border-radius: var(--md-shape-xs);
   background: var(--md-surface);
   color: var(--md-on-surface);
   cursor: pointer;
-  transition: border-color var(--md-duration-short3) var(--md-easing-standard);
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23534343' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  transition: border-color var(--md-duration-short4) var(--md-easing-standard),
+              box-shadow var(--md-duration-short4) var(--md-easing-standard);
+}
+.cm-filter-select:hover {
+  border-color: var(--md-on-surface);
 }
 .cm-filter-select:focus {
   outline: none;
   border-color: var(--md-primary);
-  box-shadow: 0 0 0 1px var(--md-primary);
+  border-width: 2px;
+  padding: 7px 35px 7px 11px;
+  box-shadow: none;
 }
 
 /* ─── View Header Stack (Breadcrumb + Title hierarchy) ─── */
