@@ -795,12 +795,15 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   max-width: 0;
   overflow: hidden;
   opacity: 0;
+  padding-left: 0;
   transition: max-width var(--md-duration-medium2) var(--md-easing-emphasized-decelerate),
-              opacity var(--md-duration-short4) var(--md-easing-standard);
+              opacity var(--md-duration-short4) var(--md-easing-standard),
+              padding-left var(--md-duration-medium2) var(--md-easing-emphasized-decelerate);
 }
 .header-search-container.header-search-open .header-search-field {
-  max-width: 280px;
+  max-width: 288px;
   opacity: 1;
+  padding-left: 8px;
 }
 .header-search-input {
   width: 240px;
