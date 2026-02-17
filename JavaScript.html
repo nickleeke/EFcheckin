@@ -2004,7 +2004,13 @@ function toggleTimelineDay(dayIndex) {
   } else {
     appState.timelineExpandedDay = dayIndex;
   }
-  if (appState.evalSummary) {
+  if (!appState.evalSummary) return;
+
+  // Surgically update only the timeline strip — leave metric cards untouched
+  var stripEl = document.querySelector('.eval-timeline-strip');
+  if (stripEl) {
+    stripEl.outerHTML = buildTimelineHtml_(appState.evalSummary);
+  } else {
     renderEvalSummary(appState.evalSummary);
   }
 }
