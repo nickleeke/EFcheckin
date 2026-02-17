@@ -175,7 +175,7 @@ var STUDENT_HEADERS = [
   'id','firstName','lastName','grade','period',
   'focusGoal','accommodations','notes','classesJson',
   'createdAt','updatedAt','iepGoal','goalsJson','caseManagerEmail',
-  'online','contactsJson'
+  'online','contactsJson','birthday'
 ];
 var CHECKIN_HEADERS = [
   'id','studentId','weekOf',
@@ -392,6 +392,7 @@ function saveStudent(profile) {
         caseManagerEmail: profile.caseManagerEmail || '',
         online: profile.online ? 'TRUE' : '',
         contactsJson: contactsJson,
+        birthday: profile.birthday || '',
         updatedAt: now
       });
       invalidateCache_();
@@ -406,7 +407,7 @@ function saveStudent(profile) {
     profile.focusGoal||'', profile.accommodations||'',
     profile.notes||'', classesJson, now, now,
     profile.iepGoal||'', profile.goalsJson||'', profile.caseManagerEmail||'',
-    profile.online ? 'TRUE' : '', contactsJson
+    profile.online ? 'TRUE' : '', contactsJson, profile.birthday || ''
   ]);
   invalidateCache_();
   return { success: true, id: id };
@@ -739,6 +740,7 @@ function getDashboardData() {
       gpa: gpa,
       totalMissing: totalMissing,
       academicData: academicData,
+      birthday: s.birthday || '',
       evalType: evalTypeMap[s.id] || null,
       daysSinceCheckIn: daysSinceCheckIn,
       efHistory: efHistory
@@ -1048,6 +1050,7 @@ function getDueProcessData() {
           goalText: goal.text || '',
           caseManagerEmail: s.caseManagerEmail || '',
           online: s.online === 'TRUE',
+          birthday: s.birthday || '',
           objectiveCount: (goal.objectives || []).length
         });
       }
