@@ -301,6 +301,7 @@ When adding a new button class, add it to this selector in `Stylesheet.html`.
 - **Respect `prefers-reduced-motion`:** Global `@media` rule reduces all durations to `0.01ms`.
 - **Motion tokens:** Use `--md-duration-*` and `--md-easing-*` variables. Never hardcode durations.
 - **Color tier tokens:** Use `var(--color-tier-*)` for gold/green/yellow tier colors. Never hardcode `#FFDEAB`, `#D6F5D6`, `#FFF3CD`, etc. in Stylesheet.html. Tokens are defined in `:root`. JS inline styles (sparkline dots, progress report CSS strings) may use raw hex since CSS vars aren't available there.
+- **No single-side strokes:** Never use `border-left`, `border-top`, etc. as accent indicators. Always use a full `border` around the entire element. For emphasis, use color (e.g., `border: 1px solid var(--md-error)`) rather than a thicker single-side stripe.
 
 ### Autosave Safety
 

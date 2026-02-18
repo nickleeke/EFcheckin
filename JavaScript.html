@@ -3122,125 +3122,134 @@ function openSidePanel(index) {
 
   var content = '';
 
-  // Student info subtitle
-  if (s.grade) {
-    content += '<div class="sp-subtitle" style="margin-bottom:16px;">Grade ' + esc(s.grade) + '</div>';
-  }
-
-  // Case manager
+  // Subtitle: grade + case manager on one line
+  var subtitleParts = [];
+  if (s.grade) subtitleParts.push('Grade ' + esc(s.grade));
   var cmEmail = s.caseManagerEmail || '';
   if (cmEmail) {
     var cmName = getCaseManagerName(cmEmail);
-    content += '<div class="sp-case-manager">' +
-      '<span class="sp-case-manager-name">Case Manager: ' + esc(cmName) + '</span>' +
-      '<a href="mailto:' + esc(cmEmail) + '" class="btn-icon" title="Email case manager" onclick="event.stopPropagation();">' +
-        '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>' +
-      '</a>' +
-    '</div>';
+    subtitleParts.push('CM: ' + esc(cmName));
+  }
+  if (subtitleParts.length) {
+    content += '<div class="sp-subtitle">' + subtitleParts.join(' &#xB7; ') + '</div>';
   }
 
-  // GPA
-  content += '<div class="sp-section">';
-  content += '<div class="sp-section-title">Current GPA</div>';
+  // Stat cards row: GPA + Total Missing side by side
+  var totalMissing = s.totalMissing || 0;
+  content += '<div class="sp-stat-row">';
+
+  // GPA card
+  var gpaCardClass = 'sp-stat-card';
   if (s.gpa != null) {
-    var gpaClass = s.gpa >= 3.5 ? 'high' : s.gpa > 3.0 ? 'mid' : s.gpa >= 2.5 ? 'caution' : 'low';
-    content += '<div class="sp-gpa ' + gpaClass + '">' + s.gpa.toFixed(2) + '</div>';
-  } else {
-    content += '<div class="sp-gpa none">No GPA data</div>';
+    gpaCardClass += s.gpa >= 3.5 ? ' gpa-honor-roll' : s.gpa > 3.0 ? ' gpa-good-standing' : s.gpa >= 2.5 ? ' gpa-caution' : ' gpa-at-risk';
   }
+  content += '<div class="' + gpaCardClass + '" id="sp-gpa-card">';
+  content += '<div class="sp-stat-label">Current GPA</div>';
+  content += '<div class="sp-stat-value" id="sp-gpa-value">';
+  if (s.gpa != null) {
+    content += esc(s.gpa.toFixed(2));
+    if (s.gpa >= 3.7) content += ' <span class="profile-trophy visible">&#x1F3C6;</span>';
+  } else {
+    content += '--';
+  }
+  content += '</div></div>';
+
+  // Total Missing card
+  var missingCardClass = 'sp-stat-card profile-stat-clickable';
+  missingCardClass += totalMissing === 0 ? ' missing-ok' : ' missing-alert';
+  content += '<div class="' + missingCardClass + '" id="sp-missing-card" onclick="closeSidePanel(); showMissingAssignments(\'' + s.id + '\')" role="button" tabindex="0" onkeydown="if(event.key===\'Enter\'){closeSidePanel(); showMissingAssignments(\'' + s.id + '\');}">';
+  content += '<div class="sp-stat-label">Missing</div>';
+  content += '<div class="sp-stat-value" id="sp-missing-value">' + totalMissing + '</div>';
+  content += '</div>';
   content += '</div>';
 
-  // Focus Goal (from student profile / onboarding)
+  // Focus Goal
   if (s.focusGoal) {
     content += '<div class="sp-section">';
-    content += '<div class="sp-section-title">Focus Goal</div>';
+    content += '<div class="sp-section-title">Current Goal</div>';
     content += '<div class="sp-goal-text">' + esc(s.focusGoal) + '</div>';
     content += '</div>';
   }
 
-  // Current Micro Goal (from latest check-in)
-  content += '<div class="sp-section">';
-  content += '<div class="sp-section-title">Current Micro Goal</div>';
+  // Micro Goal (plain text, like check-in form)
   if (s.latestMicroGoal) {
-    content += '<div class="sp-goal-text">' + esc(s.latestMicroGoal) + '</div>';
-  } else {
-    content += '<div class="sp-goal-none">No goal set</div>';
-  }
-  content += '</div>';
-
-  // IEP Goal
-  if (s.iepGoal) {
     content += '<div class="sp-section">';
-    content += '<div class="sp-section-title">IEP Goal</div>';
-    content += '<div class="sp-goal-text">' + esc(s.iepGoal) + '</div>';
+    content += '<div class="sp-section-title">Micro Goal</div>';
+    content += '<div class="sp-micro-goal">' + esc(s.latestMicroGoal) + '</div>';
     content += '</div>';
   }
 
-  // Classes & Grades (with inline grade selects)
+  // Academics table (mimics profile schedule table)
   content += '<div class="sp-section">';
   content += '<div class="sp-section-title">Classes &amp; Grades</div>';
-  if (s.academicData && s.academicData.length > 0) {
-    content += '<ul class="sp-class-list">';
-    s.academicData.forEach(function(c, classIdx) {
-      var missingNum = Number(c.missing) || 0;
-      var classLabel = c.className || 'Unknown';
-      var matchedClass = (s.classes || []).find(function(cl) { return cl.name === c.className; });
-      if (matchedClass && matchedClass.period) classLabel += ' (P' + matchedClass.period + ')';
-      // Grade select dropdown
-      var gradeOpts = ['--', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'D-', 'F'];
-      var gradeSelect = '<select class="sp-grade-select" onchange="sidePanelChangeGrade(\'' + s.id + '\', ' + classIdx + ', this.value)" title="Change grade">';
-      gradeOpts.forEach(function(g) {
-        var sel = (c.grade || '--') === g ? ' selected' : '';
-        gradeSelect += '<option value="' + g + '"' + sel + '>' + g + '</option>';
-      });
-      gradeSelect += '</select>';
-      // Missing items with mark-done buttons
-      var missingHtml = '';
-      if (missingNum > 0 && c.missingAssignments && c.missingAssignments.length > 0) {
-        missingHtml += '<div class="sp-missing-detail">';
-        c.missingAssignments.forEach(function(a, aIdx) {
-          missingHtml += '<div class="sp-missing-item">' +
-            '<span>' + esc(a.name || 'Assignment ' + (aIdx + 1)) + '</span>' +
-            '<button class="sp-missing-done-btn" onclick="event.stopPropagation(); spMarkDone(\'' + s.id + '\', ' + classIdx + ', ' + aIdx + ', this)" title="Mark done">' +
-              '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>' +
-            '</button>' +
-          '</div>';
+  var mergedRows = buildMergedScheduleRows_(s);
+  if (mergedRows.length > 0) {
+    content += '<table class="profile-schedule-table sp-schedule-table">';
+    content += '<thead><tr><th class="pst-col-period">Per</th><th class="pst-col-class">Class</th><th class="pst-col-grade">Grade</th><th class="pst-col-missing">Miss</th></tr></thead><tbody>';
+
+    mergedRows.forEach(function(row, idx) {
+      var expandable = row.academicIdx !== null && row.missingNum > 0;
+
+      content += '<tr class="profile-schedule-row" id="sp-row-' + idx + '" data-expandable="' + expandable + '"' +
+        (expandable ? ' onclick="toggleSpRow(' + idx + ')"' : '') + '>';
+      content += '<td class="pst-period">' + esc(row.period ? String(row.period) : '--') + '</td>';
+      content += '<td class="pst-class">' + esc(row.className) + '</td>';
+
+      // Grade column
+      if (row.academicIdx !== null) {
+        var gradeOptions = ['', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'D-', 'F'];
+        content += '<td class="pst-grade"><select class="profile-grade-select" onclick="event.stopPropagation()" onchange="sidePanelChangeGrade(\'' + s.id + '\', ' + row.academicIdx + ', this.value)">';
+        gradeOptions.forEach(function(g) {
+          var selected = (row.grade || '') === g ? ' selected' : '';
+          content += '<option value="' + esc(g) + '"' + selected + '>' + esc(g || '--') + '</option>';
         });
-        missingHtml += '</div>';
+        content += '</select></td>';
+      } else {
+        content += '<td class="pst-grade"><span style="color:var(--md-on-surface-variant);font-size:13px;">--</span></td>';
       }
-      var missingBadgeClass = missingNum > 0 ? '' : ' none';
-      content += '<li class="sp-class-item">' +
-        '<span class="sp-class-name">' + esc(classLabel) + '</span>' +
-        '<span class="sp-class-meta">' +
-          gradeSelect +
-          '<span class="sp-missing-badge clickable' + missingBadgeClass + '" onclick="event.stopPropagation(); closeSidePanel(); showMissingAssignments(\'' + s.id + '\')" title="View missing assignments">' + missingNum + ' missing</span>' +
-        '</span>' +
-        missingHtml +
-      '</li>';
+
+      // Missing pill
+      content += '<td class="pst-missing">';
+      if (row.missingNum > 0) {
+        var pillClass = row.missingNum <= 3 ? 'badge-yellow' : 'badge-red';
+        content += '<span class="profile-missing-pill ' + pillClass + '">' + row.missingNum + '</span>';
+      }
+      content += '</td></tr>';
+
+      // Expansion detail row
+      if (expandable) {
+        content += '<tr class="profile-row-detail" id="sp-row-detail-' + idx + '">';
+        content += '<td colspan="4" class="profile-row-detail-cell">';
+        var assignments = row.assignments || [];
+        if (assignments.length > 0) {
+          var sorted = assignments.map(function(a, i) {
+            return { name: a.name, type: a.type, _origIdx: i };
+          }).sort(function(a, b) {
+            return (a.name || '').localeCompare(b.name || '');
+          });
+          content += '<table class="missing-detail-table"><thead><tr><th>Assignment</th><th>Type</th><th></th></tr></thead><tbody>';
+          sorted.forEach(function(a) {
+            var typeClass = a.type === 'Summative' ? 'type-summative' : a.type === 'Formative' ? 'type-formative' : '';
+            content += '<tr>' +
+              '<td>' + esc(a.name || 'Untitled') + '</td>' +
+              '<td><span class="assignment-type ' + typeClass + '">' + esc(a.type || '') + '</span></td>' +
+              '<td class="missing-actions-cell">' +
+                '<button class="missing-action-btn btn-check" onclick="event.stopPropagation(); spMarkDone(\'' + s.id + '\', ' + row.academicIdx + ', ' + a._origIdx + ', this)" title="Mark done">' +
+                  '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>' +
+                '</button>' +
+              '</td></tr>';
+          });
+          content += '</tbody></table>';
+        } else {
+          content += '<div style="padding:8px 12px;font-size:13px;color:var(--md-on-surface-variant);">' + row.missingNum + ' missing (no details)</div>';
+        }
+        content += '</td></tr>';
+      }
     });
-    content += '</ul>';
+    content += '</tbody></table>';
   } else {
-    content += '<div class="sp-goal-none">No academic data from latest check-in</div>';
+    content += '<div class="sp-goal-none">No classes or academic data</div>';
   }
-  content += '</div>';
-
-  // Total missing (clickable to open detail view)
-  content += '<div class="sp-section">';
-  var totalMissing = s.totalMissing || 0;
-  if (totalMissing === 0) {
-    content += '<div class="sp-total-missing ok sp-no-missing" onclick="closeSidePanel(); showMissingAssignments(\'' + s.id + '\')" style="cursor:pointer;" title="View missing assignments detail">No Missing Assignments! <span class="sp-no-missing-emoji">&#x1F4AF;</span></div>';
-  } else {
-    content += '<div class="sp-total-missing alert" onclick="closeSidePanel(); showMissingAssignments(\'' + s.id + '\')" style="cursor:pointer;" title="View missing assignments detail">Total Missing Assignments: ' + totalMissing + '</div>';
-  }
-  content += '</div>';
-
-  // Quick note
-  content += '<div class="sp-section">';
-  content += '<div class="sp-section-title">Quick Note</div>';
-  content += '<div class="sp-quick-note-form">' +
-    '<textarea id="sp-note-input" class="sp-quick-note-input" placeholder="Add a quick note..." rows="2"></textarea>' +
-    '<button class="btn btn-secondary btn-sm" onclick="saveQuickNote(\'' + s.id + '\')">Save Note</button>' +
-  '</div>';
   content += '</div>';
 
   // Action buttons
@@ -3254,6 +3263,14 @@ function openSidePanel(index) {
   document.getElementById('side-panel-overlay').classList.add('open');
 }
 
+function toggleSpRow(idx) {
+  var mainRow = document.getElementById('sp-row-' + idx);
+  var detailRow = document.getElementById('sp-row-detail-' + idx);
+  if (!mainRow || !detailRow) return;
+  mainRow.classList.toggle('expanded');
+  detailRow.classList.toggle('expanded');
+}
+
 function closeSidePanel() {
   document.getElementById('side-panel').classList.remove('open');
   document.getElementById('side-panel-overlay').classList.remove('open');
@@ -3262,23 +3279,23 @@ function closeSidePanel() {
 function sidePanelChangeGrade(studentId, classIdx, newGrade) {
   var student = getStudentById(studentId);
   if (!student || !student.academicData || !student.academicData[classIdx]) return;
-  student.academicData[classIdx].grade = newGrade === '--' ? '' : newGrade;
+  student.academicData[classIdx].grade = newGrade;
   // Recalculate GPA using global GPA_MAP
   var validGrades = [];
   student.academicData.forEach(function(c) {
     if (c.grade && GPA_MAP[c.grade] !== undefined) validGrades.push(GPA_MAP[c.grade]);
   });
   student.gpa = validGrades.length > 0 ? validGrades.reduce(function(a, b) { return a + b; }, 0) / validGrades.length : null;
-  // Update GPA display in panel
-  var gpaSection = document.querySelector('.sp-gpa');
-  if (gpaSection) {
+  // Update GPA stat card in side panel
+  var gpaCard = document.getElementById('sp-gpa-card');
+  var gpaValue = document.getElementById('sp-gpa-value');
+  if (gpaCard && gpaValue) {
+    gpaCard.className = 'sp-stat-card';
     if (student.gpa != null) {
-      var gpaClass = student.gpa >= 3.5 ? 'high' : student.gpa > 3.0 ? 'mid' : student.gpa >= 2.5 ? 'caution' : 'low';
-      gpaSection.className = 'sp-gpa ' + gpaClass;
-      gpaSection.textContent = student.gpa.toFixed(2);
+      gpaCard.classList.add(student.gpa >= 3.5 ? 'gpa-honor-roll' : student.gpa > 3.0 ? 'gpa-good-standing' : student.gpa >= 2.5 ? 'gpa-caution' : 'gpa-at-risk');
+      gpaValue.innerHTML = esc(student.gpa.toFixed(2)) + (student.gpa >= 3.7 ? ' <span class="profile-trophy visible">&#x1F3C6;</span>' : '');
     } else {
-      gpaSection.className = 'sp-gpa none';
-      gpaSection.textContent = 'No GPA data';
+      gpaValue.textContent = '--';
     }
   }
   persistAcademicData_(student);
@@ -3287,67 +3304,51 @@ function sidePanelChangeGrade(studentId, classIdx, newGrade) {
 
 function spMarkDone(studentId, classIdx, assignmentIdx, btnEl) {
   modifyMissingAssignment(studentId, classIdx, assignmentIdx, { action: 'done' });
-  // Optimistic: remove the item from DOM
-  var item = btnEl.closest('.sp-missing-item');
-  if (item) {
-    item.style.transition = 'opacity 0.2s, height 0.2s';
-    item.style.opacity = '0';
-    item.style.height = '0';
-    item.style.overflow = 'hidden';
-    setTimeout(function() { item.remove(); }, 200);
+  // Optimistic: remove the row from detail table
+  var row = btnEl.closest('tr');
+  if (row) {
+    row.style.transition = 'opacity 0.2s, height 0.2s';
+    row.style.opacity = '0';
+    setTimeout(function() { row.remove(); }, 200);
   }
-  // Update missing badge count in side panel
+  // Update missing pill in side panel table
   var student = getStudentById(studentId);
   if (student) {
     var classData = student.academicData && student.academicData[classIdx];
     if (classData) {
-      var badges = document.querySelectorAll('.sp-missing-badge');
-      if (badges[classIdx]) {
-        var newCount = Number(classData.missing) || 0;
-        badges[classIdx].textContent = newCount + ' missing';
-        badges[classIdx].classList.toggle('none', newCount === 0);
-      }
+      var newCount = Number(classData.missing) || 0;
+      // Find the pill in the corresponding table row
+      var pills = document.querySelectorAll('.sp-schedule-table .profile-missing-pill');
+      pills.forEach(function(pill) {
+        var parentRow = pill.closest('tr');
+        if (parentRow) {
+          var idx = parseInt((parentRow.id || '').replace('sp-row-', ''));
+          // Match by academicIdx stored during render
+          if (!isNaN(idx)) {
+            var mergedRows = buildMergedScheduleRows_(student);
+            if (mergedRows[idx] && mergedRows[idx].academicIdx === classIdx) {
+              if (newCount > 0) {
+                pill.textContent = newCount;
+                pill.className = 'profile-missing-pill ' + (newCount <= 3 ? 'badge-yellow' : 'badge-red');
+              } else {
+                pill.remove();
+              }
+            }
+          }
+        }
+      });
     }
-    // Update total missing display
-    var totalEl = document.querySelector('.sp-total-missing');
-    if (totalEl) {
+    // Update total missing stat card
+    var missingCard = document.getElementById('sp-missing-card');
+    var missingValue = document.getElementById('sp-missing-value');
+    if (missingCard && missingValue) {
       var tm = student.totalMissing || 0;
-      if (tm === 0) {
-        totalEl.className = 'sp-total-missing ok sp-no-missing';
-        totalEl.innerHTML = 'No Missing Assignments! <span class="sp-no-missing-emoji">&#x1F4AF;</span>';
-      } else {
-        totalEl.className = 'sp-total-missing alert';
-        totalEl.textContent = 'Total Missing Assignments: ' + tm;
-      }
+      missingValue.textContent = tm;
+      missingCard.className = 'sp-stat-card profile-stat-clickable ' + (tm === 0 ? 'missing-ok' : 'missing-alert');
     }
   }
 }
 
-function saveQuickNote(studentId) {
-  var input = document.getElementById('sp-note-input');
-  if (!input) return;
-  var text = input.value.trim();
-  if (!text) { showToast('Enter a note first'); return; }
-  input.disabled = true;
-  google.script.run
-    .withSuccessHandler(function(result) {
-      input.disabled = false;
-      if (result && result.success) {
-        input.value = '';
-        showToast('Note saved');
-        // Update local state
-        var student = getStudentById(studentId);
-        if (student && result.notes) student.notes = result.notes;
-      } else {
-        showToast('Failed to save note');
-      }
-    })
-    .withFailureHandler(function(err) {
-      input.disabled = false;
-      showToast('Error: ' + (err && err.message ? err.message : String(err)));
-    })
-    .appendStudentNote(studentId, text);
-}
 
 // ─── Check-In Form ───
 function startCheckIn(studentId, existingCheckIn) {
