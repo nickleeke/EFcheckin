@@ -2548,7 +2548,8 @@ function buildDPProgressGroupedView_(studentGoals, studentOrder, completionMap, 
         'onclick="toggleDPReportItem(\'' + esc(sid) + '\',\'' + esc(g.goalId) + '\',\'' + esc(quarter) + '\',' + !goalDone + ')" ' +
         'role="button" tabindex="0" onkeydown="if(event.key===\'Enter\')toggleDPReportItem(\'' + esc(sid) + '\',\'' + esc(g.goalId) + '\',\'' + esc(quarter) + '\',' + !goalDone + ')">';
       html += '<input type="checkbox" class="eval-item-checkbox" ' + (goalDone ? 'checked' : '') +
-        ' onclick="event.stopPropagation();toggleDPReportItem(\'' + esc(sid) + '\',\'' + esc(g.goalId) + '\',\'' + esc(quarter) + '\',' + !goalDone + ')" tabindex="-1">';
+        ' onchange="event.stopPropagation();toggleDPReportItem(\'' + esc(sid) + '\',\'' + esc(g.goalId) + '\',\'' + esc(quarter) + '\',this.checked)" ' +
+        'onclick="event.stopPropagation()" tabindex="-1">';
       html += '<div style="flex:1;min-width:0;">';
       html += '<span class="dp-progress-goal-chip" style="margin-right:6px;">' + esc(g.goalArea) + '</span>';
       html += '<span class="dp-progress-checkbox-text">' + esc(g.goalText) + '</span>';
@@ -2627,7 +2628,8 @@ function buildDPProgressFlatView_(assignments, completionMap, completionFlags, q
       'onclick="toggleDPReportItem(\'' + esc(a.studentId) + '\',\'' + esc(a.goalId) + '\',\'' + esc(quarter) + '\',' + !goalDone + ')" ' +
       'onkeydown="if(event.key===\'Enter\')toggleDPReportItem(\'' + esc(a.studentId) + '\',\'' + esc(a.goalId) + '\',\'' + esc(quarter) + '\',' + !goalDone + ')">';
     html += '<input type="checkbox" class="eval-item-checkbox" ' + (goalDone ? 'checked' : '') +
-      ' onclick="event.stopPropagation();toggleDPReportItem(\'' + esc(a.studentId) + '\',\'' + esc(a.goalId) + '\',\'' + esc(quarter) + '\',' + !goalDone + ')" tabindex="-1">';
+      ' onchange="event.stopPropagation();toggleDPReportItem(\'' + esc(a.studentId) + '\',\'' + esc(a.goalId) + '\',\'' + esc(quarter) + '\',this.checked)" ' +
+      'onclick="event.stopPropagation()" tabindex="-1">';
     html += '<span class="dp-progress-flat-name">' + esc(a.studentName) + '</span>';
     html += '<span class="dp-progress-goal-chip">' + esc(a.goalArea) + '</span>';
     html += '<span class="dp-progress-checkbox-text" style="flex:1;min-width:0;">' + esc(a.goalText) + '</span>';
