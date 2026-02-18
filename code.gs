@@ -787,7 +787,9 @@ function invalidateCache_() {
     props.deleteProperty(CACHE_PREFIX + 'dashboard');
     props.deleteProperty(CACHE_PREFIX + 'eval_summary');
     props.deleteProperty(CACHE_PREFIX + 'progress');
-    props.deleteProperty(CACHE_PREFIX + 'due_process');
+    VALID_QUARTERS.forEach(function(q) {
+      props.deleteProperty(CACHE_PREFIX + 'due_process_' + q);
+    });
   } catch(e) {}
 }
 
@@ -812,7 +814,9 @@ function invalidateEvalCaches_() {
     var props = PropertiesService.getUserProperties();
     props.deleteProperty(CACHE_PREFIX + 'eval_summary');
     props.deleteProperty(CACHE_PREFIX + 'dashboard');
-    props.deleteProperty(CACHE_PREFIX + 'due_process');
+    VALID_QUARTERS.forEach(function(q) {
+      props.deleteProperty(CACHE_PREFIX + 'due_process_' + q);
+    });
   } catch(e) {}
 }
 
@@ -820,7 +824,9 @@ function invalidateMeetingCaches_() {
   try {
     var props = PropertiesService.getUserProperties();
     props.deleteProperty(CACHE_PREFIX + 'eval_summary');
-    props.deleteProperty(CACHE_PREFIX + 'due_process');
+    VALID_QUARTERS.forEach(function(q) {
+      props.deleteProperty(CACHE_PREFIX + 'due_process_' + q);
+    });
   } catch(e) {}
 }
 
@@ -828,7 +834,9 @@ function invalidateProgressCaches_() {
   try {
     var props = PropertiesService.getUserProperties();
     props.deleteProperty(CACHE_PREFIX + 'progress');
-    props.deleteProperty(CACHE_PREFIX + 'due_process');
+    VALID_QUARTERS.forEach(function(q) {
+      props.deleteProperty(CACHE_PREFIX + 'due_process_' + q);
+    });
   } catch(e) {}
 }
 
@@ -1061,14 +1069,17 @@ function deleteIEPMeeting(meetingId) {
 
 // ───── Due Process Dashboard Data ─────
 
-function getDueProcessData() {
-  var cached = getCache_('due_process');
+function getDueProcessData(quarter) {
+  if (!quarter || VALID_QUARTERS.indexOf(quarter) === -1) {
+    quarter = getCurrentQuarter();
+  }
+  var cacheKey = 'due_process_' + quarter;
+  var cached = getCache_(cacheKey);
   if (cached) return cached;
 
   initializeSheetsIfNeeded_();
   var email = (getCurrentUserEmail_() || '').toLowerCase();
   var students = getStudents();
-  var quarter = getCurrentQuarter();
 
   // 1. Eval summary with extended 30-day timeline
   var evalSummary = getEvalTimelineExtended_(30);
@@ -1105,7 +1116,10 @@ function getDueProcessData() {
           caseManagerEmail: s.caseManagerEmail || '',
           online: s.online === 'TRUE',
           birthday: s.birthday || '',
-          objectiveCount: (goal.objectives || []).length
+          objectiveCount: (goal.objectives || []).length,
+          objectives: (goal.objectives || []).map(function(obj) {
+            return { id: obj.id, text: obj.text || '' };
+          })
         });
       }
     });
@@ -1114,16 +1128,19 @@ function getDueProcessData() {
   // 4. Completion map: for each student, check if all assigned objectives have entries
   var completionMap = buildCompletionMap_(email, students, quarter);
 
+  var completionFlags = getDPCompletionFlags_();
+
   var result = {
     evalSummary: evalSummary,
     meetings: meetings,
     meetingsThisWeek: meetingsThisWeek,
     progressAssignments: progressAssignments,
     completionMap: completionMap,
+    completionFlags: completionFlags,
     currentQuarter: quarter
   };
 
-  setCache_('due_process', result);
+  setCache_(cacheKey, result);
   return result;
 }
 
@@ -1367,24 +1384,34 @@ function buildCompletionMap_(email, students, quarter) {
 
     var total = 0;
     var completed = 0;
+    var goalDetail = {};
     myGoals.forEach(function(goal) {
       var objectives = goal.objectives || [];
+      var objDetail = {};
       if (objectives.length === 0) {
         // Goal with no objectives counts as 1 item
         total++;
-        if (entrySet[s.id + '|' + goal.id + '|']) completed++;
+        var done = !!entrySet[s.id + '|' + goal.id + '|'];
+        if (done) completed++;
+        goalDetail[goal.id] = { completed: done, objectives: {} };
       } else {
+        var goalAllDone = true;
         objectives.forEach(function(obj) {
           total++;
-          if (entrySet[s.id + '|' + goal.id + '|' + obj.id]) completed++;
+          var objDone = !!entrySet[s.id + '|' + goal.id + '|' + obj.id];
+          if (objDone) completed++;
+          else goalAllDone = false;
+          objDetail[obj.id] = objDone;
         });
+        goalDetail[goal.id] = { completed: goalAllDone, objectives: objDetail };
       }
     });
 
     completionMap[s.id] = {
       total: total,
       completed: completed,
-      allDone: total > 0 && completed >= total
+      allDone: total > 0 && completed >= total,
+      goals: goalDetail
     };
   });
 
@@ -2696,6 +2723,43 @@ function generateBatchReports(quarter, overallSummaries) {
   } catch (e) {
     return { success: false, error: 'Failed to generate batch reports: ' + e.message };
   }
+}
+
+// ───── Due Process Completion Flags ─────
+
+/**
+ * Toggle a due process report completion flag.
+ * Flags are stored in UserProperties as JSON: { "studentId|goalId|quarter": true }
+ */
+function toggleDPReportComplete(studentId, goalId, quarter, complete) {
+  if (!studentId || !goalId || VALID_QUARTERS.indexOf(quarter) === -1) {
+    return { success: false, error: 'Invalid parameters' };
+  }
+  var lock = LockService.getUserLock();
+  try {
+    lock.waitLock(5000);
+    var props = PropertiesService.getUserProperties();
+    var flagsJson = props.getProperty('dp_completion_flags') || '{}';
+    var flags = JSON.parse(flagsJson);
+    var key = studentId + '|' + goalId + '|' + quarter;
+    if (complete) {
+      flags[key] = true;
+    } else {
+      delete flags[key];
+    }
+    props.setProperty('dp_completion_flags', JSON.stringify(flags));
+  } finally {
+    lock.releaseLock();
+  }
+  invalidateProgressCaches_();
+  return { success: true };
+}
+
+/** Read completion flags from UserProperties. */
+function getDPCompletionFlags_() {
+  var props = PropertiesService.getUserProperties();
+  var flagsJson = props.getProperty('dp_completion_flags') || '{}';
+  return JSON.parse(flagsJson);
 }
 
 // ───── Helpers ─────

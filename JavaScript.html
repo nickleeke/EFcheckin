@@ -34,12 +34,17 @@ var appState = {
   dueProcessCalendarWeeks: 1,
   dueProcessExpandedDay: null,
   dueProcessProgressFilter: 'all',
+  dueProcessQuarter: null,
+  dueProcessProgressViewMode: 'grouped',
+  dueProcessGoalAreaFilters: [],
+  dueProcessExpandedStudents: {},
   currentGoals: [],
   editingGoalId: null,
   expandedGoalIds: {},
   expandedProgressGoalIds: {},
   editingProgressGoalId: null,
-  lastProgressQuarter: {}
+  lastProgressQuarter: {},
+  autoExpandProgressGoalId: null
 };
 var _persistTimers = {};
 var _persistInFlight = 0;
@@ -1829,6 +1834,10 @@ function showDueProcess() {
   appState.dueProcessExpandedDay = null;
   appState.dueProcessCalendarWeeks = 1;
   appState.dueProcessProgressFilter = 'all';
+  appState.dueProcessProgressViewMode = 'grouped';
+  appState.dueProcessGoalAreaFilters = [];
+  appState.dueProcessExpandedStudents = {};
+  // Keep dueProcessQuarter across visits (don't reset)
 
   showView('dueprocess-view');
 
@@ -1855,7 +1864,7 @@ function showDueProcess() {
       var container = document.getElementById('dueprocess-content');
       if (container) container.innerHTML = renderErrorState(err && err.message ? err.message : String(err));
     })
-    .getDueProcessData();
+    .getDueProcessData(appState.dueProcessQuarter);
 }
 
 function refreshDueProcess() {
@@ -1998,8 +2007,6 @@ function buildDPSummarySection_(data) {
       '<span class="eval-metric-value">' + doneStudents + '/' + totalStudents + '</span>' +
     '</div>' +
   '</div>' +
-  '<div class="dp-summary-progress-bar">' +
-    '<div class="dp-summary-progress-fill" style="width:' + pctDone + '%"></div>' +
   '</div></div>';
 
   html += '</div></div>';
@@ -2315,17 +2322,35 @@ function buildDPUpcomingMeetingsList_(meetings, days) {
 function buildDPProgressSection_(data) {
   var assignments = data.progressAssignments || [];
   var completionMap = data.completionMap || {};
+  var completionFlags = data.completionFlags || {};
   var quarter = data.currentQuarter || '';
   var filter = appState.dueProcessProgressFilter || 'all';
+  var viewMode = appState.dueProcessProgressViewMode || 'grouped';
+  var areaFilters = appState.dueProcessGoalAreaFilters || [];
 
   var html = '<div class="dp-section" id="dp-progress-section">';
-  html += '<h2 class="dp-section-header">Progress Reports (' + esc(quarter) + ')</h2>';
+
+  // Header row with quarter selector
+  html += '<div class="dp-section-header-row">';
+  html += '<h2 class="dp-section-header">Progress Reports</h2>';
+  html += '<div class="dp-progress-quarter-selector">';
+  ['Q1','Q2','Q3','Q4'].forEach(function(q) {
+    var active = q === quarter ? ' progress-quarter-btn-active' : '';
+    html += '<button class="btn btn-sm progress-quarter-btn' + active + '" ' +
+      'onclick="switchDPProgressQuarter(\'' + q + '\')">' + q + '</button>';
+  });
+  html += '</div></div>';
 
   if (assignments.length === 0) {
     html += '<p class="dp-empty-state">No goals assigned to you. Mark yourself as responsible in student profiles.</p>';
     html += '</div>';
     return html;
   }
+
+  // Collect unique goal areas for filter chips
+  var areaSet = {};
+  assignments.forEach(function(a) { areaSet[a.goalArea] = true; });
+  var areaList = Object.keys(areaSet).sort();
 
   // Group by studentId
   var studentGoals = {};
@@ -2338,12 +2363,12 @@ function buildDPProgressSection_(data) {
     studentGoals[a.studentId].goals.push(a);
   });
 
-  // Compute aggregate completion
+  // Compute aggregate completion (considering both flags and progress data)
   var totalStudents = studentOrder.length;
   var doneStudents = 0;
   studentOrder.forEach(function(sid) {
-    var comp = completionMap[sid];
-    if (comp && comp.allDone) doneStudents++;
+    var allGoalsDone = isStudentFullyComplete_(sid, studentGoals[sid].goals, completionMap, completionFlags, quarter);
+    if (allGoalsDone) doneStudents++;
   });
   var pctDone = totalStudents > 0 ? Math.round(doneStudents / totalStudents * 100) : 0;
 
@@ -2353,7 +2378,7 @@ function buildDPProgressSection_(data) {
   html += '<div class="dp-progress-bar"><div class="dp-progress-bar-fill" style="width:' + pctDone + '%"></div></div>';
   html += '</div>';
 
-  // Filter chips
+  // Status filter chips
   html += '<div class="dp-progress-filters">';
   var filters = [
     { key: 'all', label: 'All' },
@@ -2366,74 +2391,337 @@ function buildDPProgressSection_(data) {
       'aria-pressed="' + isActive + '" onclick="setDPProgressFilter(\'' + f.key + '\')">' +
       f.label + '</button>';
   });
+
+  // View mode toggle
+  html += '<span style="border-left:1px solid var(--md-outline-variant);height:20px;margin:0 4px;"></span>';
+  var groupedActive = viewMode === 'grouped' ? ' eval-filter-chip-active' : '';
+  var flatActive = viewMode === 'flat' ? ' eval-filter-chip-active' : '';
+  html += '<button class="eval-filter-chip' + groupedActive + '" aria-pressed="' + (viewMode === 'grouped') + '" ' +
+    'onclick="setDPProgressViewMode(\'grouped\')">Group by Student</button>';
+  html += '<button class="eval-filter-chip' + flatActive + '" aria-pressed="' + (viewMode === 'flat') + '" ' +
+    'onclick="setDPProgressViewMode(\'flat\')">Show All</button>';
   html += '</div>';
 
-  // Sort: incomplete first, then complete
-  var sortedOrder = studentOrder.slice().sort(function(a, b) {
-    var aDone = (completionMap[a] && completionMap[a].allDone) ? 1 : 0;
-    var bDone = (completionMap[b] && completionMap[b].allDone) ? 1 : 0;
-    return aDone - bDone;
-  });
-
-  html += '<div class="dp-progress-list">';
-
-  sortedOrder.forEach(function(sid) {
-    var info = studentGoals[sid];
-    var comp = completionMap[sid] || { total: 0, completed: 0, allDone: false };
-
-    // Apply filter
-    if (filter === 'incomplete' && comp.allDone) return;
-    if (filter === 'complete' && !comp.allDone) return;
-
-    var cardClass = 'dp-progress-card' + (comp.allDone ? ' dp-progress-complete' : '');
-
-    html += '<div class="' + cardClass + '" role="button" tabindex="0" ' +
-      'onclick="showStudentProfile(\'' + esc(sid) + '\')" ' +
-      'onkeydown="if(event.key===\'Enter\')showStudentProfile(\'' + esc(sid) + '\')">';
-
-    // Header row: student name + status
-    html += '<div class="dp-progress-card-header">';
-    html += '<span class="dp-progress-card-name">' + esc(info.name) + (info.online ? ' <span class="online-badge" title="Online">Online</span>' : '') + buildBirthdayBadge_(info.birthday) + '</span>';
-    if (comp.allDone) {
-      html += '<span class="chip-green">Complete &#x2714;&#xFE0E;</span>';
-    } else {
-      html += '<span class="chip-yellow">' + comp.completed + '/' + comp.total + '</span>';
-    }
-    html += '</div>';
-
-    // Goal areas
-    html += '<div class="dp-progress-card-goals">';
-    info.goals.forEach(function(g) {
-      html += '<span class="dp-progress-goal-chip">' + esc(g.goalArea) + '</span>';
+  // Goal area filter chips (only if >1 area)
+  if (areaList.length > 1) {
+    html += '<div class="dp-progress-area-filters">';
+    areaList.forEach(function(area) {
+      var isActive = areaFilters.indexOf(area) !== -1;
+      html += '<button class="eval-filter-chip' + (isActive ? ' eval-filter-chip-active' : '') + '" ' +
+        'aria-pressed="' + isActive + '" onclick="toggleDPGoalAreaFilter(\'' + esc(area) + '\')">' +
+        esc(area) + '</button>';
     });
-    html += '</div>';
-
-    // Case manager
-    html += '<div class="dp-progress-card-cm">';
-    html += '<span class="dp-progress-cm-label">Case Manager:</span> ';
-    html += '<span>' + esc(info.caseManager || 'Not assigned') + '</span>';
-    html += '</div>';
-
-    html += '</div>';
-
-    // Fire confetti for newly-complete students on initial render
-    if (comp.allDone && !_progressCompletionFiredFor[sid + quarter]) {
-      _progressCompletionFiredFor[sid + quarter] = true;
-      setTimeout(function() {
-        var card = document.querySelector('.dp-progress-card[onclick*="' + sid + '"]');
-        if (card) launchConfetti(card);
-      }, 400);
+    if (areaFilters.length > 0) {
+      html += '<button class="btn-ghost" style="font-size:12px;padding:4px 8px;" onclick="clearDPGoalAreaFilters()">Clear</button>';
     }
-  });
+    html += '</div>';
+  }
 
-  html += '</div>';
+  // Render the appropriate view
+  if (viewMode === 'grouped') {
+    html += buildDPProgressGroupedView_(studentGoals, studentOrder, completionMap, completionFlags, quarter, filter, areaFilters);
+  } else {
+    html += buildDPProgressFlatView_(assignments, completionMap, completionFlags, quarter, filter, areaFilters);
+  }
+
   html += '</div>';
   return html;
 }
 
+/** Check if a single goal is flagged complete (either via flag or progress data). */
+function isGoalComplete_(studentId, goalId, completionMap, completionFlags, quarter) {
+  var flagKey = studentId + '|' + goalId + '|' + quarter;
+  if (completionFlags[flagKey]) return true;
+  var comp = completionMap[studentId];
+  if (comp && comp.goals && comp.goals[goalId]) {
+    return comp.goals[goalId].completed;
+  }
+  return false;
+}
+
+/** Check if ALL goals for a student are complete. */
+function isStudentFullyComplete_(studentId, goals, completionMap, completionFlags, quarter) {
+  for (var i = 0; i < goals.length; i++) {
+    if (!isGoalComplete_(studentId, goals[i].goalId, completionMap, completionFlags, quarter)) return false;
+  }
+  return goals.length > 0;
+}
+
+/** Count completed goals for a student. */
+function countCompletedGoals_(studentId, goals, completionMap, completionFlags, quarter) {
+  var count = 0;
+  goals.forEach(function(g) {
+    if (isGoalComplete_(studentId, g.goalId, completionMap, completionFlags, quarter)) count++;
+  });
+  return count;
+}
+
+/** Filter goals by active goal area filters (OR logic). Returns all if no filters active. */
+function filterGoalsByArea_(goals, areaFilters) {
+  if (areaFilters.length === 0) return goals;
+  return goals.filter(function(g) {
+    return areaFilters.indexOf(g.goalArea) !== -1;
+  });
+}
+
+// ── Grouped View ──
+
+function buildDPProgressGroupedView_(studentGoals, studentOrder, completionMap, completionFlags, quarter, filter, areaFilters) {
+  var html = '<div class="dp-progress-list">';
+
+  // Sort: incomplete first
+  var sortedOrder = studentOrder.slice().sort(function(a, b) {
+    var aDone = isStudentFullyComplete_(a, studentGoals[a].goals, completionMap, completionFlags, quarter) ? 1 : 0;
+    var bDone = isStudentFullyComplete_(b, studentGoals[b].goals, completionMap, completionFlags, quarter) ? 1 : 0;
+    if (aDone !== bDone) return aDone - bDone;
+    return studentGoals[a].name.localeCompare(studentGoals[b].name);
+  });
+
+  var visibleCount = 0;
+  sortedOrder.forEach(function(sid) {
+    var info = studentGoals[sid];
+    var filteredGoals = filterGoalsByArea_(info.goals, areaFilters);
+    if (filteredGoals.length === 0) return;
+
+    var allDone = isStudentFullyComplete_(sid, filteredGoals, completionMap, completionFlags, quarter);
+    var doneCount = countCompletedGoals_(sid, filteredGoals, completionMap, completionFlags, quarter);
+    var totalGoals = filteredGoals.length;
+
+    // Apply status filter
+    if (filter === 'incomplete' && allDone) return;
+    if (filter === 'complete' && !allDone) return;
+
+    visibleCount++;
+    var isExpanded = !!appState.dueProcessExpandedStudents[sid];
+    var rowClass = 'dp-progress-student-row' + (allDone ? ' dp-progress-student-complete' : '');
+
+    html += '<div class="' + rowClass + '">';
+
+    // Header
+    html += '<div class="dp-progress-student-header" role="button" tabindex="0" ' +
+      'onclick="toggleDPProgressStudent(\'' + esc(sid) + '\')" ' +
+      'onkeydown="if(event.key===\'Enter\')toggleDPProgressStudent(\'' + esc(sid) + '\')">';
+    html += '<span class="dp-progress-student-name">' + esc(info.name) +
+      (info.online ? ' <span class="online-badge" title="Online">Online</span>' : '') +
+      buildBirthdayBadge_(info.birthday) + '</span>';
+    html += '<div class="dp-progress-student-right">';
+    if (allDone) {
+      html += '<span class="chip-green">' + doneCount + '/' + totalGoals + ' &#x2714;&#xFE0E;</span>';
+    } else {
+      html += '<span class="chip-yellow">' + doneCount + '/' + totalGoals + '</span>';
+    }
+    html += '<svg class="dp-progress-chevron' + (isExpanded ? ' dp-progress-chevron-open' : '') + '" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+      '<polyline points="6 9 12 15 18 9"></polyline></svg>';
+    html += '</div></div>';
+
+    // Body (collapsible)
+    html += '<div class="dp-progress-student-body' + (isExpanded ? ' dp-progress-student-body-open' : '') + '">';
+    filteredGoals.forEach(function(g) {
+      var goalDone = isGoalComplete_(sid, g.goalId, completionMap, completionFlags, quarter);
+
+      // Goal heading with checkbox
+      html += '<div class="dp-progress-checkbox-row' + (goalDone ? ' dp-progress-checkbox-done' : '') + '" ' +
+        'onclick="toggleDPReportItem(\'' + esc(sid) + '\',\'' + esc(g.goalId) + '\',\'' + esc(quarter) + '\',' + !goalDone + ')" ' +
+        'role="button" tabindex="0" onkeydown="if(event.key===\'Enter\')toggleDPReportItem(\'' + esc(sid) + '\',\'' + esc(g.goalId) + '\',\'' + esc(quarter) + '\',' + !goalDone + ')">';
+      html += '<input type="checkbox" class="eval-item-checkbox" ' + (goalDone ? 'checked' : '') +
+        ' onclick="event.stopPropagation();toggleDPReportItem(\'' + esc(sid) + '\',\'' + esc(g.goalId) + '\',\'' + esc(quarter) + '\',' + !goalDone + ')" tabindex="-1">';
+      html += '<div style="flex:1;min-width:0;">';
+      html += '<span class="dp-progress-goal-chip" style="margin-right:6px;">' + esc(g.goalArea) + '</span>';
+      html += '<span class="dp-progress-checkbox-text">' + esc(g.goalText) + '</span>';
+      html += '</div>';
+      html += '<svg class="dp-progress-goto-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+        'onclick="event.stopPropagation();navigateToProgressGoal(\'' + esc(sid) + '\',\'' + esc(g.goalId) + '\',\'' + esc(quarter) + '\')" title="Go to profile">' +
+        '<polyline points="9 18 15 12 9 6"></polyline></svg>';
+      html += '</div>';
+
+      // Objectives (indented)
+      if (g.objectives && g.objectives.length > 0) {
+        g.objectives.forEach(function(obj) {
+          var objComp = completionMap[sid] && completionMap[sid].goals && completionMap[sid].goals[g.goalId] &&
+            completionMap[sid].goals[g.goalId].objectives ? completionMap[sid].goals[g.goalId].objectives[obj.id] : false;
+          html += '<div class="dp-progress-checkbox-row dp-progress-checkbox-objective' + (objComp ? ' dp-progress-checkbox-done' : '') + '" ' +
+            'onclick="navigateToProgressGoal(\'' + esc(sid) + '\',\'' + esc(g.goalId) + '\',\'' + esc(quarter) + '\')" ' +
+            'role="button" tabindex="0" onkeydown="if(event.key===\'Enter\')navigateToProgressGoal(\'' + esc(sid) + '\',\'' + esc(g.goalId) + '\',\'' + esc(quarter) + '\')">';
+          html += '<span class="dp-progress-obj-indicator' + (objComp ? ' dp-progress-obj-done' : '') + '">' +
+            (objComp ? '&#x2714;&#xFE0E;' : '&#x25CB;') + '</span>';
+          html += '<span class="dp-progress-checkbox-text">' + esc(obj.text) + '</span>';
+          html += '<svg class="dp-progress-goto-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+            '<polyline points="9 18 15 12 9 6"></polyline></svg>';
+          html += '</div>';
+        });
+      }
+    });
+    html += '</div>';
+
+    html += '</div>';
+
+    // Fire confetti for newly-complete students
+    if (allDone && !_progressCompletionFiredFor[sid + quarter]) {
+      _progressCompletionFiredFor[sid + quarter] = true;
+      setTimeout(function() {
+        var rows = document.querySelectorAll('.dp-progress-student-complete');
+        if (rows.length > 0) launchConfetti(rows[rows.length - 1]);
+      }, 400);
+    }
+  });
+
+  if (visibleCount === 0) {
+    html += '<p class="dp-empty-state">No matching progress reports.</p>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
+// ── Flat View ──
+
+function buildDPProgressFlatView_(assignments, completionMap, completionFlags, quarter, filter, areaFilters) {
+  var html = '<div class="dp-progress-list">';
+
+  var filtered = filterGoalsByArea_(assignments, areaFilters);
+
+  // Sort: incomplete first, then by student name
+  filtered = filtered.slice().sort(function(a, b) {
+    var aDone = isGoalComplete_(a.studentId, a.goalId, completionMap, completionFlags, quarter) ? 1 : 0;
+    var bDone = isGoalComplete_(b.studentId, b.goalId, completionMap, completionFlags, quarter) ? 1 : 0;
+    if (aDone !== bDone) return aDone - bDone;
+    return a.studentName.localeCompare(b.studentName);
+  });
+
+  var visibleCount = 0;
+  filtered.forEach(function(a) {
+    var goalDone = isGoalComplete_(a.studentId, a.goalId, completionMap, completionFlags, quarter);
+
+    // Apply status filter
+    if (filter === 'incomplete' && goalDone) return;
+    if (filter === 'complete' && !goalDone) return;
+
+    visibleCount++;
+    var cardClass = 'dp-progress-flat-card' + (goalDone ? ' dp-progress-flat-complete' : '');
+
+    html += '<div class="' + cardClass + '" role="button" tabindex="0" ' +
+      'onclick="toggleDPReportItem(\'' + esc(a.studentId) + '\',\'' + esc(a.goalId) + '\',\'' + esc(quarter) + '\',' + !goalDone + ')" ' +
+      'onkeydown="if(event.key===\'Enter\')toggleDPReportItem(\'' + esc(a.studentId) + '\',\'' + esc(a.goalId) + '\',\'' + esc(quarter) + '\',' + !goalDone + ')">';
+    html += '<input type="checkbox" class="eval-item-checkbox" ' + (goalDone ? 'checked' : '') +
+      ' onclick="event.stopPropagation();toggleDPReportItem(\'' + esc(a.studentId) + '\',\'' + esc(a.goalId) + '\',\'' + esc(quarter) + '\',' + !goalDone + ')" tabindex="-1">';
+    html += '<span class="dp-progress-flat-name">' + esc(a.studentName) + '</span>';
+    html += '<span class="dp-progress-goal-chip">' + esc(a.goalArea) + '</span>';
+    html += '<span class="dp-progress-checkbox-text" style="flex:1;min-width:0;">' + esc(a.goalText) + '</span>';
+    html += '<svg class="dp-progress-goto-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+      'onclick="event.stopPropagation();navigateToProgressGoal(\'' + esc(a.studentId) + '\',\'' + esc(a.goalId) + '\',\'' + esc(quarter) + '\')" title="Go to profile">' +
+      '<polyline points="9 18 15 12 9 6"></polyline></svg>';
+    html += '</div>';
+  });
+
+  if (visibleCount === 0) {
+    html += '<p class="dp-empty-state">No matching progress reports.</p>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
+// ── Progress Section Handlers ──
+
 function setDPProgressFilter(filter) {
   appState.dueProcessProgressFilter = filter;
   renderDPProgressOnly_();
+}
+
+function setDPProgressViewMode(mode) {
+  appState.dueProcessProgressViewMode = mode;
+  renderDPProgressOnly_();
+}
+
+function toggleDPGoalAreaFilter(area) {
+  var idx = appState.dueProcessGoalAreaFilters.indexOf(area);
+  if (idx === -1) {
+    appState.dueProcessGoalAreaFilters.push(area);
+  } else {
+    appState.dueProcessGoalAreaFilters.splice(idx, 1);
+  }
+  renderDPProgressOnly_();
+}
+
+function clearDPGoalAreaFilters() {
+  appState.dueProcessGoalAreaFilters = [];
+  renderDPProgressOnly_();
+}
+
+function toggleDPProgressStudent(studentId) {
+  if (appState.dueProcessExpandedStudents[studentId]) {
+    delete appState.dueProcessExpandedStudents[studentId];
+  } else {
+    appState.dueProcessExpandedStudents[studentId] = true;
+  }
+  renderDPProgressOnly_();
+}
+
+function switchDPProgressQuarter(quarter) {
+  appState.dueProcessQuarter = quarter;
+  // Show skeleton in progress section only
+  var section = document.getElementById('dp-progress-section');
+  if (section) {
+    var skelHtml = '<div class="dp-section" id="dp-progress-section">';
+    skelHtml += '<div class="dp-section-header-row">';
+    skelHtml += '<h2 class="dp-section-header">Progress Reports</h2>';
+    skelHtml += '<div class="dp-progress-quarter-selector">';
+    ['Q1','Q2','Q3','Q4'].forEach(function(q) {
+      var active = q === quarter ? ' progress-quarter-btn-active' : '';
+      skelHtml += '<button class="btn btn-sm progress-quarter-btn' + active + '" disabled>' + q + '</button>';
+    });
+    skelHtml += '</div></div>';
+    skelHtml += '<div class="skeleton" style="width:100%;height:120px;border-radius:12px;margin-top:12px;"></div>';
+    skelHtml += '</div>';
+    var tmp = document.createElement('div');
+    tmp.innerHTML = skelHtml;
+    section.parentNode.replaceChild(tmp.firstChild, section);
+  }
+  google.script.run
+    .withSuccessHandler(function(data) {
+      if (_currentViewId !== 'dueprocess-view') return;
+      appState.dueProcessData.progressAssignments = data.progressAssignments;
+      appState.dueProcessData.completionMap = data.completionMap;
+      appState.dueProcessData.completionFlags = data.completionFlags;
+      appState.dueProcessData.currentQuarter = data.currentQuarter;
+      renderDPProgressOnly_();
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error: ' + (err && err.message ? err.message : String(err)));
+      renderDPProgressOnly_();
+    })
+    .getDueProcessData(quarter);
+}
+
+function toggleDPReportItem(studentId, goalId, quarter, checked) {
+  var flags = appState.dueProcessData.completionFlags || {};
+  var key = studentId + '|' + goalId + '|' + quarter;
+
+  // Optimistic update
+  if (checked) {
+    flags[key] = true;
+  } else {
+    delete flags[key];
+  }
+  appState.dueProcessData.completionFlags = flags;
+  renderDPProgressOnly_();
+
+  // Save to backend
+  google.script.run
+    .withSuccessHandler(function() { _lastDueProcessFetch = 0; })
+    .withFailureHandler(function(err) {
+      // Revert optimistic update
+      if (checked) { delete flags[key]; } else { flags[key] = true; }
+      appState.dueProcessData.completionFlags = flags;
+      renderDPProgressOnly_();
+      showToast('Error saving: ' + (err && err.message ? err.message : String(err)));
+    })
+    .toggleDPReportComplete(studentId, goalId, quarter, checked);
+}
+
+function navigateToProgressGoal(studentId, goalId, quarter) {
+  appState.autoExpandProgressGoalId = goalId;
+  showStudentProfile(studentId);
 }
 
 function renderDPProgressOnly_() {
@@ -4710,6 +4998,12 @@ function renderProgressSection(studentId, goals, quarter, allEntries) {
   var qOrder = ['Q1', 'Q2', 'Q3', 'Q4'];
   var currentIdx = qOrder.indexOf(quarter);
   var priorQuarters = currentIdx > 0 ? qOrder.slice(0, currentIdx) : [];
+
+  // Auto-expand goal navigated from due process dashboard
+  if (appState.autoExpandProgressGoalId) {
+    appState.expandedProgressGoalIds[appState.autoExpandProgressGoalId] = true;
+    appState.autoExpandProgressGoalId = null;
+  }
 
   // Render each goal as an expandable card
   goals.forEach(function(goal) {

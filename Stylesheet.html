@@ -2926,7 +2926,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 }
 
 /* ─── Button Ripple Effect ─── */
-.btn, .btn-icon, .btn-ghost, .btn-outlined, .action-btn, .rating-btn, .nav-drawer-item, .goal-met-btn, .eval-filter-chip, .eval-nav-btn, .dp-cal-day, .fab-btn, .fab-menu-item, .header-search-result-item {
+.btn, .btn-icon, .btn-ghost, .btn-outlined, .action-btn, .rating-btn, .nav-drawer-item, .goal-met-btn, .eval-filter-chip, .eval-nav-btn, .dp-cal-day, .fab-btn, .fab-menu-item, .header-search-result-item, .dp-progress-checkbox-row, .dp-progress-flat-card {
   position: relative;
   overflow: hidden;
 }
@@ -4543,6 +4543,10 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;
 }
+.dp-summary-row .eval-metric-card {
+  max-height: 80px;
+  overflow: hidden;
+}
 .dp-metric-icon-meetings {
   background: rgba(117, 90, 47, 0.12);
   color: var(--md-tertiary);
@@ -4550,19 +4554,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .dp-metric-icon-progress {
   background: #D6F5D6;
   color: #1B5E20;
-}
-.dp-summary-progress-bar {
-  height: 4px;
-  background: var(--md-surface-container-high);
-  border-radius: var(--md-shape-full);
-  margin: 0 20px 8px;
-  overflow: hidden;
-}
-.dp-summary-progress-fill {
-  height: 100%;
-  background: #1B5E20;
-  border-radius: var(--md-shape-full);
-  transition: width var(--md-duration-medium2) var(--md-easing-standard);
 }
 
 .dp-section {
@@ -4603,6 +4594,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   display: flex;
   align-items: center;
   justify-content: space-between;
+  margin-bottom: 12px;
 }
 .dp-calendar-header > .dp-section-header {
   margin-bottom: 0;
@@ -4931,54 +4923,116 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   display: flex;
   gap: 8px;
   margin-bottom: 12px;
+  flex-wrap: wrap;
+  align-items: center;
 }
 .dp-progress-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-.dp-progress-card {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 14px 16px;
+/* Grouped View — Expandable Student Rows */
+.dp-progress-student-row {
   border: 1px solid var(--md-outline-variant);
   border-radius: var(--md-shape-md);
   background: var(--md-surface);
-  cursor: pointer;
-  transition: background var(--md-duration-short3) var(--md-easing-standard),
-              box-shadow var(--md-duration-short3) var(--md-easing-standard);
+  overflow: hidden;
 }
-.dp-progress-card:hover {
-  background: var(--md-surface-container-low);
-  box-shadow: var(--md-elevation-1);
-}
-.dp-progress-card:focus-visible {
-  outline: 2px solid var(--md-primary);
-  outline-offset: 2px;
-}
-.dp-progress-complete {
+.dp-progress-student-complete {
   border-color: #1B5E20;
   background: #D6F5D6;
 }
-.dp-progress-complete:hover {
-  background: #c4ecc4;
-}
-.dp-progress-card-header {
+.dp-progress-student-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding: 14px 16px;
+  cursor: pointer;
   gap: 12px;
 }
-.dp-progress-card-name {
+.dp-progress-student-header:hover {
+  background: rgba(0,0,0,0.04);
+}
+.dp-progress-student-complete .dp-progress-student-header:hover {
+  background: rgba(0,0,0,0.06);
+}
+.dp-progress-student-header:focus-visible {
+  outline: 2px solid var(--md-primary);
+  outline-offset: -2px;
+}
+.dp-progress-student-name {
   font-size: 15px;
   font-weight: 500;
   color: var(--md-on-surface);
 }
-.dp-progress-card-goals {
+.dp-progress-student-right {
   display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.dp-progress-chevron {
+  color: var(--md-on-surface-variant);
+  transition: transform var(--md-duration-short4) var(--md-easing-standard);
+}
+.dp-progress-chevron-open {
+  transform: rotate(180deg);
+}
+.dp-progress-student-body {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height var(--md-duration-medium2) var(--md-easing-standard),
+              padding var(--md-duration-medium2) var(--md-easing-standard);
+  padding: 0 16px;
+}
+.dp-progress-student-body-open {
+  max-height: 2000px;
+  padding: 0 16px 12px;
+}
+
+/* Checkbox Rows (goals + objectives) */
+.dp-progress-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 4px;
+  border-radius: var(--md-shape-sm);
+  cursor: pointer;
+}
+.dp-progress-checkbox-row:hover {
+  background: rgba(0,0,0,0.04);
+}
+.dp-progress-checkbox-objective {
+  padding-left: 24px;
+}
+.dp-progress-checkbox-done .dp-progress-checkbox-text {
+  text-decoration: line-through;
+  color: var(--md-on-surface-variant);
+}
+.dp-progress-checkbox-text {
+  font-size: 14px;
+  color: var(--md-on-surface);
+}
+.dp-progress-obj-indicator {
+  font-size: 14px;
+  width: 18px;
+  text-align: center;
+  color: var(--md-on-surface-variant);
+  flex-shrink: 0;
+}
+.dp-progress-obj-done {
+  color: #1B5E20;
+}
+.dp-progress-goto-icon {
+  color: var(--md-on-surface-variant);
+  opacity: 0;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: opacity var(--md-duration-short2) var(--md-easing-standard);
+}
+.dp-progress-checkbox-row:hover .dp-progress-goto-icon,
+.dp-progress-flat-card:hover .dp-progress-goto-icon {
+  opacity: 1;
 }
 .dp-progress-goal-chip {
   display: inline-block;
@@ -4988,13 +5042,64 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   color: var(--md-on-surface-variant);
   font-size: 12px;
   font-weight: 500;
+  flex-shrink: 0;
 }
-.dp-progress-card-cm {
-  font-size: 12px;
-  color: var(--md-on-surface-variant);
+
+/* Flat View */
+.dp-progress-flat-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-md);
+  cursor: pointer;
 }
-.dp-progress-cm-label {
+.dp-progress-flat-card:hover {
+  background: var(--md-surface-container-low);
+}
+.dp-progress-flat-card:focus-visible {
+  outline: 2px solid var(--md-primary);
+  outline-offset: 2px;
+}
+.dp-progress-flat-complete {
+  border-color: #1B5E20;
+  background: #D6F5D6;
+}
+.dp-progress-flat-complete:hover {
+  background: #c4ecc4;
+}
+.dp-progress-flat-name {
+  font-size: 14px;
   font-weight: 500;
+  color: var(--md-on-surface);
+  flex-shrink: 0;
+}
+
+/* Goal Area Filters */
+.dp-progress-area-filters {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* Header row with quarter selector */
+.dp-section-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.dp-section-header-row .dp-section-header {
+  margin-bottom: 0;
+}
+.dp-progress-quarter-selector {
+  display: flex;
+  gap: 4px;
 }
 
 /* ── Responsibility Toggle (Student Profile) ── */
@@ -6571,7 +6676,11 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   .dp-calendar-30 .dp-cal-day { padding: 4px 2px; min-height: 40px; }
   .dp-calendar-30 .dp-cal-day-abbr { font-size: 8px; }
   .dp-calendar-30 .dp-cal-day-num { font-size: 12px; }
-  .dp-progress-card-header { flex-wrap: wrap; }
+  .dp-progress-student-header { flex-wrap: wrap; }
+  .dp-progress-checkbox-objective { padding-left: 8px; }
+  .dp-progress-quarter-selector { flex-wrap: wrap; }
+  .dp-section-header-row { flex-direction: column; align-items: flex-start; }
+  .dp-progress-flat-card { flex-wrap: wrap; }
   .dp-upcoming-date { min-width: 70px; font-size: 11px; }
   .dp-upcoming-row { padding: 8px 12px; gap: 8px; }
 }
