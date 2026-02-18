@@ -4611,6 +4611,27 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   flex-direction: column;
   gap: 4px;
 }
+.dp-calendar-extra {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-height var(--md-duration-medium4) var(--md-easing-standard),
+              opacity var(--md-duration-medium2) var(--md-easing-standard);
+}
+.dp-calendar-extra-open {
+  max-height: 600px;
+  opacity: 1;
+}
+.dp-calendar-days-sm .dp-cal-day {
+  padding: 4px 2px;
+  min-height: 40px;
+}
+.dp-calendar-days-sm .dp-cal-day-abbr {
+  font-size: 9px;
+}
+.dp-calendar-days-sm .dp-cal-day-num {
+  font-size: 13px;
+}
 .dp-calendar-month-label {
   font-size: 11px;
   font-weight: 500;
@@ -4639,7 +4660,9 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   cursor: pointer;
   transition: background var(--md-duration-short3) var(--md-easing-standard),
               border-color var(--md-duration-short3) var(--md-easing-standard),
-              box-shadow var(--md-duration-short3) var(--md-easing-standard);
+              box-shadow var(--md-duration-short3) var(--md-easing-standard),
+              padding var(--md-duration-medium2) var(--md-easing-standard),
+              min-height var(--md-duration-medium2) var(--md-easing-standard);
   min-height: 52px;
   font-family: inherit;
   color: inherit;
@@ -4681,6 +4704,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   letter-spacing: 0.5px;
   color: var(--md-on-surface-variant);
   text-transform: uppercase;
+  transition: font-size var(--md-duration-medium2) var(--md-easing-standard);
 }
 .dp-cal-today .dp-cal-day-abbr {
   color: var(--md-on-surface);
@@ -4689,6 +4713,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   font-size: 15px;
   font-weight: 500;
   color: var(--md-on-surface);
+  transition: font-size var(--md-duration-medium2) var(--md-easing-standard);
 }
 .dp-cal-today .dp-cal-day-num {
   color: var(--md-on-surface);
@@ -6673,9 +6698,9 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   .needs-attention-cards { gap: 8px; }
   .needs-attention-card { width: 160px; padding: 10px; }
   /* Due Process responsive */
-  .dp-calendar-30 .dp-cal-day { padding: 4px 2px; min-height: 40px; }
-  .dp-calendar-30 .dp-cal-day-abbr { font-size: 8px; }
-  .dp-calendar-30 .dp-cal-day-num { font-size: 12px; }
+  .dp-calendar-days-sm .dp-cal-day { padding: 3px 2px; min-height: 36px; }
+  .dp-calendar-days-sm .dp-cal-day-abbr { font-size: 8px; }
+  .dp-calendar-days-sm .dp-cal-day-num { font-size: 11px; }
   .dp-progress-student-header { flex-wrap: wrap; }
   .dp-progress-checkbox-objective { padding-left: 8px; }
   .dp-progress-quarter-selector { flex-wrap: wrap; }

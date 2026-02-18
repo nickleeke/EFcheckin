@@ -2114,7 +2114,7 @@ function buildDPCalendarDays_(data) {
 }
 
 function buildDPCalendarSection_(data) {
-  var numWeeks = appState.dueProcessCalendarWeeks;
+  var expanded = appState.dueProcessCalendarWeeks > 1;
   var result = buildDPCalendarDays_(data);
   var days = result.days;
   var dateMap = result.dateMap;
@@ -2122,29 +2122,34 @@ function buildDPCalendarSection_(data) {
   var html = '<div class="dp-section" id="dp-calendar-section">';
   html += '<div class="dp-calendar-header">';
   html += '<h2 class="dp-section-header">At a Glance</h2>';
-  html += '<button class="btn btn-sm" onclick="toggleDPCalendarRange()">' +
-    (numWeeks === 1 ? 'Show 4 Weeks' : 'This Week') + '</button>';
+  html += '<button class="btn btn-sm" id="dp-cal-toggle-btn" onclick="toggleDPCalendarRange()">' +
+    (expanded ? 'This Week' : 'Show 4 Weeks') + '</button>';
   html += '</div>';
 
-  if (numWeeks === 1) {
-    html += '<div class="dp-calendar-strip">';
-    html += '<div class="dp-calendar-days">';
-    html += buildDPCalendarDaysHtml_(days);
-    html += '</div>';
-    html += '</div>';
-  } else {
-    html += '<div class="dp-calendar-strip dp-calendar-30">';
-    for (var w = 0; w < numWeeks; w++) {
-      var weekDays = days.slice(w * 5, (w + 1) * 5);
-      if (w === 0 || weekDays[0].dayNum <= 7) {
-        html += '<div class="dp-calendar-month-label">' + esc(weekDays[0].monthShort) + '</div>';
-      }
-      html += '<div class="dp-calendar-days">';
-      html += buildDPCalendarDaysHtml_(weekDays);
-      html += '</div>';
+  // Always render all 4 weeks; weeks 2-4 in a collapsible wrapper
+  var stripClass = 'dp-calendar-strip dp-calendar-30';
+  html += '<div class="' + stripClass + '">';
+
+  // Week 1 (always visible)
+  var week1 = days.slice(0, 5);
+  html += '<div class="dp-calendar-days' + (expanded ? ' dp-calendar-days-sm' : '') + '" id="dp-cal-week1">';
+  html += buildDPCalendarDaysHtml_(week1);
+  html += '</div>';
+
+  // Weeks 2-4 (collapsible)
+  html += '<div class="dp-calendar-extra' + (expanded ? ' dp-calendar-extra-open' : '') + '" id="dp-cal-extra">';
+  for (var w = 1; w < 4; w++) {
+    var weekDays = days.slice(w * 5, (w + 1) * 5);
+    if (weekDays.length === 0) break;
+    if (weekDays[0].dayNum <= 7) {
+      html += '<div class="dp-calendar-month-label">' + esc(weekDays[0].monthShort) + '</div>';
     }
+    html += '<div class="dp-calendar-days dp-calendar-days-sm">';
+    html += buildDPCalendarDaysHtml_(weekDays);
     html += '</div>';
   }
+  html += '</div>';
+  html += '</div>';
 
   // Expanded day details
   if (appState.dueProcessExpandedDay !== null) {
@@ -2258,9 +2263,28 @@ function renderDPCalendarOnly_() {
 }
 
 function toggleDPCalendarRange() {
-  appState.dueProcessCalendarWeeks = (appState.dueProcessCalendarWeeks === 1) ? 4 : 1;
+  var expanding = appState.dueProcessCalendarWeeks === 1;
+  appState.dueProcessCalendarWeeks = expanding ? 4 : 1;
   appState.dueProcessExpandedDay = null;
-  renderDPCalendarOnly_();
+
+  var extra = document.getElementById('dp-cal-extra');
+  var week1 = document.getElementById('dp-cal-week1');
+  var btn = document.getElementById('dp-cal-toggle-btn');
+
+  if (extra) {
+    if (expanding) {
+      extra.classList.add('dp-calendar-extra-open');
+      if (week1) week1.classList.add('dp-calendar-days-sm');
+    } else {
+      extra.classList.remove('dp-calendar-extra-open');
+      if (week1) week1.classList.remove('dp-calendar-days-sm');
+    }
+  }
+  if (btn) btn.textContent = expanding ? 'This Week' : 'Show 4 Weeks';
+
+  // Clear expanded day detail (needs DOM update)
+  var dayDetail = document.querySelector('.dp-expanded-day');
+  if (dayDetail) dayDetail.remove();
 }
 
 function toggleDPDay(dateStr) {
