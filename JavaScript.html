@@ -2530,7 +2530,7 @@ function buildDPProgressGroupedView_(studentGoals, studentOrder, completionMap, 
       buildBirthdayBadge_(info.birthday) + '</span>';
     html += '<div class="dp-progress-student-right">';
     if (allDone) {
-      html += '<span class="chip chip-green">' + doneCount + '/' + totalGoals + ' &#x2714;&#xFE0E;</span>';
+      html += '<span class="chip chip-green">' + doneCount + '/' + totalGoals + '</span>';
     } else {
       html += '<span class="chip chip-yellow">' + doneCount + '/' + totalGoals + '</span>';
     }
@@ -2568,7 +2568,7 @@ function buildDPProgressGroupedView_(studentGoals, studentOrder, completionMap, 
             'onclick="navigateToProgressGoal(\'' + esc(sid) + '\',\'' + esc(g.goalId) + '\',\'' + esc(quarter) + '\')" ' +
             'role="button" tabindex="0" onkeydown="if(event.key===\'Enter\')navigateToProgressGoal(\'' + esc(sid) + '\',\'' + esc(g.goalId) + '\',\'' + esc(quarter) + '\')">';
           html += '<span class="dp-progress-obj-indicator' + (objComp ? ' dp-progress-obj-done' : '') + '">' +
-            (objComp ? '&#x2714;&#xFE0E;' : '&#x25CB;') + '</span>';
+            (objComp ? '&#x25CF;' : '&#x25CB;') + '</span>';
           html += '<span class="dp-progress-checkbox-text">' + esc(obj.text) + '</span>';
           html += '<svg class="dp-progress-goto-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
             '<polyline points="9 18 15 12 9 6"></polyline></svg>';
