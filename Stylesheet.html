@@ -701,9 +701,16 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 
 /* Dashboard search bar */
 .dashboard-search {
-  position: relative;
-  max-width: 360px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 400px;
   margin-bottom: var(--md-spacing-subsection);
+}
+.dashboard-search-input-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
 }
 .dashboard-search-icon {
   position: absolute;
