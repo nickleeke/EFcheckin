@@ -61,7 +61,6 @@ var _evalAutosaveDirty = false;
 var _evalItemFilter = 'all'; // 'all' | 'remaining' | 'overdue' | 'completed'
 var _expandedEvalItemFiles = {}; // { itemId: true } — tracks expanded file lists per task
 var _searchDebounceTimer = null;
-var _headerSearchOpen = false;
 var _headerSearchHighlight = -1;
 var _evalFocusedIndex = -1;
 var _progressAutosaveTimer = null;
@@ -564,8 +563,6 @@ function enterApp() {
   var navDrawer = document.getElementById('nav-drawer');
   if (navbar) navbar.style.display = '';
   if (navDrawer) navDrawer.style.display = '';
-  var headerSearch = document.getElementById('header-search-container');
-  if (headerSearch) headerSearch.style.display = '';
   // Load global case managers list
   google.script.run
     .withSuccessHandler(function(cms) {
@@ -799,6 +796,12 @@ document.addEventListener('keydown', function(e) {
   // Skip shortcuts if user is typing in an input
   var tag = (document.activeElement && document.activeElement.tagName) || '';
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  // Global shortcut: s = focus search bar (works from any view)
+  if (e.key === 's') {
+    e.preventDefault();
+    openHeaderSearch();
+    return;
+  }
   // Only handle dashboard shortcuts when dashboard is visible
   var dashView = document.getElementById('dashboard-view');
   if (!dashView || !dashView.classList.contains('active')) return;
@@ -882,6 +885,7 @@ function toggleKeyboardHelp() {
   overlay.innerHTML =
     '<div class="keyboard-help">' +
       '<h3>Keyboard Shortcuts</h3>' +
+      '<div class="kb-row"><span>Search students</span><kbd>s</kbd></div>' +
       '<div class="kb-row"><span>Navigate rows</span><span><kbd>&#x2191;</kbd> <kbd>&#x2193;</kbd></span></div>' +
       '<div class="kb-row"><span>Open side panel</span><kbd>Enter</kbd></div>' +
       '<div class="kb-row"><span>New check-in</span><kbd>n</kbd></div>' +
@@ -1106,48 +1110,45 @@ function clearStudentListSearch() {
   renderDashboard(applyFilter_(appState.dashboardData), { skipAnimation: true });
 }
 
-// ─── Header Search (expandable typeahead) ───
-function toggleHeaderSearch() {
-  if (_headerSearchOpen) {
-    closeHeaderSearch();
-  } else {
-    openHeaderSearch();
-  }
+// ─── Header Search Bar ───
+function openHeaderSearch() {
+  var input = document.getElementById('header-search-input');
+  if (input) input.focus();
 }
 
-function openHeaderSearch() {
-  var container = document.getElementById('header-search-container');
+function clearHeaderSearch() {
   var input = document.getElementById('header-search-input');
-  if (!container) return;
-  _headerSearchOpen = true;
+  var results = document.getElementById('header-search-results');
+  var closeBtn = document.getElementById('header-search-close');
   _headerSearchHighlight = -1;
-  container.classList.add('header-search-open');
   if (input) { input.value = ''; input.focus(); }
+  if (results) results.innerHTML = '';
+  if (closeBtn) closeBtn.style.display = 'none';
 }
 
 function closeHeaderSearch() {
-  var container = document.getElementById('header-search-container');
   var input = document.getElementById('header-search-input');
   var results = document.getElementById('header-search-results');
-  if (!container) return;
-  _headerSearchOpen = false;
+  var closeBtn = document.getElementById('header-search-close');
   _headerSearchHighlight = -1;
-  container.classList.remove('header-search-open');
-  if (input) input.value = '';
+  if (input) input.blur();
   if (results) results.innerHTML = '';
-  document.removeEventListener('click', _closeHeaderSearchOnOutsideClick);
+  if (closeBtn) closeBtn.style.display = 'none';
 }
 
 function _closeHeaderSearchOnOutsideClick(e) {
   var container = document.getElementById('header-search-container');
   if (container && !container.contains(e.target)) {
-    closeHeaderSearch();
+    var results = document.getElementById('header-search-results');
+    if (results) results.innerHTML = '';
   }
 }
 
 function handleHeaderSearchInput(query) {
   if (_searchDebounceTimer) clearTimeout(_searchDebounceTimer);
   _headerSearchHighlight = -1;
+  var closeBtn = document.getElementById('header-search-close');
+  if (closeBtn) closeBtn.style.display = query.trim() ? '' : 'none';
   _searchDebounceTimer = setTimeout(function() {
     renderHeaderSearchResults(query.trim().toLowerCase());
   }, 150);
@@ -1206,7 +1207,7 @@ function boldMatchedLetters(name, query) {
 }
 
 function selectHeaderSearchResult(studentId) {
-  closeHeaderSearch();
+  clearHeaderSearch();
   showStudentProfile(studentId);
 }
 
@@ -1228,7 +1229,9 @@ function handleHeaderSearchKeydown(e) {
     if (sid) selectHeaderSearchResult(sid);
   } else if (e.key === 'Escape') {
     e.preventDefault();
-    closeHeaderSearch();
+    clearHeaderSearch();
+    var input = document.getElementById('header-search-input');
+    if (input) input.blur();
   }
 }
 
