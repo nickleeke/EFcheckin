@@ -158,11 +158,23 @@ Definitions: `EVAL_TYPES` array + `EVAL_TYPE_ALIASES` map (frontend), `VALID_EVA
 
 **Reference:** [Material Design 3 Web Components](https://github.com/material-components/material-web/tree/main/docs)
 
-### Seed Color
+### Brand Palette (Richfield Public Schools)
 
-Cardinal Red `#C41E3A` (Richfield school brand)
+| Swatch | Name | HEX | RGB | Usage |
+|---|---|---|---|---|
+| **Primary** | Richfield Red | `#942022` | 148-32-34 | MD3 seed color, top app bar, primary actions |
+| **Primary** | Helmet Gray | `#797a7d` | 121-122-125 | Neutral accents |
+| **Primary** | Black | `#000000` | — | Text, icons |
+| **Primary** | White | `#FFFFFF` | — | Backgrounds, on-primary text |
+| **Secondary** | Navy | `#21376c` | 33-55-108 | — |
+| **Secondary** | Gold | `#e8b34b` | 232-179-75 | — |
+| **Secondary** | Teal | `#4ea3a8` | 78-163-168 | FAB, accent surfaces |
+| **Secondary** | Green | `#79af61` | 121-175-97 | — |
+| **Secondary** | Orange | `#cf5d35` | 207-93-53 | — |
 
 ### Design Tokens (CSS Custom Properties)
+
+The MD3 token system is derived from the Richfield Red seed color `#942022`, with adjustments for WCAG contrast and MD3 tonal palette generation.
 
 | Token Group | Key Variables |
 |---|---|
@@ -170,8 +182,8 @@ Cardinal Red `#C41E3A` (Richfield school brand)
 | **Secondary** | `--md-secondary: #775656` (desaturated cardinal) |
 | **Tertiary** | `--md-tertiary: #755A2F` (warm gold accent) |
 | **Error** | `--md-error: #BA1A1A`, `--md-error-container: #FFDAD6` |
-| **Surface** | `--md-surface: #FFFBFF`, levels: lowest / low / container / high / highest |
-| **Outline** | `--md-outline: #857373`, `--md-outline-variant: #D8C2C2` |
+| **Surface** | `--md-surface: #FAFAFA`, levels: lowest / low / container / high / highest |
+| **Outline** | `--md-outline: #757575`, `--md-outline-variant: #C8C8C8` |
 | **Shape** | xs: 4px, sm: 8px, md: 12px, lg: 16px, xl: 28px, full: 9999px |
 | **Elevation** | Levels 1-3 via box-shadow |
 | **Motion** | Easing: `standard`, `emphasized-decelerate`, `emphasized-accelerate`. Duration: short1-4 (50-200ms), medium1-4 (250-400ms), long1-2 (450-500ms) |
