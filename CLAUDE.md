@@ -6,10 +6,10 @@ A Google Apps Script web application for Richfield Public Schools educators to m
 
 ## Tech Stack
 
-- **Backend:** Google Apps Script (`code.gs`, ~2,400 lines)
-- **Frontend:** Vanilla JavaScript (`JavaScript.html`, ~4,800 lines)
-- **Styling:** Vanilla CSS implementing Material Design 3 (`Stylesheet.html`, ~3,300 lines)
-- **Tests:** GAS-compatible function-based test suite (`Tests.gs`, ~850 lines)
+- **Backend:** Google Apps Script (`code.gs`, ~3,000 lines)
+- **Frontend:** Vanilla JavaScript (`JavaScript.html`, ~9,100 lines)
+- **Styling:** Vanilla CSS implementing Material Design 3 (`Stylesheet.html`, ~6,700 lines)
+- **Tests:** GAS-compatible function-based test suite (`Tests.gs`, ~1,300 lines)
 - **Data:** Google Sheets (per-user, auto-provisioned in Drive)
 - **Auth:** Google Session API (`Session.getActiveUser()`)
 - **Hosting:** Google Apps Script web app deployment
@@ -168,7 +168,7 @@ Definitions: `EVAL_TYPES` array + `EVAL_TYPE_ALIASES` map (frontend), `VALID_EVA
 | **Primary** | White | `#FFFFFF` | — | Backgrounds, on-primary text |
 | **Secondary** | Navy | `#21376c` | 33-55-108 | — |
 | **Secondary** | Gold | `#e8b34b` | 232-179-75 | — |
-| **Secondary** | Teal | `#4ea3a8` | 78-163-168 | FAB, accent surfaces |
+| **Secondary** | Teal | `#4ea3a8` | 78-163-168 | Accent surfaces |
 | **Secondary** | Green | `#79af61` | 121-175-97 | — |
 | **Secondary** | Orange | `#cf5d35` | 207-93-53 | — |
 
@@ -187,6 +187,7 @@ The MD3 token system is derived from the Richfield Red seed color `#942022`, wit
 | **Shape** | xs: 4px, sm: 8px, md: 12px, lg: 16px, xl: 28px, full: 9999px |
 | **Elevation** | Levels 1-3 via box-shadow |
 | **Motion** | Easing: `standard`, `emphasized-decelerate`, `emphasized-accelerate`. Duration: short1-4 (50-200ms), medium1-4 (250-400ms), long1-2 (450-500ms) |
+| **Color Tiers** | `--color-tier-gold-bg/text`, `--color-tier-green-bg/text`, `--color-tier-yellow-bg/text` |
 
 ### Typography (Roboto)
 
@@ -207,21 +208,21 @@ The MD3 token system is derived from the Richfield Red seed color `#942022`, wit
 ### MD3 Components
 
 **Layout & Navigation:**
-- **Top App Bar (Small):** Sticky, cardinal red, with logo and Team button
-- **Navigation Drawer:** Side nav with collapsible groups, tooltip fallback when collapsed
+- **Top App Bar (Small):** Sticky, cardinal red. On mobile (≤840px): hamburger menu only. On desktop (≥841px): compact 48px bar with search icon (left) and user name + avatar (right); persistent action bar hidden.
+- **Navigation Drawer:** Side nav with collapsible groups, tooltip fallback when collapsed. Bottom section has Shortcuts item (keyboard help). Collapse toggle at bottom (desktop only).
 - **Primary Tabs:** With sliding JS indicator + CSS border-bottom fallback
 - **Side Sheet:** Right-side panel with overlay scrim
 
 **Inputs & Controls:**
 - **Outlined Text Fields:** With focus ring transition to primary color
 - **Buttons:** Filled, Tonal, Text/Ghost, Icon, Danger variants — with ripple effect
-- **Segmented Buttons:** Rating button groups (1-5), goal-met Yes/Partially/No
+- **Segmented Buttons:** Rating button groups (1-5) with color-coded selected states (red/yellow/green by value via `[data-value]` attribute selectors), goal-met Yes/Partially/No with semantic colors (green/yellow/red via `[data-goal-met]` selectors)
 - **Filter Chips:** Toggle buttons (`.filter-chip` / `.filter-chip-active`) with `aria-pressed`
 
 **Data Display:**
 - **Data Table:** Outlined, sortable headers (priority/name/grade), hover states, sparklines, staleness chips
 - **Chips:** Status badges (gold/green/yellow/red/gray) — see Color Tiers below
-- **Cards:** Outlined with expandable sections; metric cards with `toggleMetricDropdown`; needs-attention cards
+- **Cards:** Outlined with expandable sections; metric cards with `toggleMetricDropdown`; needs-attention cards (left red accent stripe, not full border)
 - **Sparklines:** Inline SVG mini-charts (`.ef-sparkline`) in table cells
 - **Staleness Chips:** Color-coded relative date (`.staleness-green/yellow/red`)
 - **Progress Bar:** Thin linear indicator (`.checkin-progress-fill`) with ARIA progressbar
@@ -230,19 +231,19 @@ The MD3 token system is derived from the Richfield Red seed color `#942022`, wit
 - **Dialog:** Confirmation with overlay, scale+fade, `closeConfirmDialog()` with timeout fallback
 - **Snackbar/Toast:** Bottom notification with auto-dismiss, debounced via `_toastTimer`
 - **Skeleton Loading:** Diagonal shimmer placeholders, cross-fade via `animateContentIn()`
-- **Keyboard Help Dialog:** Fixed-position `?` hint + overlay with shortcut reference
+- **Keyboard Help Dialog:** Accessible via `?` key, nav drawer Shortcuts button, or `toggleKeyboardHelp()`
 
 ### Color Tiers
 
-All color-coded indicators use the same tier system across the app (GPA chips, staleness, EF ratings, missing assignments). Always use MD3 container/on-container pairs.
+All color-coded indicators use the same tier system across the app (GPA chips, staleness, EF ratings, missing assignments, rating buttons, goal-met buttons). Always use the CSS custom properties — never hardcode hex values.
 
-| Tier | Background | Text | Thresholds |
-|---|---|---|---|
-| **Gold** | `#FFDEAB` | `#2A1800` | GPA >= 3.5. Trophy at >= 3.7 |
-| **Green** | `#D6F5D6` | `#1B5E20` | GPA 3.0-3.5, EF >= 4, missing = 0, staleness <= 6d |
-| **Yellow** | `#FFF3CD` | `#7A5900` | GPA 2.5-3.0, EF 3-3.9, missing 1-3, staleness 7-13d |
-| **Red** | `var(--md-error-container)` | `var(--md-on-error-container)` | GPA < 2.5, EF < 3, missing >= 4, staleness 14d+ |
-| **Gray** | `var(--md-surface-container-high)` | `var(--md-on-surface-variant)` | No data |
+| Tier | CSS Token (bg) | CSS Token (text) | Hex Values | Thresholds |
+|---|---|---|---|---|
+| **Gold** | `var(--color-tier-gold-bg)` | `var(--color-tier-gold-text)` | `#FFDEAB` / `#2A1800` | GPA >= 3.5. Trophy at >= 3.7 |
+| **Green** | `var(--color-tier-green-bg)` | `var(--color-tier-green-text)` | `#D6F5D6` / `#1B5E20` | GPA 3.0-3.5, EF >= 4, missing = 0, staleness <= 6d |
+| **Yellow** | `var(--color-tier-yellow-bg)` | `var(--color-tier-yellow-text)` | `#FFF3CD` / `#7A5900` | GPA 2.5-3.0, EF 3-3.9, missing 1-3, staleness 7-13d |
+| **Red** | `var(--md-error-container)` | `var(--md-on-error-container)` | — | GPA < 2.5, EF < 3, missing >= 4, staleness 14d+ |
+| **Gray** | `var(--md-surface-container-high)` | `var(--md-on-surface-variant)` | — | No data |
 
 **CSS classes by surface:**
 
@@ -253,11 +254,13 @@ All color-coded indicators use the same tier system across the app (GPA chips, s
 | Profile stat cards | `.gpa-honor-roll`, `.gpa-good-standing`, `.gpa-caution`, `.gpa-at-risk` |
 | Staleness chips | `.staleness-green`, `.staleness-yellow`, `.staleness-red` |
 
-When adding new color-coded indicators, derive from this palette and keep thresholds consistent across surfaces. Update dynamically via `classList.remove()/add()`.
+When adding new color-coded indicators, use `var(--color-tier-*)` tokens. Keep thresholds consistent across surfaces. Update dynamically via `classList.remove()/add()`. Never hardcode tier hex values in Stylesheet.html — they are defined once in `:root`.
 
 ### Responsive Breakpoints
 
-- `<= 600px`: Hide progress counter, keyboard hint, sparklines; shrink filter chips and attention cards
+- `>= 841px` (desktop): Nav drawer always visible (collapsible). Compact 48px top bar with search + user identity. Persistent action bar hidden.
+- `<= 840px` (mobile): Nav drawer as overlay with scrim. Full 64px top bar with hamburger. Persistent action bar visible below top bar.
+- `<= 600px`: Hide progress counter, sparklines; shrink filter chips and attention cards. Top bar shrinks to 56px.
 - Touch targets: minimum 40px height for buttons/controls
 - Side panel: `max-width: 90vw` on small screens
 
@@ -287,7 +290,7 @@ Define constants, label arrays, and lookup maps in one place. Never redeclare lo
 
 ### Ripple Effect
 
-Delegated click handler creates `<span class="ripple-effect">` inside buttons. All button classes must be in the ripple overflow selector: `.btn, .btn-icon, .btn-ghost, .action-btn, .rating-btn, .nav-drawer-item, .filter-chip, .goal-met-btn`. Exception: `.rating-btn` needs `overflow: visible` for overlapping borders.
+Delegated click handler creates `<span class="ripple-effect">` inside buttons. All button classes must be in the ripple overflow selector: `.btn, .btn-icon, .btn-ghost, .btn-outlined, .action-btn, .rating-btn, .nav-drawer-item, .goal-met-btn, .eval-filter-chip, .eval-nav-btn, .dp-cal-day, .header-search-result-item, .dp-progress-checkbox-row, .dp-progress-flat-card`. Exception: `.rating-btn` needs `overflow: visible` for overlapping borders.
 
 When adding a new button class, add it to this selector in `Stylesheet.html`.
 
@@ -297,6 +300,7 @@ When adding a new button class, add it to this selector in `Stylesheet.html`.
 - **Animation safety:** Never set explicit `opacity: 0` on elements that rely on animation. Use `animation-fill-mode: both`. Always add timeout fallbacks for `animationend`. Debounce repeated animations.
 - **Respect `prefers-reduced-motion`:** Global `@media` rule reduces all durations to `0.01ms`.
 - **Motion tokens:** Use `--md-duration-*` and `--md-easing-*` variables. Never hardcode durations.
+- **Color tier tokens:** Use `var(--color-tier-*)` for gold/green/yellow tier colors. Never hardcode `#FFDEAB`, `#D6F5D6`, `#FFF3CD`, etc. in Stylesheet.html. Tokens are defined in `:root`. JS inline styles (sparkline dots, progress report CSS strings) may use raw hex since CSS vars aren't available there.
 
 ### Autosave Safety
 
