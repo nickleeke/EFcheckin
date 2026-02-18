@@ -2506,9 +2506,9 @@ function buildDPProgressGroupedView_(studentGoals, studentOrder, completionMap, 
       buildBirthdayBadge_(info.birthday) + '</span>';
     html += '<div class="dp-progress-student-right">';
     if (allDone) {
-      html += '<span class="chip-green">' + doneCount + '/' + totalGoals + ' &#x2714;&#xFE0E;</span>';
+      html += '<span class="chip chip-green">' + doneCount + '/' + totalGoals + ' &#x2714;&#xFE0E;</span>';
     } else {
-      html += '<span class="chip-yellow">' + doneCount + '/' + totalGoals + '</span>';
+      html += '<span class="chip chip-yellow">' + doneCount + '/' + totalGoals + '</span>';
     }
     html += '<svg class="dp-progress-chevron' + (isExpanded ? ' dp-progress-chevron-open' : '') + '" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
       '<polyline points="6 9 12 15 18 9"></polyline></svg>';
