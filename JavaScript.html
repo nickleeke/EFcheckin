@@ -129,6 +129,96 @@ function updateEvalBreadcrumb_(typeLabel) {
     esc(typeLabel);
 }
 
+// ─── Goal Area Definitions ───
+var GOAL_AREA_OPTIONS = [
+  { type: 'header', label: 'District/Coop Options' },
+  { value: 'Math', label: 'Math' },
+  { value: 'Reading', label: 'Reading' },
+  { value: 'Writing', label: 'Writing' },
+  { value: 'Motor', label: 'Motor' },
+  { value: 'Emotional/Social/Behavioral', label: 'Emotional/Social/Behavioral' },
+  { value: 'Functional', label: 'Functional' },
+  { value: 'Communication', label: 'Communication' },
+  { value: 'Sensory', label: 'Sensory' },
+  { type: 'divider' },
+  { value: 'Cognitive', label: 'Cognitive' },
+  { value: 'Adaptive', label: 'Adaptive' },
+  { value: 'Post Secondary Education and Training / Employment / Independent Living Skills', label: 'Post Secondary Education and Training / Employment / Independent Living Skills' },
+  { value: 'Academics', label: 'Academics' },
+  { value: 'Social/Communication', label: 'Social/Communication' }
+];
+
+function buildGoalAreaDropdown_(goalId, currentArea) {
+  var label = currentArea || 'Select Goal Area';
+  var html = '<div class="eval-type-picker goal-area-picker" data-goal-id="' + esc(goalId) + '">' +
+    '<button class="eval-type-ghost-btn" onclick="toggleGoalAreaPicker(event)" aria-haspopup="listbox" aria-expanded="false">' +
+      esc(label) +
+      ' <svg class="eval-type-chevron" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>' +
+    '</button>' +
+    '<div class="eval-type-menu goal-area-menu" role="listbox">';
+  GOAL_AREA_OPTIONS.forEach(function(opt) {
+    if (opt.type === 'header') {
+      html += '<div class="goal-area-menu-header">' + esc(opt.label) + '</div>';
+    } else if (opt.type === 'divider') {
+      html += '<div class="goal-area-menu-divider"></div>';
+    } else {
+      var selected = currentArea === opt.value;
+      html += '<div class="eval-type-menu-item' + (selected ? ' eval-type-menu-item-selected' : '') + '" role="option" aria-selected="' + selected + '" ' +
+        'onclick="selectGoalArea(\'' + esc(goalId) + '\', \'' + esc(opt.value) + '\')" ' +
+        'onkeydown="if(event.key===\'Enter\')selectGoalArea(\'' + esc(goalId) + '\', \'' + esc(opt.value) + '\')" tabindex="0">' +
+        esc(opt.label) + '</div>';
+    }
+  });
+  html += '</div></div>';
+  return html;
+}
+
+function toggleGoalAreaPicker(e) {
+  e.stopPropagation();
+  var picker = e.currentTarget.closest('.goal-area-picker');
+  var menu = picker.querySelector('.goal-area-menu');
+  var btn = picker.querySelector('.eval-type-ghost-btn');
+  var open = menu.classList.contains('eval-type-menu-open');
+  // Close any other open pickers first
+  document.querySelectorAll('.eval-type-menu-open').forEach(function(m) { m.classList.remove('eval-type-menu-open'); });
+  document.querySelectorAll('.eval-type-ghost-btn[aria-expanded="true"]').forEach(function(b) { b.setAttribute('aria-expanded', 'false'); });
+  if (!open) {
+    menu.classList.add('eval-type-menu-open');
+    btn.setAttribute('aria-expanded', 'true');
+    setTimeout(function() {
+      document.addEventListener('click', closeGoalAreaPicker_, { once: true });
+    }, 0);
+  }
+}
+
+function closeGoalAreaPicker_() {
+  document.querySelectorAll('.goal-area-menu.eval-type-menu-open').forEach(function(m) { m.classList.remove('eval-type-menu-open'); });
+  document.querySelectorAll('.goal-area-picker .eval-type-ghost-btn[aria-expanded="true"]').forEach(function(b) { b.setAttribute('aria-expanded', 'false'); });
+}
+
+function selectGoalArea(goalId, value) {
+  closeGoalAreaPicker_();
+  var picker = document.querySelector('.goal-area-picker[data-goal-id="' + goalId + '"]');
+  if (picker) {
+    var btn = picker.querySelector('.eval-type-ghost-btn');
+    btn.innerHTML = esc(value) + ' <svg class="eval-type-chevron" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>';
+    picker.setAttribute('data-selected', value);
+    picker.querySelectorAll('.eval-type-menu-item').forEach(function(item) {
+      var isMatch = item.textContent.trim() === value;
+      item.classList.toggle('eval-type-menu-item-selected', isMatch);
+      item.setAttribute('aria-selected', isMatch);
+    });
+  }
+  // Update appState directly
+  for (var i = 0; i < appState.currentGoals.length; i++) {
+    if (appState.currentGoals[i].id === goalId) {
+      appState.currentGoals[i].goalArea = value;
+      break;
+    }
+  }
+  scheduleGoalsAutosave();
+}
+
 function buildEvalTypeDropdown_(evalId, currentType) {
   var resolved = EVAL_TYPE_ALIASES[currentType] || currentType;
   var label = getEvalTypeLabel(currentType);
@@ -474,8 +564,8 @@ function enterApp() {
   var navDrawer = document.getElementById('nav-drawer');
   if (navbar) navbar.style.display = '';
   if (navDrawer) navDrawer.style.display = '';
-  var actionBar = document.getElementById('persistent-action-bar');
-  if (actionBar) actionBar.style.display = '';
+  var headerSearch = document.getElementById('header-search-container');
+  if (headerSearch) headerSearch.style.display = '';
   // G1: Populate desktop top bar user identity
   var firstName = getFirstNameFromEmail(appState.currentUserEmail);
   var nameEl = document.getElementById('top-bar-user-name');
@@ -1332,7 +1422,12 @@ function renderDashboard(data, opts) {
     // Last check-in staleness
     if (s.latestWeek) {
       var rel = formatRelativeDate(s.latestWeek);
-      html += '<td><span class="staleness-chip staleness-' + rel.tier + '" title="' + esc(formatDateDisplay(s.latestWeek)) + '">' + esc(rel.text) + '</span></td>';
+      var dateParts = s.latestWeek.split('-');
+      var compactDate = parseInt(dateParts[1], 10) + '/' + parseInt(dateParts[2], 10);
+      html += '<td><span class="staleness-chip staleness-' + rel.tier + '" title="' + esc(formatDateDisplay(s.latestWeek)) + '">' +
+        '<span class="staleness-relative">' + esc(rel.text) + '</span>' +
+        '<span class="staleness-compact">' + esc(compactDate) + '</span>' +
+        '</span></td>';
     } else {
       html += '<td><span class="chip chip-gray">--</span></td>';
     }
@@ -2098,7 +2193,7 @@ function buildDPCalendarDays_(data) {
 }
 
 function buildDPCalendarSection_(data) {
-  var numWeeks = appState.dueProcessCalendarWeeks;
+  var expanded = appState.dueProcessCalendarWeeks > 1;
   var result = buildDPCalendarDays_(data);
   var days = result.days;
   var dateMap = result.dateMap;
@@ -2106,29 +2201,34 @@ function buildDPCalendarSection_(data) {
   var html = '<div class="dp-section" id="dp-calendar-section">';
   html += '<div class="dp-calendar-header">';
   html += '<h2 class="dp-section-header">At a Glance</h2>';
-  html += '<button class="btn btn-sm" onclick="toggleDPCalendarRange()">' +
-    (numWeeks === 1 ? 'Show 4 Weeks' : 'This Week') + '</button>';
+  html += '<button class="btn btn-sm" id="dp-cal-toggle-btn" onclick="toggleDPCalendarRange()">' +
+    (expanded ? 'This Week' : 'Show 4 Weeks') + '</button>';
   html += '</div>';
 
-  if (numWeeks === 1) {
-    html += '<div class="dp-calendar-strip">';
-    html += '<div class="dp-calendar-days">';
-    html += buildDPCalendarDaysHtml_(days);
-    html += '</div>';
-    html += '</div>';
-  } else {
-    html += '<div class="dp-calendar-strip dp-calendar-30">';
-    for (var w = 0; w < numWeeks; w++) {
-      var weekDays = days.slice(w * 5, (w + 1) * 5);
-      if (w === 0 || weekDays[0].dayNum <= 7) {
-        html += '<div class="dp-calendar-month-label">' + esc(weekDays[0].monthShort) + '</div>';
-      }
-      html += '<div class="dp-calendar-days">';
-      html += buildDPCalendarDaysHtml_(weekDays);
-      html += '</div>';
+  // Always render all 4 weeks; weeks 2-4 in a collapsible wrapper
+  var stripClass = 'dp-calendar-strip dp-calendar-30';
+  html += '<div class="' + stripClass + '">';
+
+  // Week 1 (always visible)
+  var week1 = days.slice(0, 5);
+  html += '<div class="dp-calendar-days' + (expanded ? ' dp-calendar-days-sm' : '') + '" id="dp-cal-week1">';
+  html += buildDPCalendarDaysHtml_(week1);
+  html += '</div>';
+
+  // Weeks 2-4 (collapsible)
+  html += '<div class="dp-calendar-extra' + (expanded ? ' dp-calendar-extra-open' : '') + '" id="dp-cal-extra">';
+  for (var w = 1; w < 4; w++) {
+    var weekDays = days.slice(w * 5, (w + 1) * 5);
+    if (weekDays.length === 0) break;
+    if (weekDays[0].dayNum <= 7) {
+      html += '<div class="dp-calendar-month-label">' + esc(weekDays[0].monthShort) + '</div>';
     }
+    html += '<div class="dp-calendar-days dp-calendar-days-sm">';
+    html += buildDPCalendarDaysHtml_(weekDays);
     html += '</div>';
   }
+  html += '</div>';
+  html += '</div>';
 
   // Expanded day details
   if (appState.dueProcessExpandedDay !== null) {
@@ -2242,9 +2342,28 @@ function renderDPCalendarOnly_() {
 }
 
 function toggleDPCalendarRange() {
-  appState.dueProcessCalendarWeeks = (appState.dueProcessCalendarWeeks === 1) ? 4 : 1;
+  var expanding = appState.dueProcessCalendarWeeks === 1;
+  appState.dueProcessCalendarWeeks = expanding ? 4 : 1;
   appState.dueProcessExpandedDay = null;
-  renderDPCalendarOnly_();
+
+  var extra = document.getElementById('dp-cal-extra');
+  var week1 = document.getElementById('dp-cal-week1');
+  var btn = document.getElementById('dp-cal-toggle-btn');
+
+  if (extra) {
+    if (expanding) {
+      extra.classList.add('dp-calendar-extra-open');
+      if (week1) week1.classList.add('dp-calendar-days-sm');
+    } else {
+      extra.classList.remove('dp-calendar-extra-open');
+      if (week1) week1.classList.remove('dp-calendar-days-sm');
+    }
+  }
+  if (btn) btn.textContent = expanding ? 'This Week' : 'Show 4 Weeks';
+
+  // Clear expanded day detail (needs DOM update)
+  var dayDetail = document.querySelector('.dp-expanded-day');
+  if (dayDetail) dayDetail.remove();
 }
 
 function toggleDPDay(dateStr) {
@@ -2479,7 +2598,8 @@ function buildGroupedStudentRow_(sid, info, filteredGoals, completionMap, comple
       'onclick="toggleDPReportItem(\'' + esc(sid) + '\',\'' + esc(g.goalId) + '\',\'' + esc(quarter) + '\',' + !goalDone + ')" ' +
       'role="button" tabindex="0" onkeydown="if(event.key===\'Enter\')toggleDPReportItem(\'' + esc(sid) + '\',\'' + esc(g.goalId) + '\',\'' + esc(quarter) + '\',' + !goalDone + ')">';
     html += '<input type="checkbox" class="eval-item-checkbox" ' + (goalDone ? 'checked' : '') +
-      ' onclick="event.stopPropagation();toggleDPReportItem(\'' + esc(sid) + '\',\'' + esc(g.goalId) + '\',\'' + esc(quarter) + '\',' + !goalDone + ')" tabindex="-1">';
+      ' onchange="event.stopPropagation();toggleDPReportItem(\'' + esc(sid) + '\',\'' + esc(g.goalId) + '\',\'' + esc(quarter) + '\',this.checked)" ' +
+      'onclick="event.stopPropagation()" tabindex="-1">';
     html += '<div style="flex:1;min-width:0;">';
     html += '<span class="dp-progress-goal-chip" style="margin-right:6px;">' + esc(g.goalArea) + '</span>';
     html += '<span class="dp-progress-checkbox-text">' + esc(g.goalText) + '</span>';
@@ -2498,7 +2618,7 @@ function buildGroupedStudentRow_(sid, info, filteredGoals, completionMap, comple
           'onclick="navigateToProgressGoal(\'' + esc(sid) + '\',\'' + esc(g.goalId) + '\',\'' + esc(quarter) + '\')" ' +
           'role="button" tabindex="0" onkeydown="if(event.key===\'Enter\')navigateToProgressGoal(\'' + esc(sid) + '\',\'' + esc(g.goalId) + '\',\'' + esc(quarter) + '\')">';
         html += '<span class="dp-progress-obj-indicator' + (objComp ? ' dp-progress-obj-done' : '') + '">' +
-          (objComp ? '&#x2714;&#xFE0E;' : '&#x25CB;') + '</span>';
+          (objComp ? '&#x25CF;' : '&#x25CB;') + '</span>';
         html += '<span class="dp-progress-checkbox-text">' + esc(obj.text) + '</span>';
         html += '<svg class="dp-progress-goto-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
           '<polyline points="9 18 15 12 9 6"></polyline></svg>';
@@ -2601,7 +2721,8 @@ function buildFlatGoalRow_(a, completionMap, completionFlags, quarter, goalDone)
     'onclick="toggleDPReportItem(\'' + esc(a.studentId) + '\',\'' + esc(a.goalId) + '\',\'' + esc(quarter) + '\',' + !goalDone + ')" ' +
     'onkeydown="if(event.key===\'Enter\')toggleDPReportItem(\'' + esc(a.studentId) + '\',\'' + esc(a.goalId) + '\',\'' + esc(quarter) + '\',' + !goalDone + ')">';
   html += '<input type="checkbox" class="eval-item-checkbox" ' + (goalDone ? 'checked' : '') +
-    ' onclick="event.stopPropagation();toggleDPReportItem(\'' + esc(a.studentId) + '\',\'' + esc(a.goalId) + '\',\'' + esc(quarter) + '\',' + !goalDone + ')" tabindex="-1">';
+    ' onchange="event.stopPropagation();toggleDPReportItem(\'' + esc(a.studentId) + '\',\'' + esc(a.goalId) + '\',\'' + esc(quarter) + '\',this.checked)" ' +
+    'onclick="event.stopPropagation()" tabindex="-1">';
   html += '<span class="dp-progress-flat-name">' + esc(a.studentName) + '</span>';
   html += '<span class="dp-progress-goal-chip">' + esc(a.goalArea) + '</span>';
   html += '<span class="dp-progress-checkbox-text" style="flex:1;min-width:0;">' + esc(a.goalText) + '</span>';
@@ -3841,13 +3962,16 @@ function saveEditingGoalToState_() {
   if (!goalEl) return;
 
   var goalText = goalEl.querySelector('[data-field="goal-text"]');
-  var goalAreaInput = goalEl.querySelector('[data-field="goal-area"]');
+  var goalAreaPicker = goalEl.querySelector('.goal-area-picker');
   var responsibleSelect = goalEl.querySelector('[data-field="goal-responsible"]');
 
   for (var i = 0; i < appState.currentGoals.length; i++) {
     if (appState.currentGoals[i].id === editId) {
       if (goalText) appState.currentGoals[i].text = goalText.value;
-      if (goalAreaInput) appState.currentGoals[i].goalArea = goalAreaInput.value;
+      if (goalAreaPicker) {
+        var selected = goalAreaPicker.getAttribute('data-selected');
+        if (selected !== null) appState.currentGoals[i].goalArea = selected;
+      }
       if (responsibleSelect) appState.currentGoals[i].responsibleEmail = responsibleSelect.value;
 
       // Read objectives from DOM
@@ -3952,9 +4076,9 @@ function addGoal() {
   var goalEl = div.firstChild;
   container.appendChild(goalEl);
 
-  // Focus goal area input
-  var areaInput = goalEl.querySelector('[data-field="goal-area"]');
-  if (areaInput) areaInput.focus();
+  // Focus goal text input
+  var textInput = goalEl.querySelector('[data-field="goal-text"]');
+  if (textInput) textInput.focus();
   scheduleGoalsAutosave();
 }
 
@@ -4942,12 +5066,10 @@ function renderGoalEditMode_(goal) {
   var respEmail = (goal.responsibleEmail || '').toLowerCase();
   var currentEmail = (appState.currentUserEmail || '').toLowerCase();
 
-  // Goal area input
+  // Goal area dropdown
   html += '<div class="profile-goal-area-row">';
   html += '<label class="profile-goal-area-label">Goal Area:</label>';
-  html += '<input type="text" class="profile-goal-area-input" data-field="goal-area" ' +
-    'placeholder="e.g., Math Calculation, Reading Comprehension, Behavior..." ' +
-    'value="' + esc(goalArea) + '" />';
+  html += buildGoalAreaDropdown_(goal.id, goalArea);
   html += '</div>';
 
   // Responsibility selector

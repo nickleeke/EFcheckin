@@ -760,9 +760,16 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 
 /* Dashboard search bar */
 .dashboard-search {
-  position: relative;
-  max-width: 360px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 400px;
   margin-bottom: var(--md-spacing-subsection);
+}
+.dashboard-search-input-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
 }
 .dashboard-search-icon {
   position: absolute;
@@ -842,18 +849,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   color: var(--md-on-surface);
 }
 
-/* ─── Persistent Action Bar ─── */
-.persistent-action-bar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 4px;
-  padding: 8px 24px;
-  background: var(--md-surface);
-  position: sticky;
-  top: 0;
-  z-index: 50;
-}
+/* ─── Global Search Icon (fixed top-right) ─── */
 
 /* ─── Add Student Icon Button (in student list search bar) ─── */
 .add-student-icon-btn {
@@ -864,13 +860,29 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 
 /* ─── Header Search (expandable typeahead) ─── */
 .header-search-container {
-  position: relative;
+  position: fixed;
+  top: 12px;
+  right: 16px;
+  z-index: 110;
   display: flex;
   align-items: center;
+}
+.header-search-btn {
+  color: var(--md-on-surface-variant);
+  background: var(--md-surface-container);
+  border-radius: var(--md-shape-full);
+  box-shadow: var(--md-elevation-1);
+  transition: opacity var(--md-duration-short3) var(--md-easing-standard),
+              background var(--md-duration-short3) var(--md-easing-standard);
+}
+.header-search-btn:hover {
+  background: var(--md-surface-container-high);
 }
 .header-search-field {
   position: absolute;
   right: 0;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
   align-items: center;
   max-width: 0;
@@ -880,13 +892,13 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
               opacity var(--md-duration-short4) var(--md-easing-standard);
 }
 .header-search-container.header-search-open .header-search-field {
-  max-width: 288px;
+  max-width: 320px;
   opacity: 1;
 }
 .header-search-input {
-  width: 240px;
+  width: 260px;
   height: 40px;
-  padding: 0 36px 0 12px;
+  padding: 0 40px 0 14px;
   border: 1px solid var(--md-outline-variant);
   border-radius: var(--md-shape-full);
   font-family: 'Roboto', sans-serif;
@@ -895,6 +907,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   letter-spacing: 0.25px;
   background: var(--md-surface-container-low);
   color: var(--md-on-surface);
+  box-shadow: var(--md-elevation-2);
   transition: border-color var(--md-duration-short4) var(--md-easing-standard),
               background var(--md-duration-short4) var(--md-easing-standard);
 }
@@ -904,11 +917,8 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   border-color: var(--md-primary);
   background: var(--md-surface);
 }
-.header-search-close { margin-left: -36px; z-index: 1; }
-#header-search-btn {
-  transition: opacity var(--md-duration-short3) var(--md-easing-standard);
-}
-.header-search-container.header-search-open #header-search-btn {
+.header-search-close { margin-left: -40px; z-index: 1; }
+.header-search-container.header-search-open .header-search-btn {
   opacity: 0;
   pointer-events: none;
 }
@@ -918,13 +928,13 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   position: absolute;
   top: 100%;
   right: 0;
-  margin-top: 4px;
-  min-width: 280px;
+  margin-top: 8px;
+  min-width: 300px;
   max-height: 0;
   overflow: hidden;
   background: var(--md-surface-container-lowest);
   border-radius: var(--md-shape-md);
-  z-index: 100;
+  z-index: 110;
   transition: max-height var(--md-duration-medium2) var(--md-easing-standard);
 }
 .header-search-results:not(:empty) {
@@ -3491,12 +3501,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 
 /* Mobile: disable hover for submenu, rely on JS click toggle */
 @media (max-width: 840px) {
-  .persistent-action-bar {
-    top: 64px;
-    padding: 8px 16px;
-  }
-}
-@media (max-width: 840px) {
   .nav-drawer-group:hover .nav-drawer-submenu {
     max-height: 0;
   }
@@ -3567,6 +3571,19 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   .dashboard-table th {
     top: 64px;
   }
+  /* Position search icon inside top app bar on mobile */
+  .header-search-container {
+    top: 12px;
+    right: 12px;
+  }
+  .header-search-btn {
+    color: var(--md-on-primary);
+    background: transparent;
+    box-shadow: none;
+  }
+  .header-search-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+  }
 }
 
 /* ─── Responsive ─── */
@@ -3577,6 +3594,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   .top-app-bar-content {
     padding: 0 12px;
   }
+  .header-search-container { top: 8px; }
   .nav-logo { width: 120px; }
   main { padding: 16px; }
   .form-row { flex-direction: column; gap: 0; }
@@ -4701,6 +4719,27 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   flex-direction: column;
   gap: 4px;
 }
+.dp-calendar-extra {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-height var(--md-duration-medium4) var(--md-easing-standard),
+              opacity var(--md-duration-medium2) var(--md-easing-standard);
+}
+.dp-calendar-extra-open {
+  max-height: 600px;
+  opacity: 1;
+}
+.dp-calendar-days-sm .dp-cal-day {
+  padding: 4px 2px;
+  min-height: 40px;
+}
+.dp-calendar-days-sm .dp-cal-day-abbr {
+  font-size: 9px;
+}
+.dp-calendar-days-sm .dp-cal-day-num {
+  font-size: 13px;
+}
 .dp-calendar-month-label {
   font-size: 11px;
   font-weight: 500;
@@ -4729,7 +4768,9 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   cursor: pointer;
   transition: background var(--md-duration-short3) var(--md-easing-standard),
               border-color var(--md-duration-short3) var(--md-easing-standard),
-              box-shadow var(--md-duration-short3) var(--md-easing-standard);
+              box-shadow var(--md-duration-short3) var(--md-easing-standard),
+              padding var(--md-duration-medium2) var(--md-easing-standard),
+              min-height var(--md-duration-medium2) var(--md-easing-standard);
   min-height: 52px;
   font-family: inherit;
   color: inherit;
@@ -4771,6 +4812,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   letter-spacing: 0.5px;
   color: var(--md-on-surface-variant);
   text-transform: uppercase;
+  transition: font-size var(--md-duration-medium2) var(--md-easing-standard);
 }
 .dp-cal-today .dp-cal-day-abbr {
   color: var(--md-on-surface);
@@ -4779,6 +4821,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   font-size: 15px;
   font-weight: 500;
   color: var(--md-on-surface);
+  transition: font-size var(--md-duration-medium2) var(--md-easing-standard);
 }
 .dp-cal-today .dp-cal-day-num {
   color: var(--md-on-surface);
@@ -5346,7 +5389,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   background: transparent;
   border: none;
   border-radius: var(--md-shape-sm);
-  padding: 4px 4px 4px 0;
+  padding: 4px 8px;
   cursor: pointer;
   transition: color var(--md-duration-short3) var(--md-easing-standard),
               background var(--md-duration-short3) var(--md-easing-standard);
@@ -5416,6 +5459,26 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .eval-type-menu-item-selected:hover {
   background: var(--md-state-on-surface-pressed);
 }
+
+/* Goal Area Dropdown Extensions */
+.goal-area-menu {
+  max-height: 320px;
+  overflow-y: auto;
+}
+.goal-area-menu-header {
+  padding: 8px 16px 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--md-on-surface-variant);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.goal-area-menu-divider {
+  height: 1px;
+  background: var(--md-outline-variant);
+  margin: 4px 12px;
+}
+
 .eval-summary-progress {
   font-size: 14px;
   color: var(--md-on-surface-variant);
@@ -6702,7 +6765,9 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   border-radius: var(--md-shape-full);
   font-size: 12px;
   font-weight: 500;
+  white-space: nowrap;
 }
+.staleness-compact { display: none; }
 .staleness-green { background: var(--color-tier-green-bg); color: var(--color-tier-green-text); }
 .staleness-yellow { background: var(--color-tier-yellow-bg); color: var(--color-tier-yellow-text); }
 .staleness-red { background: var(--md-error-container); color: var(--md-on-error-container); }
@@ -6711,15 +6776,15 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 @media (max-width: 600px) {
   .persistent-action-bar { top: 56px; }
   .ef-sparkline { display: none; }
-  .header-search-container.header-search-open .header-search-field { max-width: 180px; }
-  .header-search-input { width: 140px; }
-  .header-search-results { min-width: 220px; }
+  .header-search-container.header-search-open .header-search-field { max-width: 200px; }
+  .header-search-input { width: 160px; }
+  .header-search-results { min-width: 240px; }
   .needs-attention-cards { gap: 8px; }
   .needs-attention-card { width: 160px; padding: 10px; }
   /* Due Process responsive */
-  .dp-calendar-30 .dp-cal-day { padding: 4px 2px; min-height: 40px; }
-  .dp-calendar-30 .dp-cal-day-abbr { font-size: 8px; }
-  .dp-calendar-30 .dp-cal-day-num { font-size: 12px; }
+  .dp-calendar-days-sm .dp-cal-day { padding: 3px 2px; min-height: 36px; }
+  .dp-calendar-days-sm .dp-cal-day-abbr { font-size: 8px; }
+  .dp-calendar-days-sm .dp-cal-day-num { font-size: 11px; }
   .dp-progress-student-header { flex-wrap: wrap; }
   .dp-progress-checkbox-objective { padding-left: 8px; }
   .dp-progress-quarter-selector { flex-wrap: wrap; }
@@ -6727,6 +6792,9 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   .dp-progress-flat-card { flex-wrap: wrap; }
   .dp-upcoming-date { min-width: 70px; font-size: 11px; }
   .dp-upcoming-row { padding: 8px 12px; gap: 8px; }
+  /* Swap staleness text to compact MM/DD in narrow viewports */
+  .staleness-relative { display: none; }
+  .staleness-compact { display: inline; }
 }
 
 /* ─── Reduced Motion ─── */
