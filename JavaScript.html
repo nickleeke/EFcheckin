@@ -38,6 +38,7 @@ var appState = {
   dueProcessProgressViewMode: 'grouped',
   dueProcessGoalAreaFilters: [],
   dueProcessExpandedStudents: {},
+  dueProcessCompletedCollapsed: false,
   currentGoals: [],
   editingGoalId: null,
   expandedGoalIds: {},
@@ -126,6 +127,96 @@ function updateEvalBreadcrumb_(typeLabel) {
     '<button class="breadcrumb-link" onclick="goBackFromEvalChecklist()">Student Profile</button> ' +
     '<svg class="breadcrumb-chevron" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg> ' +
     esc(typeLabel);
+}
+
+// ─── Goal Area Definitions ───
+var GOAL_AREA_OPTIONS = [
+  { type: 'header', label: 'District/Coop Options' },
+  { value: 'Math', label: 'Math' },
+  { value: 'Reading', label: 'Reading' },
+  { value: 'Writing', label: 'Writing' },
+  { value: 'Motor', label: 'Motor' },
+  { value: 'Emotional/Social/Behavioral', label: 'Emotional/Social/Behavioral' },
+  { value: 'Functional', label: 'Functional' },
+  { value: 'Communication', label: 'Communication' },
+  { value: 'Sensory', label: 'Sensory' },
+  { type: 'divider' },
+  { value: 'Cognitive', label: 'Cognitive' },
+  { value: 'Adaptive', label: 'Adaptive' },
+  { value: 'Post Secondary Education and Training / Employment / Independent Living Skills', label: 'Post Secondary Education and Training / Employment / Independent Living Skills' },
+  { value: 'Academics', label: 'Academics' },
+  { value: 'Social/Communication', label: 'Social/Communication' }
+];
+
+function buildGoalAreaDropdown_(goalId, currentArea) {
+  var label = currentArea || 'Select Goal Area';
+  var html = '<div class="eval-type-picker goal-area-picker" data-goal-id="' + esc(goalId) + '">' +
+    '<button class="eval-type-ghost-btn" onclick="toggleGoalAreaPicker(event)" aria-haspopup="listbox" aria-expanded="false">' +
+      esc(label) +
+      ' <svg class="eval-type-chevron" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>' +
+    '</button>' +
+    '<div class="eval-type-menu goal-area-menu" role="listbox">';
+  GOAL_AREA_OPTIONS.forEach(function(opt) {
+    if (opt.type === 'header') {
+      html += '<div class="goal-area-menu-header">' + esc(opt.label) + '</div>';
+    } else if (opt.type === 'divider') {
+      html += '<div class="goal-area-menu-divider"></div>';
+    } else {
+      var selected = currentArea === opt.value;
+      html += '<div class="eval-type-menu-item' + (selected ? ' eval-type-menu-item-selected' : '') + '" role="option" aria-selected="' + selected + '" ' +
+        'onclick="selectGoalArea(\'' + esc(goalId) + '\', \'' + esc(opt.value) + '\')" ' +
+        'onkeydown="if(event.key===\'Enter\')selectGoalArea(\'' + esc(goalId) + '\', \'' + esc(opt.value) + '\')" tabindex="0">' +
+        esc(opt.label) + '</div>';
+    }
+  });
+  html += '</div></div>';
+  return html;
+}
+
+function toggleGoalAreaPicker(e) {
+  e.stopPropagation();
+  var picker = e.currentTarget.closest('.goal-area-picker');
+  var menu = picker.querySelector('.goal-area-menu');
+  var btn = picker.querySelector('.eval-type-ghost-btn');
+  var open = menu.classList.contains('eval-type-menu-open');
+  // Close any other open pickers first
+  document.querySelectorAll('.eval-type-menu-open').forEach(function(m) { m.classList.remove('eval-type-menu-open'); });
+  document.querySelectorAll('.eval-type-ghost-btn[aria-expanded="true"]').forEach(function(b) { b.setAttribute('aria-expanded', 'false'); });
+  if (!open) {
+    menu.classList.add('eval-type-menu-open');
+    btn.setAttribute('aria-expanded', 'true');
+    setTimeout(function() {
+      document.addEventListener('click', closeGoalAreaPicker_, { once: true });
+    }, 0);
+  }
+}
+
+function closeGoalAreaPicker_() {
+  document.querySelectorAll('.goal-area-menu.eval-type-menu-open').forEach(function(m) { m.classList.remove('eval-type-menu-open'); });
+  document.querySelectorAll('.goal-area-picker .eval-type-ghost-btn[aria-expanded="true"]').forEach(function(b) { b.setAttribute('aria-expanded', 'false'); });
+}
+
+function selectGoalArea(goalId, value) {
+  closeGoalAreaPicker_();
+  var picker = document.querySelector('.goal-area-picker[data-goal-id="' + goalId + '"]');
+  if (picker) {
+    var btn = picker.querySelector('.eval-type-ghost-btn');
+    btn.innerHTML = esc(value) + ' <svg class="eval-type-chevron" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>';
+    picker.setAttribute('data-selected', value);
+    picker.querySelectorAll('.eval-type-menu-item').forEach(function(item) {
+      var isMatch = item.textContent.trim() === value;
+      item.classList.toggle('eval-type-menu-item-selected', isMatch);
+      item.setAttribute('aria-selected', isMatch);
+    });
+  }
+  // Update appState directly
+  for (var i = 0; i < appState.currentGoals.length; i++) {
+    if (appState.currentGoals[i].id === goalId) {
+      appState.currentGoals[i].goalArea = value;
+      break;
+    }
+  }
+  scheduleGoalsAutosave();
 }
 
 function buildEvalTypeDropdown_(evalId, currentType) {
@@ -473,8 +564,14 @@ function enterApp() {
   var navDrawer = document.getElementById('nav-drawer');
   if (navbar) navbar.style.display = '';
   if (navDrawer) navDrawer.style.display = '';
-  var actionBar = document.getElementById('persistent-action-bar');
-  if (actionBar) actionBar.style.display = '';
+  var headerSearch = document.getElementById('header-search-container');
+  if (headerSearch) headerSearch.style.display = '';
+  // G1: Populate desktop top bar user identity
+  var firstName = getFirstNameFromEmail(appState.currentUserEmail);
+  var nameEl = document.getElementById('top-bar-user-name');
+  var avatarEl = document.getElementById('top-bar-avatar');
+  if (nameEl) nameEl.textContent = firstName || '';
+  if (avatarEl) avatarEl.textContent = firstName ? firstName.charAt(0) : '';
   // Load global case managers list
   google.script.run
     .withSuccessHandler(function(cms) {
@@ -667,7 +764,7 @@ function hideNavFlyout_() {
 
 function scheduleFlyoutHide_() {
   clearTimeout(_flyoutHideTimer);
-  _flyoutHideTimer = setTimeout(hideNavFlyout_, 200);
+  _flyoutHideTimer = setTimeout(hideNavFlyout_, 100);
 }
 
 // Delegated hover for flyout
@@ -781,30 +878,6 @@ function updateRowHighlight(rows) {
   }
 }
 
-function toggleFabMenu() {
-  var container = document.getElementById('fab-container');
-  if (!container) return;
-  container.classList.toggle('fab-open');
-  if (container.classList.contains('fab-open')) {
-    // Close on outside click
-    setTimeout(function() {
-      document.addEventListener('click', _closeFabOnOutsideClick);
-    }, 0);
-  } else {
-    document.removeEventListener('click', _closeFabOnOutsideClick);
-  }
-}
-function closeFabMenu() {
-  var container = document.getElementById('fab-container');
-  if (container) container.classList.remove('fab-open');
-  document.removeEventListener('click', _closeFabOnOutsideClick);
-}
-function _closeFabOnOutsideClick(e) {
-  var container = document.getElementById('fab-container');
-  if (container && !container.contains(e.target)) {
-    closeFabMenu();
-  }
-}
 
 function toggleKeyboardHelp() {
   var existing = document.querySelector('.keyboard-help-overlay');
@@ -829,7 +902,7 @@ function toggleKeyboardHelp() {
 function closeConfirmDialog(overlayEl) {
   if (!overlayEl || overlayEl.classList.contains('dialog-closing')) return;
   overlayEl.classList.add('dialog-closing');
-  var fallback = setTimeout(function() { overlayEl.remove(); }, 300);
+  var fallback = setTimeout(function() { overlayEl.remove(); }, 200);
   overlayEl.addEventListener('animationend', function() {
     clearTimeout(fallback);
     overlayEl.remove();
@@ -1349,7 +1422,12 @@ function renderDashboard(data, opts) {
     // Last check-in staleness
     if (s.latestWeek) {
       var rel = formatRelativeDate(s.latestWeek);
-      html += '<td><span class="staleness-chip staleness-' + rel.tier + '" title="' + esc(formatDateDisplay(s.latestWeek)) + '">' + esc(rel.text) + '</span></td>';
+      var dateParts = s.latestWeek.split('-');
+      var compactDate = parseInt(dateParts[1], 10) + '/' + parseInt(dateParts[2], 10);
+      html += '<td><span class="staleness-chip staleness-' + rel.tier + '" title="' + esc(formatDateDisplay(s.latestWeek)) + '">' +
+        '<span class="staleness-relative">' + esc(rel.text) + '</span>' +
+        '<span class="staleness-compact">' + esc(compactDate) + '</span>' +
+        '</span></td>';
     } else {
       html += '<td><span class="chip chip-gray">--</span></td>';
     }
@@ -1837,6 +1915,7 @@ function showDueProcess() {
   appState.dueProcessProgressViewMode = 'grouped';
   appState.dueProcessGoalAreaFilters = [];
   appState.dueProcessExpandedStudents = {};
+  appState.dueProcessCompletedCollapsed = false;
   // Keep dueProcessQuarter across visits (don't reset)
 
   showView('dueprocess-view');
@@ -2490,130 +2569,177 @@ function filterGoalsByArea_(goals, areaFilters) {
 
 // ── Grouped View ──
 
-function buildDPProgressGroupedView_(studentGoals, studentOrder, completionMap, completionFlags, quarter, filter, areaFilters) {
-  var html = '<div class="dp-progress-list">';
+function buildGroupedStudentRow_(sid, info, filteredGoals, completionMap, completionFlags, quarter) {
+  var doneCount = countCompletedGoals_(sid, filteredGoals, completionMap, completionFlags, quarter);
+  var totalGoals = filteredGoals.length;
+  var isExpanded = !!appState.dueProcessExpandedStudents[sid];
 
-  // Sort: incomplete first
-  var sortedOrder = studentOrder.slice().sort(function(a, b) {
-    var aDone = isStudentFullyComplete_(a, studentGoals[a].goals, completionMap, completionFlags, quarter) ? 1 : 0;
-    var bDone = isStudentFullyComplete_(b, studentGoals[b].goals, completionMap, completionFlags, quarter) ? 1 : 0;
-    if (aDone !== bDone) return aDone - bDone;
-    return studentGoals[a].name.localeCompare(studentGoals[b].name);
+  var html = '<div class="dp-progress-student-row" data-student-id="' + esc(sid) + '">';
+
+  // Header — no checkbox, neutral count chip + chevron
+  html += '<div class="dp-progress-student-header" role="button" tabindex="0" ' +
+    'onclick="toggleDPProgressStudent(\'' + esc(sid) + '\')" ' +
+    'onkeydown="if(event.key===\'Enter\')toggleDPProgressStudent(\'' + esc(sid) + '\')">';
+  html += '<span class="dp-progress-student-name">' + esc(info.name) +
+    (info.online ? ' <span class="online-badge" title="Online">Online</span>' : '') +
+    buildBirthdayBadge_(info.birthday) + '</span>';
+  html += '<div class="dp-progress-student-right">';
+  html += '<span class="dp-progress-count-chip">' + doneCount + '/' + totalGoals + '</span>';
+  html += '<svg class="dp-progress-chevron' + (isExpanded ? ' dp-progress-chevron-open' : '') + '" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+    '<polyline points="6 9 12 15 18 9"></polyline></svg>';
+  html += '</div></div>';
+
+  // Body (collapsible goal rows)
+  html += '<div class="dp-progress-student-body' + (isExpanded ? ' dp-progress-student-body-open' : '') + '">';
+  filteredGoals.forEach(function(g) {
+    var goalDone = isGoalComplete_(sid, g.goalId, completionMap, completionFlags, quarter);
+
+    html += '<div class="dp-progress-checkbox-row' + (goalDone ? ' dp-progress-checkbox-done' : '') + '" ' +
+      'onclick="toggleDPReportItem(\'' + esc(sid) + '\',\'' + esc(g.goalId) + '\',\'' + esc(quarter) + '\',' + !goalDone + ')" ' +
+      'role="button" tabindex="0" onkeydown="if(event.key===\'Enter\')toggleDPReportItem(\'' + esc(sid) + '\',\'' + esc(g.goalId) + '\',\'' + esc(quarter) + '\',' + !goalDone + ')">';
+    html += '<input type="checkbox" class="eval-item-checkbox" ' + (goalDone ? 'checked' : '') +
+      ' onchange="event.stopPropagation();toggleDPReportItem(\'' + esc(sid) + '\',\'' + esc(g.goalId) + '\',\'' + esc(quarter) + '\',this.checked)" ' +
+      'onclick="event.stopPropagation()" tabindex="-1">';
+    html += '<div style="flex:1;min-width:0;">';
+    html += '<span class="dp-progress-goal-chip" style="margin-right:6px;">' + esc(g.goalArea) + '</span>';
+    html += '<span class="dp-progress-checkbox-text">' + esc(g.goalText) + '</span>';
+    html += '</div>';
+    html += '<svg class="dp-progress-goto-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+      'onclick="event.stopPropagation();navigateToProgressGoal(\'' + esc(sid) + '\',\'' + esc(g.goalId) + '\',\'' + esc(quarter) + '\')" title="Go to profile">' +
+      '<polyline points="9 18 15 12 9 6"></polyline></svg>';
+    html += '</div>';
+
+    // Objectives (indented)
+    if (g.objectives && g.objectives.length > 0) {
+      g.objectives.forEach(function(obj) {
+        var objComp = completionMap[sid] && completionMap[sid].goals && completionMap[sid].goals[g.goalId] &&
+          completionMap[sid].goals[g.goalId].objectives ? completionMap[sid].goals[g.goalId].objectives[obj.id] : false;
+        html += '<div class="dp-progress-checkbox-row dp-progress-checkbox-objective' + (objComp ? ' dp-progress-checkbox-done' : '') + '" ' +
+          'onclick="navigateToProgressGoal(\'' + esc(sid) + '\',\'' + esc(g.goalId) + '\',\'' + esc(quarter) + '\')" ' +
+          'role="button" tabindex="0" onkeydown="if(event.key===\'Enter\')navigateToProgressGoal(\'' + esc(sid) + '\',\'' + esc(g.goalId) + '\',\'' + esc(quarter) + '\')">';
+        html += '<span class="dp-progress-obj-indicator' + (objComp ? ' dp-progress-obj-done' : '') + '">' +
+          (objComp ? '&#x25CF;' : '&#x25CB;') + '</span>';
+        html += '<span class="dp-progress-checkbox-text">' + esc(obj.text) + '</span>';
+        html += '<svg class="dp-progress-goto-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+          '<polyline points="9 18 15 12 9 6"></polyline></svg>';
+        html += '</div>';
+      });
+    }
   });
+  html += '</div>'; // end body
+  html += '</div>'; // end student row
+  return html;
+}
 
-  var visibleCount = 0;
-  sortedOrder.forEach(function(sid) {
+function buildDPProgressGroupedView_(studentGoals, studentOrder, completionMap, completionFlags, quarter, filter, areaFilters) {
+  // Split students into incomplete and complete arrays
+  var incompleteStudents = [];
+  var completeStudents = [];
+
+  studentOrder.forEach(function(sid) {
     var info = studentGoals[sid];
     var filteredGoals = filterGoalsByArea_(info.goals, areaFilters);
     if (filteredGoals.length === 0) return;
 
     var allDone = isStudentFullyComplete_(sid, filteredGoals, completionMap, completionFlags, quarter);
-    var doneCount = countCompletedGoals_(sid, filteredGoals, completionMap, completionFlags, quarter);
-    var totalGoals = filteredGoals.length;
 
     // Apply status filter
     if (filter === 'incomplete' && allDone) return;
     if (filter === 'complete' && !allDone) return;
 
-    visibleCount++;
-    var isExpanded = !!appState.dueProcessExpandedStudents[sid];
-    var rowClass = 'dp-progress-student-row' + (allDone ? ' dp-progress-student-complete' : '');
-
-    html += '<div class="' + rowClass + '">';
-
-    // Header
-    html += '<div class="dp-progress-student-header" role="button" tabindex="0" ' +
-      'onclick="toggleDPProgressStudent(\'' + esc(sid) + '\')" ' +
-      'onkeydown="if(event.key===\'Enter\')toggleDPProgressStudent(\'' + esc(sid) + '\')">';
-    html += '<span class="dp-progress-student-name">' + esc(info.name) +
-      (info.online ? ' <span class="online-badge" title="Online">Online</span>' : '') +
-      buildBirthdayBadge_(info.birthday) + '</span>';
-    html += '<div class="dp-progress-student-right">';
+    var entry = { sid: sid, info: info, filteredGoals: filteredGoals, allDone: allDone };
     if (allDone) {
-      html += '<span class="chip chip-green">' + doneCount + '/' + totalGoals + '</span>';
+      completeStudents.push(entry);
     } else {
-      html += '<span class="chip chip-yellow">' + doneCount + '/' + totalGoals + '</span>';
+      incompleteStudents.push(entry);
     }
-    html += '<svg class="dp-progress-chevron' + (isExpanded ? ' dp-progress-chevron-open' : '') + '" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
-      '<polyline points="6 9 12 15 18 9"></polyline></svg>';
-    html += '</div></div>';
+  });
 
-    // Body (collapsible)
-    html += '<div class="dp-progress-student-body' + (isExpanded ? ' dp-progress-student-body-open' : '') + '">';
-    filteredGoals.forEach(function(g) {
-      var goalDone = isGoalComplete_(sid, g.goalId, completionMap, completionFlags, quarter);
+  // Sort each group alphabetically
+  var nameSorter = function(a, b) { return a.info.name.localeCompare(b.info.name); };
+  incompleteStudents.sort(nameSorter);
+  completeStudents.sort(nameSorter);
 
-      // Goal heading with checkbox
-      html += '<div class="dp-progress-checkbox-row' + (goalDone ? ' dp-progress-checkbox-done' : '') + '" ' +
-        'onclick="toggleDPReportItem(\'' + esc(sid) + '\',\'' + esc(g.goalId) + '\',\'' + esc(quarter) + '\',' + !goalDone + ')" ' +
-        'role="button" tabindex="0" onkeydown="if(event.key===\'Enter\')toggleDPReportItem(\'' + esc(sid) + '\',\'' + esc(g.goalId) + '\',\'' + esc(quarter) + '\',' + !goalDone + ')">';
-      html += '<input type="checkbox" class="eval-item-checkbox" ' + (goalDone ? 'checked' : '') +
-        ' onchange="event.stopPropagation();toggleDPReportItem(\'' + esc(sid) + '\',\'' + esc(g.goalId) + '\',\'' + esc(quarter) + '\',this.checked)" ' +
-        'onclick="event.stopPropagation()" tabindex="-1">';
-      html += '<div style="flex:1;min-width:0;">';
-      html += '<span class="dp-progress-goal-chip" style="margin-right:6px;">' + esc(g.goalArea) + '</span>';
-      html += '<span class="dp-progress-checkbox-text">' + esc(g.goalText) + '</span>';
-      html += '</div>';
-      html += '<svg class="dp-progress-goto-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
-        'onclick="event.stopPropagation();navigateToProgressGoal(\'' + esc(sid) + '\',\'' + esc(g.goalId) + '\',\'' + esc(quarter) + '\')" title="Go to profile">' +
-        '<polyline points="9 18 15 12 9 6"></polyline></svg>';
-      html += '</div>';
+  var visibleCount = incompleteStudents.length + completeStudents.length;
+  if (visibleCount === 0) {
+    return '<p class="dp-empty-state">No matching progress reports.</p>';
+  }
 
-      // Objectives (indented)
-      if (g.objectives && g.objectives.length > 0) {
-        g.objectives.forEach(function(obj) {
-          var objComp = completionMap[sid] && completionMap[sid].goals && completionMap[sid].goals[g.goalId] &&
-            completionMap[sid].goals[g.goalId].objectives ? completionMap[sid].goals[g.goalId].objectives[obj.id] : false;
-          html += '<div class="dp-progress-checkbox-row dp-progress-checkbox-objective' + (objComp ? ' dp-progress-checkbox-done' : '') + '" ' +
-            'onclick="navigateToProgressGoal(\'' + esc(sid) + '\',\'' + esc(g.goalId) + '\',\'' + esc(quarter) + '\')" ' +
-            'role="button" tabindex="0" onkeydown="if(event.key===\'Enter\')navigateToProgressGoal(\'' + esc(sid) + '\',\'' + esc(g.goalId) + '\',\'' + esc(quarter) + '\')">';
-          html += '<span class="dp-progress-obj-indicator' + (objComp ? ' dp-progress-obj-done' : '') + '">' +
-            (objComp ? '&#x25CF;' : '&#x25CB;') + '</span>';
-          html += '<span class="dp-progress-checkbox-text">' + esc(obj.text) + '</span>';
-          html += '<svg class="dp-progress-goto-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
-            '<polyline points="9 18 15 12 9 6"></polyline></svg>';
-          html += '</div>';
-        });
-      }
-    });
-    html += '</div>';
+  // Single container (matches eval-items-card)
+  var html = '<div class="eval-items-card">';
 
-    html += '</div>';
+  // Render incomplete students
+  incompleteStudents.forEach(function(entry) {
+    html += buildGroupedStudentRow_(entry.sid, entry.info, entry.filteredGoals, completionMap, completionFlags, quarter);
+  });
+
+  // Completed section divider + collapsible container
+  if (completeStudents.length > 0 && incompleteStudents.length > 0) {
+    var isCollapsed = !!appState.dueProcessCompletedCollapsed;
+    html += '<div class="eval-completed-divider" role="button" tabindex="0" ' +
+      'onclick="toggleDPProgressCompletedSection()" ' +
+      'onkeydown="if(event.key===\'Enter\')toggleDPProgressCompletedSection()" ' +
+      'aria-expanded="' + (!isCollapsed) + '" aria-controls="dp-progress-completed-items" ' +
+      'id="dp-progress-completed-divider">' +
+      '<svg class="eval-completed-divider-icon' + (isCollapsed ? ' collapsed' : '') + '" ' +
+        'id="dp-progress-completed-chevron" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">' +
+        '<path d="M7 10l5 5 5-5z"/></svg>' +
+      '<span class="eval-completed-divider-text">' + completeStudents.length + ' completed</span>' +
+    '</div>';
+    html += '<div class="eval-completed-items' + (isCollapsed ? ' collapsed' : '') + '" ' +
+      'id="dp-progress-completed-items">';
+  }
+
+  completeStudents.forEach(function(entry) {
+    html += buildGroupedStudentRow_(entry.sid, entry.info, entry.filteredGoals, completionMap, completionFlags, quarter);
 
     // Fire confetti for newly-complete students
-    if (allDone && !_progressCompletionFiredFor[sid + quarter]) {
-      _progressCompletionFiredFor[sid + quarter] = true;
+    if (!_progressCompletionFiredFor[entry.sid + quarter]) {
+      _progressCompletionFiredFor[entry.sid + quarter] = true;
+      var capturedSid = entry.sid;
       setTimeout(function() {
-        var rows = document.querySelectorAll('.dp-progress-student-complete');
-        if (rows.length > 0) launchConfetti(rows[rows.length - 1]);
+        var header = document.querySelector('[data-student-id="' + capturedSid + '"] .dp-progress-student-header');
+        if (header) launchConfetti(header);
       }, 400);
     }
   });
 
-  if (visibleCount === 0) {
-    html += '<p class="dp-empty-state">No matching progress reports.</p>';
+  if (completeStudents.length > 0 && incompleteStudents.length > 0) {
+    html += '</div>'; // end .eval-completed-items
   }
 
-  html += '</div>';
+  html += '</div>'; // end .eval-items-card
   return html;
 }
 
 // ── Flat View ──
 
-function buildDPProgressFlatView_(assignments, completionMap, completionFlags, quarter, filter, areaFilters) {
-  var html = '<div class="dp-progress-list">';
+function buildFlatGoalRow_(a, completionMap, completionFlags, quarter, goalDone) {
+  var cardClass = 'dp-progress-flat-card' + (goalDone ? ' dp-progress-flat-done' : '');
 
+  var html = '<div class="' + cardClass + '" role="button" tabindex="0" ' +
+    'onclick="toggleDPReportItem(\'' + esc(a.studentId) + '\',\'' + esc(a.goalId) + '\',\'' + esc(quarter) + '\',' + !goalDone + ')" ' +
+    'onkeydown="if(event.key===\'Enter\')toggleDPReportItem(\'' + esc(a.studentId) + '\',\'' + esc(a.goalId) + '\',\'' + esc(quarter) + '\',' + !goalDone + ')">';
+  html += '<input type="checkbox" class="eval-item-checkbox" ' + (goalDone ? 'checked' : '') +
+    ' onchange="event.stopPropagation();toggleDPReportItem(\'' + esc(a.studentId) + '\',\'' + esc(a.goalId) + '\',\'' + esc(quarter) + '\',this.checked)" ' +
+    'onclick="event.stopPropagation()" tabindex="-1">';
+  html += '<span class="dp-progress-flat-name">' + esc(a.studentName) + '</span>';
+  html += '<span class="dp-progress-goal-chip">' + esc(a.goalArea) + '</span>';
+  html += '<span class="dp-progress-checkbox-text" style="flex:1;min-width:0;">' + esc(a.goalText) + '</span>';
+  html += '<svg class="dp-progress-goto-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+    'onclick="event.stopPropagation();navigateToProgressGoal(\'' + esc(a.studentId) + '\',\'' + esc(a.goalId) + '\',\'' + esc(quarter) + '\')" title="Go to profile">' +
+    '<polyline points="9 18 15 12 9 6"></polyline></svg>';
+  html += '</div>';
+  return html;
+}
+
+function buildDPProgressFlatView_(assignments, completionMap, completionFlags, quarter, filter, areaFilters) {
   var filtered = filterGoalsByArea_(assignments, areaFilters);
 
-  // Sort: incomplete first, then by student name
-  filtered = filtered.slice().sort(function(a, b) {
-    var aDone = isGoalComplete_(a.studentId, a.goalId, completionMap, completionFlags, quarter) ? 1 : 0;
-    var bDone = isGoalComplete_(b.studentId, b.goalId, completionMap, completionFlags, quarter) ? 1 : 0;
-    if (aDone !== bDone) return aDone - bDone;
-    return a.studentName.localeCompare(b.studentName);
-  });
+  // Split into incomplete and complete arrays
+  var incompleteGoals = [];
+  var completeGoals = [];
 
-  var visibleCount = 0;
   filtered.forEach(function(a) {
     var goalDone = isGoalComplete_(a.studentId, a.goalId, completionMap, completionFlags, quarter);
 
@@ -2621,29 +2747,57 @@ function buildDPProgressFlatView_(assignments, completionMap, completionFlags, q
     if (filter === 'incomplete' && goalDone) return;
     if (filter === 'complete' && !goalDone) return;
 
-    visibleCount++;
-    var cardClass = 'dp-progress-flat-card' + (goalDone ? ' dp-progress-flat-complete' : '');
-
-    html += '<div class="' + cardClass + '" role="button" tabindex="0" ' +
-      'onclick="toggleDPReportItem(\'' + esc(a.studentId) + '\',\'' + esc(a.goalId) + '\',\'' + esc(quarter) + '\',' + !goalDone + ')" ' +
-      'onkeydown="if(event.key===\'Enter\')toggleDPReportItem(\'' + esc(a.studentId) + '\',\'' + esc(a.goalId) + '\',\'' + esc(quarter) + '\',' + !goalDone + ')">';
-    html += '<input type="checkbox" class="eval-item-checkbox" ' + (goalDone ? 'checked' : '') +
-      ' onchange="event.stopPropagation();toggleDPReportItem(\'' + esc(a.studentId) + '\',\'' + esc(a.goalId) + '\',\'' + esc(quarter) + '\',this.checked)" ' +
-      'onclick="event.stopPropagation()" tabindex="-1">';
-    html += '<span class="dp-progress-flat-name">' + esc(a.studentName) + '</span>';
-    html += '<span class="dp-progress-goal-chip">' + esc(a.goalArea) + '</span>';
-    html += '<span class="dp-progress-checkbox-text" style="flex:1;min-width:0;">' + esc(a.goalText) + '</span>';
-    html += '<svg class="dp-progress-goto-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
-      'onclick="event.stopPropagation();navigateToProgressGoal(\'' + esc(a.studentId) + '\',\'' + esc(a.goalId) + '\',\'' + esc(quarter) + '\')" title="Go to profile">' +
-      '<polyline points="9 18 15 12 9 6"></polyline></svg>';
-    html += '</div>';
+    if (goalDone) {
+      completeGoals.push(a);
+    } else {
+      incompleteGoals.push(a);
+    }
   });
 
+  // Sort each group by student name
+  var nameSorter = function(a, b) { return a.studentName.localeCompare(b.studentName); };
+  incompleteGoals.sort(nameSorter);
+  completeGoals.sort(nameSorter);
+
+  var visibleCount = incompleteGoals.length + completeGoals.length;
   if (visibleCount === 0) {
-    html += '<p class="dp-empty-state">No matching progress reports.</p>';
+    return '<p class="dp-empty-state">No matching progress reports.</p>';
   }
 
-  html += '</div>';
+  // Single container (matches eval-items-card)
+  var html = '<div class="eval-items-card">';
+
+  // Render incomplete goals
+  incompleteGoals.forEach(function(a) {
+    html += buildFlatGoalRow_(a, completionMap, completionFlags, quarter, false);
+  });
+
+  // Completed section divider + collapsible container
+  if (completeGoals.length > 0 && incompleteGoals.length > 0) {
+    var isCollapsed = !!appState.dueProcessCompletedCollapsed;
+    html += '<div class="eval-completed-divider" role="button" tabindex="0" ' +
+      'onclick="toggleDPProgressCompletedSection()" ' +
+      'onkeydown="if(event.key===\'Enter\')toggleDPProgressCompletedSection()" ' +
+      'aria-expanded="' + (!isCollapsed) + '" aria-controls="dp-progress-completed-items" ' +
+      'id="dp-progress-completed-divider">' +
+      '<svg class="eval-completed-divider-icon' + (isCollapsed ? ' collapsed' : '') + '" ' +
+        'id="dp-progress-completed-chevron" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">' +
+        '<path d="M7 10l5 5 5-5z"/></svg>' +
+      '<span class="eval-completed-divider-text">' + completeGoals.length + ' completed</span>' +
+    '</div>';
+    html += '<div class="eval-completed-items' + (isCollapsed ? ' collapsed' : '') + '" ' +
+      'id="dp-progress-completed-items">';
+  }
+
+  completeGoals.forEach(function(a) {
+    html += buildFlatGoalRow_(a, completionMap, completionFlags, quarter, true);
+  });
+
+  if (completeGoals.length > 0 && incompleteGoals.length > 0) {
+    html += '</div>'; // end .eval-completed-items
+  }
+
+  html += '</div>'; // end .eval-items-card
   return html;
 }
 
@@ -2681,6 +2835,16 @@ function toggleDPProgressStudent(studentId) {
     appState.dueProcessExpandedStudents[studentId] = true;
   }
   renderDPProgressOnly_();
+}
+
+function toggleDPProgressCompletedSection() {
+  appState.dueProcessCompletedCollapsed = !appState.dueProcessCompletedCollapsed;
+  var items = document.getElementById('dp-progress-completed-items');
+  var chevron = document.getElementById('dp-progress-completed-chevron');
+  var divider = document.getElementById('dp-progress-completed-divider');
+  if (items) items.classList.toggle('collapsed');
+  if (chevron) chevron.classList.toggle('collapsed');
+  if (divider) divider.setAttribute('aria-expanded', String(!appState.dueProcessCompletedCollapsed));
 }
 
 function switchDPProgressQuarter(quarter) {
@@ -3798,13 +3962,16 @@ function saveEditingGoalToState_() {
   if (!goalEl) return;
 
   var goalText = goalEl.querySelector('[data-field="goal-text"]');
-  var goalAreaInput = goalEl.querySelector('[data-field="goal-area"]');
+  var goalAreaPicker = goalEl.querySelector('.goal-area-picker');
   var responsibleSelect = goalEl.querySelector('[data-field="goal-responsible"]');
 
   for (var i = 0; i < appState.currentGoals.length; i++) {
     if (appState.currentGoals[i].id === editId) {
       if (goalText) appState.currentGoals[i].text = goalText.value;
-      if (goalAreaInput) appState.currentGoals[i].goalArea = goalAreaInput.value;
+      if (goalAreaPicker) {
+        var selected = goalAreaPicker.getAttribute('data-selected');
+        if (selected !== null) appState.currentGoals[i].goalArea = selected;
+      }
       if (responsibleSelect) appState.currentGoals[i].responsibleEmail = responsibleSelect.value;
 
       // Read objectives from DOM
@@ -3909,9 +4076,9 @@ function addGoal() {
   var goalEl = div.firstChild;
   container.appendChild(goalEl);
 
-  // Focus goal area input
-  var areaInput = goalEl.querySelector('[data-field="goal-area"]');
-  if (areaInput) areaInput.focus();
+  // Focus goal text input
+  var textInput = goalEl.querySelector('[data-field="goal-text"]');
+  if (textInput) textInput.focus();
   scheduleGoalsAutosave();
 }
 
@@ -4899,12 +5066,10 @@ function renderGoalEditMode_(goal) {
   var respEmail = (goal.responsibleEmail || '').toLowerCase();
   var currentEmail = (appState.currentUserEmail || '').toLowerCase();
 
-  // Goal area input
+  // Goal area dropdown
   html += '<div class="profile-goal-area-row">';
   html += '<label class="profile-goal-area-label">Goal Area:</label>';
-  html += '<input type="text" class="profile-goal-area-input" data-field="goal-area" ' +
-    'placeholder="e.g., Math Calculation, Reading Comprehension, Behavior..." ' +
-    'value="' + esc(goalArea) + '" />';
+  html += buildGoalAreaDropdown_(goal.id, goalArea);
   html += '</div>';
 
   // Responsibility selector
