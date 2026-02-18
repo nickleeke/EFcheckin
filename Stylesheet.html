@@ -307,47 +307,6 @@ body {
   height: 100%;
   padding: 0 16px;
 }
-/* G1: Desktop top bar content — search + user identity */
-.top-bar-desktop-content {
-  display: none;
-  align-items: center;
-  flex: 1;
-  height: 100%;
-}
-.top-bar-search-btn {
-  color: var(--md-on-primary);
-  opacity: 0.85;
-}
-.top-bar-search-btn:hover {
-  opacity: 1;
-  background: rgba(255,255,255,0.12);
-}
-.top-bar-spacer { flex: 1; }
-.top-bar-user {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.top-bar-user-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--md-on-primary);
-  letter-spacing: 0.1px;
-  opacity: 0.95;
-}
-.top-bar-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--md-shape-full);
-  background: rgba(255,255,255,0.2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--md-on-primary);
-  text-transform: uppercase;
-}
 .nav-logo {
   height: auto;
   max-width: 100%;
@@ -3495,14 +3454,13 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 
 /* ─── MD3 Navigation Drawer — Responsive ─── */
 
-/* Desktop: standard drawer always visible, compact top bar with user identity */
+/* Desktop: standard drawer always visible, top bar hidden */
 @media (min-width: 841px) {
-  .top-app-bar { height: 48px; }
+  .top-app-bar { display: none !important; }
   .nav-drawer-toggle { display: none !important; }
   .nav-drawer-scrim { display: none !important; }
   .nav-collapse-btn { display: inline-flex; }
   .persistent-action-bar { display: none !important; }
-  .top-bar-desktop-content { display: flex; }
 }
 
 /* Mobile: disable hover for submenu, rely on JS click toggle */

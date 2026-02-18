@@ -566,12 +566,6 @@ function enterApp() {
   if (navDrawer) navDrawer.style.display = '';
   var headerSearch = document.getElementById('header-search-container');
   if (headerSearch) headerSearch.style.display = '';
-  // G1: Populate desktop top bar user identity
-  var firstName = getFirstNameFromEmail(appState.currentUserEmail);
-  var nameEl = document.getElementById('top-bar-user-name');
-  var avatarEl = document.getElementById('top-bar-avatar');
-  if (nameEl) nameEl.textContent = firstName || '';
-  if (avatarEl) avatarEl.textContent = firstName ? firstName.charAt(0) : '';
   // Load global case managers list
   google.script.run
     .withSuccessHandler(function(cms) {

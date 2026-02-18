@@ -208,7 +208,8 @@ The MD3 token system is derived from the Richfield Red seed color `#942022`, wit
 ### MD3 Components
 
 **Layout & Navigation:**
-- **Top App Bar (Small):** Sticky, cardinal red. On mobile (≤840px): hamburger menu only. On desktop (≥841px): compact 48px bar with search icon (left) and user name + avatar (right); persistent action bar hidden.
+- **Top App Bar (Small):** Sticky, cardinal red. Mobile only (≤840px): hamburger menu. Hidden on desktop (≥841px).
+- **Search FAB:** Floating action button (bottom-right, 56px) for global student search. Accessible via `s` keyboard shortcut. Persistent across all views.
 - **Navigation Drawer:** Side nav with collapsible groups, tooltip fallback when collapsed. Bottom section has Shortcuts item (keyboard help). Collapse toggle at bottom (desktop only).
 - **Primary Tabs:** With sliding JS indicator + CSS border-bottom fallback
 - **Side Sheet:** Right-side panel with overlay scrim
@@ -258,7 +259,7 @@ When adding new color-coded indicators, use `var(--color-tier-*)` tokens. Keep t
 
 ### Responsive Breakpoints
 
-- `>= 841px` (desktop): Nav drawer always visible (collapsible). Compact 48px top bar with search + user identity. Persistent action bar hidden.
+- `>= 841px` (desktop): Nav drawer always visible (collapsible). Top app bar hidden. Search FAB (bottom-right). Persistent action bar hidden.
 - `<= 840px` (mobile): Nav drawer as overlay with scrim. Full 64px top bar with hamburger. Persistent action bar visible below top bar.
 - `<= 600px`: Hide progress counter, sparklines; shrink filter chips and attention cards. Top bar shrinks to 56px.
 - Touch targets: minimum 40px height for buttons/controls
