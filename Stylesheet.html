@@ -4343,6 +4343,26 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .eval-metric-card-wrapper {
   display: flex;
   flex-direction: column;
+  background: var(--md-surface);
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-md);
+  overflow: hidden;
+  transition: box-shadow var(--md-duration-short3) var(--md-easing-standard);
+}
+.eval-metric-card-wrapper:hover {
+  box-shadow: var(--md-elevation-1);
+}
+.eval-metric-card-wrapper .eval-metric-card {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+.eval-metric-card-wrapper .eval-metric-card:hover {
+  box-shadow: none;
+}
+.eval-metric-card-wrapper:has(.eval-metric-card-alert) {
+  border-color: var(--md-error);
+  border-width: 1.5px;
 }
 
 .eval-metric-card-clickable {
@@ -4373,6 +4393,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .eval-metric-dropdown-open {
   max-height: 400px;
   overflow-y: auto;
+  border-top: 1px solid var(--md-outline-variant);
 }
 
 .eval-metric-dropdown-item {
@@ -6738,7 +6759,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 
 /* ─── Missing Aggregate Card ─── */
 .missing-agg-students {
-  margin-top: 8px;
+  margin-top: 0;
 }
 .missing-agg-row {
   display: flex;
