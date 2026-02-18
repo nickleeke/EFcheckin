@@ -826,6 +826,19 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   margin: 0 auto;
   display: flex;
   align-items: center;
+  border-radius: var(--md-shape-full);
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.15);
+  transition: background var(--md-duration-short4) var(--md-easing-standard),
+              box-shadow var(--md-duration-short4) var(--md-easing-standard);
+}
+.header-search-container:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+.header-search-container.search-focused {
+  background: var(--md-surface);
+  box-shadow: var(--md-elevation-2);
+  color: var(--md-on-surface);
 }
 .header-search-icon {
   position: absolute;
@@ -833,6 +846,10 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   color: rgba(255, 255, 255, 0.7);
   pointer-events: none;
   flex-shrink: 0;
+  transition: color var(--md-duration-short4) var(--md-easing-standard);
+}
+.header-search-container.search-focused .header-search-icon {
+  color: var(--md-on-surface-variant);
 }
 .header-search-input {
   width: 100%;
@@ -844,19 +861,28 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   font-size: 14px;
   line-height: 20px;
   letter-spacing: 0.25px;
-  background: rgba(255, 255, 255, 0.15);
+  background: transparent;
   color: var(--md-on-primary);
-  transition: background var(--md-duration-short4) var(--md-easing-standard);
+  transition: color var(--md-duration-short4) var(--md-easing-standard);
+}
+.header-search-container.search-focused .header-search-input {
+  color: var(--md-on-surface);
 }
 .header-search-input::placeholder { color: rgba(255, 255, 255, 0.7); }
+.header-search-container.search-focused .header-search-input::placeholder {
+  color: var(--md-on-surface-variant);
+}
 .header-search-input:focus {
   outline: none;
-  background: rgba(255, 255, 255, 0.25);
 }
 .header-search-close {
   position: absolute;
   right: 4px;
   color: var(--md-on-primary);
+  transition: color var(--md-duration-short4) var(--md-easing-standard);
+}
+.header-search-container.search-focused .header-search-close {
+  color: var(--md-on-surface-variant);
 }
 
 /* Header search results dropdown */
@@ -2960,7 +2986,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 }
 
 /* ─── Button Ripple Effect ─── */
-.btn, .btn-icon, .btn-ghost, .btn-outlined, .action-btn, .rating-btn, .nav-drawer-item, .goal-met-btn, .eval-filter-chip, .eval-nav-btn, .dp-cal-day, .header-search-result-item, .dp-progress-checkbox-row, .dp-progress-flat-card {
+.btn, .btn-icon, .btn-ghost, .btn-outlined, .action-btn, .rating-btn, .nav-drawer-item, .goal-met-btn, .eval-filter-chip, .eval-nav-btn, .dp-cal-day, .header-search-result-item, .header-search-container, .dp-progress-checkbox-row, .dp-progress-flat-card {
   position: relative;
   overflow: hidden;
 }
