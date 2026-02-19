@@ -4944,7 +4944,10 @@ function renderStudentProfileDashboard(student) {
   if (contacts.length === 0) {
     html += '<div class="profile-contacts-empty">No contacts added</div>';
   } else {
-    contacts.forEach(function(c, idx) {
+    contacts.slice().sort(function(a, b) {
+      return (b.primary ? 1 : 0) - (a.primary ? 1 : 0);
+    }).forEach(function(c) {
+      var idx = contacts.indexOf(c);
       html += renderProfileContactItem(student.id, c, idx);
     });
   }
