@@ -62,6 +62,7 @@ var _evalItemFilter = 'all'; // 'all' | 'remaining' | 'overdue' | 'completed'
 var _expandedEvalItemFiles = {}; // { itemId: true } — tracks expanded file lists per task
 var _searchDebounceTimer = null;
 var _headerSearchHighlight = -1;
+var _headerSearchTopMatch = null;
 var _evalFocusedIndex = -1;
 var _progressAutosaveTimer = null;
 var _progressAutosaveInFlight = false;
@@ -1135,9 +1136,12 @@ function clearHeaderSearch() {
   var input = document.getElementById('header-search-input');
   var results = document.getElementById('header-search-results');
   var closeBtn = document.getElementById('header-search-close');
+  var suggestion = document.getElementById('header-search-suggestion');
   _headerSearchHighlight = -1;
+  _headerSearchTopMatch = null;
   if (input) { input.value = ''; input.focus(); }
   if (results) results.innerHTML = '';
+  if (suggestion) suggestion.innerHTML = '';
   if (closeBtn) closeBtn.style.display = 'none';
 }
 
@@ -1145,9 +1149,12 @@ function closeHeaderSearch() {
   var input = document.getElementById('header-search-input');
   var results = document.getElementById('header-search-results');
   var closeBtn = document.getElementById('header-search-close');
+  var suggestion = document.getElementById('header-search-suggestion');
   _headerSearchHighlight = -1;
+  _headerSearchTopMatch = null;
   if (input) input.blur();
   if (results) results.innerHTML = '';
+  if (suggestion) suggestion.innerHTML = '';
   if (closeBtn) closeBtn.style.display = 'none';
 }
 
@@ -1164,6 +1171,11 @@ function handleHeaderSearchInput(query) {
   _headerSearchHighlight = -1;
   var closeBtn = document.getElementById('header-search-close');
   if (closeBtn) closeBtn.style.display = query.trim() ? '' : 'none';
+  if (!query.trim()) {
+    _headerSearchTopMatch = null;
+    var suggestion = document.getElementById('header-search-suggestion');
+    if (suggestion) suggestion.innerHTML = '';
+  }
   _searchDebounceTimer = setTimeout(function() {
     renderHeaderSearchResults(query.trim().toLowerCase());
   }, 150);
@@ -1172,7 +1184,12 @@ function handleHeaderSearchInput(query) {
 function renderHeaderSearchResults(query) {
   var results = document.getElementById('header-search-results');
   if (!results) return;
-  if (!query) { results.innerHTML = ''; return; }
+  if (!query) {
+    results.innerHTML = '';
+    _headerSearchTopMatch = null;
+    updateHeaderSearchSuggestion('');
+    return;
+  }
   var data = appState.dashboardData || [];
   var startsWithMatches = [];
   var containsMatches = [];
@@ -1188,6 +1205,8 @@ function renderHeaderSearchResults(query) {
     }
   }
   var matches = startsWithMatches.concat(containsMatches).slice(0, 5);
+  _headerSearchTopMatch = matches.length > 0 ? matches[0] : null;
+  updateHeaderSearchSuggestion(query);
   if (matches.length === 0) {
     results.innerHTML = '<div class="header-search-empty">No matches</div>';
     return;
@@ -1207,6 +1226,18 @@ function renderHeaderSearchResults(query) {
   setTimeout(function() {
     document.addEventListener('click', _closeHeaderSearchOnOutsideClick);
   }, 0);
+}
+
+function updateHeaderSearchSuggestion(query) {
+  var el = document.getElementById('header-search-suggestion');
+  if (!el) return;
+  if (!_headerSearchTopMatch || !query || query.length < 2) {
+    el.innerHTML = '';
+    return;
+  }
+  var name = _headerSearchTopMatch.firstName + ' ' + _headerSearchTopMatch.lastName;
+  el.innerHTML = '<span style="visibility:hidden">' + esc(query) +
+    '</span><span class="header-search-suggestion-text"> &#x2013; ' + esc(name) + '</span>';
 }
 
 function boldMatchedLetters(name, query) {
@@ -1238,10 +1269,14 @@ function handleHeaderSearchKeydown(e) {
     e.preventDefault();
     _headerSearchHighlight = Math.max(_headerSearchHighlight - 1, 0);
     updateHeaderSearchHighlight(items);
-  } else if (e.key === 'Enter' && _headerSearchHighlight >= 0 && items[_headerSearchHighlight]) {
+  } else if (e.key === 'Enter') {
     e.preventDefault();
-    var sid = items[_headerSearchHighlight].dataset.studentId;
-    if (sid) selectHeaderSearchResult(sid);
+    if (_headerSearchHighlight >= 0 && items[_headerSearchHighlight]) {
+      var sid = items[_headerSearchHighlight].dataset.studentId;
+      if (sid) selectHeaderSearchResult(sid);
+    } else if (_headerSearchTopMatch) {
+      selectHeaderSearchResult(_headerSearchTopMatch.id);
+    }
   } else if (e.key === 'Escape') {
     e.preventDefault();
     clearHeaderSearch();
