@@ -8975,15 +8975,10 @@ function renderEvalFilesCard(evaluation) {
 
   // Add file by URL fallback section
   html += '<div class="eval-files-url-section">' +
-    '<button class="btn btn-ghost btn-sm" onclick="toggleEvalFileUrlForm(\'' + esc(evaluation.id) + '\')" style="width:100%;justify-content:center;">' +
+    '<button class="btn btn-ghost btn-sm" onclick="showAddFileByUrlModal_(\'' + esc(evaluation.id) + '\')" style="width:100%;justify-content:center;">' +
       '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg>' +
       ' Add by URL' +
     '</button>' +
-    '<div class="eval-file-url-form" id="eval-file-url-form" style="display:none;">' +
-      '<input type="text" class="eval-file-url-input" id="eval-file-url-input" placeholder="Paste Google Drive URL..." onkeydown="if(event.key===\'Enter\'){event.preventDefault();confirmAddEvalFileByUrl(\'' + esc(evaluation.id) + '\');}">' +
-      '<input type="text" class="eval-file-name-input" id="eval-file-name-input" placeholder="File name...">' +
-      '<button class="btn btn-primary btn-sm" onclick="confirmAddEvalFileByUrl(\'' + esc(evaluation.id) + '\')">Add</button>' +
-    '</div>' +
   '</div>';
 
   // Delete checklist (subtle placement in sidebar)
@@ -8997,22 +8992,74 @@ function renderEvalFilesCard(evaluation) {
   container.innerHTML = html;
 }
 
-function toggleEvalFileUrlForm(evalId) {
-  var form = document.getElementById('eval-file-url-form');
-  if (!form) return;
-  var isHidden = form.style.display === 'none';
-  form.style.display = isHidden ? '' : 'none';
-  if (isHidden) {
-    var urlInput = document.getElementById('eval-file-url-input');
-    if (urlInput) { urlInput.value = ''; urlInput.focus(); }
-    var nameInput = document.getElementById('eval-file-name-input');
-    if (nameInput) nameInput.value = '';
+function showAddFileByUrlModal_(evalId) {
+  // Remove existing modal if present
+  var existing = document.getElementById('url-file-overlay');
+  if (existing) existing.remove();
+
+  var overlay = document.createElement('div');
+  overlay.id = 'url-file-overlay';
+  overlay.className = 'confirm-overlay';
+  overlay.onclick = function(e) { if (e.target === overlay) closeAddFileByUrlModal_(); };
+
+  var modal = document.createElement('div');
+  modal.className = 'confirm-dialog url-file-dialog';
+  modal.onclick = function(e) { e.stopPropagation(); };
+
+  modal.innerHTML =
+    '<div class="drive-browser-header">' +
+      '<h3 class="drive-browser-title">Add file by URL</h3>' +
+      '<button class="btn-icon btn-sm" onclick="closeAddFileByUrlModal_()" aria-label="Close">' +
+        '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>' +
+      '</button>' +
+    '</div>' +
+    '<div class="url-file-body">' +
+      '<label class="url-file-label" for="url-file-url-input">File URL</label>' +
+      '<input type="text" class="eval-file-url-input" id="url-file-url-input" placeholder="Paste Google Drive or file URL...">' +
+      '<label class="url-file-label" for="url-file-name-input">File name (optional)</label>' +
+      '<input type="text" class="eval-file-name-input" id="url-file-name-input" placeholder="File name...">' +
+    '</div>' +
+    '<div class="url-file-actions">' +
+      '<button class="btn btn-outlined" onclick="closeAddFileByUrlModal_()">Cancel</button>' +
+      '<button class="btn btn-primary" id="url-file-add-btn">Add File</button>' +
+    '</div>';
+
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+
+  // Store evalId for submission
+  overlay.dataset.evalId = evalId;
+
+  // Wire up Add File button
+  var addBtn = document.getElementById('url-file-add-btn');
+  if (addBtn) {
+    addBtn.onclick = function() { confirmAddEvalFileByUrl_(evalId); };
+  }
+
+  // Wire up Enter key on inputs to submit
+  var urlInput = document.getElementById('url-file-url-input');
+  var nameInput = document.getElementById('url-file-name-input');
+  if (urlInput) {
+    urlInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') { e.preventDefault(); confirmAddEvalFileByUrl_(evalId); }
+    });
+    urlInput.focus();
+  }
+  if (nameInput) {
+    nameInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') { e.preventDefault(); confirmAddEvalFileByUrl_(evalId); }
+    });
   }
 }
 
-function confirmAddEvalFileByUrl(evalId) {
-  var urlInput = document.getElementById('eval-file-url-input');
-  var nameInput = document.getElementById('eval-file-name-input');
+function closeAddFileByUrlModal_() {
+  var overlay = document.getElementById('url-file-overlay');
+  if (overlay) closeConfirmDialog(overlay);
+}
+
+function confirmAddEvalFileByUrl_(evalId) {
+  var urlInput = document.getElementById('url-file-url-input');
+  var nameInput = document.getElementById('url-file-name-input');
   var url = (urlInput ? urlInput.value : '').trim();
   var name = (nameInput ? nameInput.value : '').trim();
 
@@ -9044,11 +9091,8 @@ function confirmAddEvalFileByUrl(evalId) {
     url: url
   };
 
+  closeAddFileByUrlModal_();
   addEvalFileHandler(evalId, fileData);
-
-  // Hide form
-  var form = document.getElementById('eval-file-url-form');
-  if (form) form.style.display = 'none';
 }
 
 function openDrivePicker(evalId) {
