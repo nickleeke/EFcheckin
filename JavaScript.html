@@ -8116,6 +8116,8 @@ function saveEvalMeetingDate(dateValue) {
   google.script.run
     .withSuccessHandler(function() {
       showToast('Meeting date saved');
+      _lastEvalSummaryFetch = 0;
+      _lastDueProcessFetch = 0;
     })
     .withFailureHandler(function() {
       showToast('Failed to save meeting date');
@@ -8186,6 +8188,9 @@ function doCreateEvalChecklist(studentId, type) {
           files: result.files || []
         };
         appState.currentEvaluation = evaluation;
+        _lastDashboardFetch = 0;
+        _lastEvalSummaryFetch = 0;
+        _lastDueProcessFetch = 0;
         showEvalChecklistView(studentId, evaluation);
       } else {
         showToast(result.error || 'Error creating checklist');
@@ -8589,6 +8594,9 @@ function doDeleteEvaluation(evalId) {
       if (result.success) {
         showToast('Checklist deleted');
         appState.currentEvaluation = null;
+        _lastDashboardFetch = 0;
+        _lastEvalSummaryFetch = 0;
+        _lastDueProcessFetch = 0;
         showStudentProfile(appState.evalChecklistStudentId);
       } else {
         showToast('Error deleting checklist');
@@ -8610,6 +8618,9 @@ function updateEvalType(evalId, newType) {
   if (!appState.currentEvaluation) return;
   appState.currentEvaluation.type = newType;
   updateEvalBreadcrumb_(getEvalTypeLabel(newType));
+  _lastDashboardFetch = 0;
+  _lastEvalSummaryFetch = 0;
+  _lastDueProcessFetch = 0;
   google.script.run
     .withSuccessHandler(function(result) {
       if (!result.success) showToast(result.error || 'Error updating type');
@@ -8859,6 +8870,9 @@ function performEvalAutosave() {
       _evalAutosaveInFlight = false;
       if (result && result.success) {
         appState.currentEvaluation.items = result.items;
+        _lastDashboardFetch = 0;
+        _lastEvalSummaryFetch = 0;
+        _lastDueProcessFetch = 0;
         if (_evalAutosaveDirty) {
           scheduleEvalAutosave();
         } else {

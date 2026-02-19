@@ -558,10 +558,11 @@ function getCheckIns(studentId) {
 
   const data = sheet.getDataRange().getValues();
   const headers = data[0];
+  const colIdx = buildColIdx_(headers);
   const results = [];
 
   for (let i = 1; i < data.length; i++) {
-    if (data[i][1] === studentId) {
+    if (data[i][colIdx['studentId'] - 1] === studentId) {
       const row = {};
       headers.forEach(function(h, idx) { row[h] = data[i][idx]; });
       row.weekOf = formatDateValue_(row.weekOf);
@@ -891,6 +892,7 @@ function getEvalTaskSummary() {
   var activeEvals = [];
   var overdueTasks = [];
   var dueThisWeekTasks = [];
+  var seenStudents = {};
 
   for (var i = 1; i < evalData.length; i++) {
     var studentId = evalData[i][evalColIdx['studentId'] - 1];
@@ -951,15 +953,18 @@ function getEvalTaskSummary() {
       }
     });
 
-    activeEvals.push({
-      evalId: evalId,
-      studentId: studentId,
-      studentName: studentFullName,
-      type: evalType,
-      done: evalDone,
-      total: items.length,
-      overdueCount: evalOverdue
-    });
+    if (!seenStudents[studentId]) {
+      seenStudents[studentId] = true;
+      activeEvals.push({
+        evalId: evalId,
+        studentId: studentId,
+        studentName: studentFullName,
+        type: evalType,
+        done: evalDone,
+        total: items.length,
+        overdueCount: evalOverdue
+      });
+    }
   }
 
   // Sort overdue by date ascending (oldest first)
@@ -1196,6 +1201,7 @@ function getEvalTimelineExtended_(numDays) {
   var activeEvals = [];
   var overdueTasks = [];
   var dueThisWeekTasks = [];
+  var seenStudents = {};
 
   // Week boundary for "due this week" count (7 days from today)
   var weekEndDate = new Date(today.getTime() + 6 * 86400000);
@@ -1250,11 +1256,14 @@ function getEvalTimelineExtended_(numDays) {
       }
     });
 
-    activeEvals.push({
-      evalId: evalId, studentId: studentId, studentName: studentFullName,
-      type: evalType, done: evalDone, total: items.length, overdueCount: evalOverdue,
-      nextDueDate: evalNextDue
-    });
+    if (!seenStudents[studentId]) {
+      seenStudents[studentId] = true;
+      activeEvals.push({
+        evalId: evalId, studentId: studentId, studentName: studentFullName,
+        type: evalType, done: evalDone, total: items.length, overdueCount: evalOverdue,
+        nextDueDate: evalNextDue
+      });
+    }
   }
 
   overdueTasks.sort(function(a, b) { return a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0; });
@@ -1675,9 +1684,10 @@ function getEvaluation(studentId) {
 
   var data = sheet.getDataRange().getValues();
   var headers = data[0];
+  var colIdx = buildColIdx_(headers);
 
   for (var i = 1; i < data.length; i++) {
-    if (data[i][1] === studentId) {
+    if (data[i][colIdx['studentId'] - 1] === studentId) {
       var row = {};
       headers.forEach(function(h, idx) { row[h] = data[i][idx]; });
       try { row.items = JSON.parse(row.itemsJson || '[]'); }
@@ -1696,26 +1706,37 @@ function createEvaluation(studentId, type) {
     return { success: false, error: 'Invalid evaluation type.' };
   }
 
-  var existing = getEvaluation(studentId);
-  if (existing) {
-    return { success: false, error: 'This student already has an active checklist.' };
+  var lock = LockService.getUserLock();
+  try {
+    lock.waitLock(10000);
+  } catch(e) {
+    return { success: false, error: 'Could not acquire lock. Please try again.' };
   }
 
-  var ss = getSS_();
-  var sheet = ss.getSheetByName(SHEET_EVALUATIONS);
-  if (!sheet) {
-    sheet = ss.insertSheet(SHEET_EVALUATIONS);
-    ensureHeaders_(sheet, EVALUATION_HEADERS);
+  try {
+    var existing = getEvaluation(studentId);
+    if (existing) {
+      return { success: false, error: 'This student already has an active checklist.' };
+    }
+
+    var ss = getSS_();
+    var sheet = ss.getSheetByName(SHEET_EVALUATIONS);
+    if (!sheet) {
+      sheet = ss.insertSheet(SHEET_EVALUATIONS);
+      ensureHeaders_(sheet, EVALUATION_HEADERS);
+    }
+
+    var items = EVAL_INITIAL_TYPES_.indexOf(type) !== -1 ? getEvalTemplateItems_() : getReEvalTemplateItems_();
+    var now = new Date().toISOString();
+    var id = Utilities.getUuid();
+
+    sheet.appendRow([id, studentId, type, JSON.stringify(items), now, now, JSON.stringify([]), '']);
+    invalidateEvalCaches_();
+
+    return { success: true, id: id, studentId: studentId, type: type, items: items, files: [], meetingDate: '' };
+  } finally {
+    lock.releaseLock();
   }
-
-  var items = EVAL_INITIAL_TYPES_.indexOf(type) !== -1 ? getEvalTemplateItems_() : getReEvalTemplateItems_();
-  var now = new Date().toISOString();
-  var id = Utilities.getUuid();
-
-  sheet.appendRow([id, studentId, type, JSON.stringify(items), now, now, JSON.stringify([]), '']);
-  invalidateEvalCaches_();
-
-  return { success: true, id: id, studentId: studentId, type: type, items: items, files: [], meetingDate: '' };
 }
 
 function updateEvalMeetingDate(evalId, meetingDate) {
