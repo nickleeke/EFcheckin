@@ -1600,53 +1600,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   background: color-mix(in srgb, var(--color-tier-green-bg) 85%, var(--color-tier-green-text));
 }
 
-/* ─── Academic Snapshot Table ─── */
-.academic-table { width: 100%; border-collapse: collapse; }
-.academic-table th {
-  text-align: left; padding: 10px 12px;
-  /* M3 Label Large */
-  font-size: 14px;
-  font-weight: 500;
-  letter-spacing: 0.1px;
-  color: var(--md-on-surface-variant);
-  background: var(--md-surface-container);
-  border-bottom: 1px solid var(--md-outline-variant);
-}
-.academic-table td {
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--md-outline-variant);
-}
-.academic-table .class-name-col { font-weight: 500; }
-.academic-table select,
-.academic-table input[type="number"] {
-  padding: 8px 10px;
-  border: 1px solid var(--md-outline);
-  border-radius: var(--md-shape-xs);
-  font-size: 14px;
-  font-family: 'Roboto', sans-serif;
-  color: var(--md-on-surface);
-  background: var(--md-surface);
-  appearance: none;
-  -webkit-appearance: none;
-  transition: border-color var(--md-duration-short4) var(--md-easing-standard);
-}
-.academic-table select {
-  width: 80px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='%2349454F' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 8px center;
-  padding-right: 26px;
-  cursor: pointer;
-}
-.academic-table input[type="number"] { width: 64px; }
-.academic-table select:focus,
-.academic-table input[type="number"]:focus {
-  outline: none;
-  border-color: var(--md-primary);
-  border-width: 2px;
-  padding: 7px 9px;
-}
-.academic-table select:focus { padding-right: 25px; }
 
 /* ─── Class Management (Student Profile) ─── */
 .class-list-item {
@@ -3362,50 +3315,13 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   display: inline-block;
 }
 
-/* ─── Check-In Inline Missing Assignment Editor ─── */
-.missing-toggle {
-  cursor: pointer;
-  border: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.missing-toggle .expand-chevron {
-  transition: transform var(--md-duration-short4) var(--md-easing-standard);
-}
-.acad-missing-row td {
-  padding: 0 !important;
-  border-bottom: 1px solid var(--md-outline-variant);
-}
-.ci-missing-container {
-  padding: 12px 16px;
-  background: var(--md-surface-container-low);
-}
-.ci-missing-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-.ci-missing-item input[type="text"] {
-  flex: 2;
-  height: 36px;
-  padding: 6px 10px;
-  border: 1px solid var(--md-outline);
+/* ─── Check-In Grade Select (inside card header) ─── */
+.ci-grade-select {
+  height: 32px;
+  padding: 4px 8px;
+  border: 1px solid var(--md-outline-variant);
   border-radius: var(--md-shape-xs);
-  font-size: 14px;
-  font-family: 'Roboto', sans-serif;
-  color: var(--md-on-surface);
-  background: var(--md-surface);
-  transition: border-color var(--md-duration-short4) var(--md-easing-standard);
-}
-.ci-missing-item select {
-  flex: 1;
-  height: 36px;
-  padding: 6px 10px;
-  border: 1px solid var(--md-outline);
-  border-radius: var(--md-shape-xs);
-  font-size: 14px;
+  font-size: 13px;
   font-family: 'Roboto', sans-serif;
   color: var(--md-on-surface);
   background: var(--md-surface);
@@ -3413,19 +3329,19 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   -webkit-appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' fill='%2349454F' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 8px center;
-  padding-right: 26px;
+  background-position: right 6px center;
+  padding-right: 22px;
   cursor: pointer;
+  width: 72px;
   transition: border-color var(--md-duration-short4) var(--md-easing-standard);
 }
-.ci-missing-item input[type="text"]:focus,
-.ci-missing-item select:focus {
+.ci-grade-select:focus {
   outline: none;
   border-color: var(--md-primary);
   border-width: 2px;
-  padding: 5px 9px;
+  padding: 3px 7px;
+  padding-right: 21px;
 }
-.ci-missing-item select:focus { padding-right: 25px; }
 
 /* ─── Clickable Missing Badge on Dashboard ─── */
 .chip-clickable {
@@ -3585,9 +3501,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   .missing-class-header { padding: 12px 16px; }
   .missing-detail-table th,
   .missing-detail-table td { padding: 10px 16px; }
-  .ci-missing-item { flex-wrap: wrap; }
-  .ci-missing-item input[type="text"] { flex: 1 1 100%; }
-  .ci-missing-item select { flex: 1; }
   .mv-add-form-row { flex-wrap: wrap; }
   .mv-add-form-row input[type="text"] { flex: 1 1 100%; }
   .mv-add-form-row select { flex: 1; }
@@ -6457,8 +6370,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .form-group input:focus-visible,
 .form-group textarea:focus-visible,
 .form-group select:focus-visible,
-.academic-table select:focus-visible,
-.academic-table input:focus-visible,
+.ci-grade-select:focus-visible,
 .class-list-item select:focus-visible,
 .class-list-item input:focus-visible,
 .profile-grade-select:focus-visible,
@@ -6479,8 +6391,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .dashboard-search-input:focus-visible,
 .mv-add-form-row input:focus-visible,
 .mv-add-form-row select:focus-visible,
-.ci-missing-item input:focus-visible,
-.ci-missing-item select:focus-visible,
 .eval-item-add-file-name:focus-visible,
 .eval-item-add-file-url:focus-visible {
   outline: 2px solid var(--md-primary);
