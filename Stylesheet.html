@@ -874,6 +874,30 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .header-search-input:focus {
   outline: none;
 }
+/* Inline autocomplete suggestion overlay */
+.header-search-suggestion {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  height: 40px;
+  padding: 0 40px;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+  font-family: 'Roboto', sans-serif;
+  font-size: 14px;
+  line-height: 20px;
+  letter-spacing: 0.25px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.header-search-suggestion-text {
+  color: rgba(255, 255, 255, 0.4);
+}
+.header-search-container.search-focused .header-search-suggestion-text {
+  color: var(--md-on-surface-variant);
+}
 .header-search-close {
   position: absolute;
   right: 4px;
