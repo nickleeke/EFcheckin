@@ -4733,12 +4733,12 @@ function renderStudentProfileDashboard(student) {
   html += '<div class="profile-eval-section-right">';
   html += '<span class="profile-eval-meeting-date" id="profile-eval-meeting-date" onclick="event.stopPropagation(); handleEvalMeetingDateClick()"></span>';
   html += '<input type="date" class="profile-eval-meeting-input" id="profile-eval-meeting-input" style="display:none" onclick="event.stopPropagation()" onchange="saveEvalMeetingDate(this.value)">';
-  html += '<button class="btn-icon btn-sm eval-collapse-btn" id="eval-collapse-btn" onclick="event.stopPropagation(); toggleEvalSectionCollapse()" aria-label="Toggle eval section">' +
+  html += '<button class="btn-icon btn-sm eval-collapse-btn rotated" id="eval-collapse-btn" onclick="event.stopPropagation(); toggleEvalSectionCollapse()" aria-label="Toggle eval section">' +
     '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/></svg>' +
   '</button>';
   html += '</div>';
   html += '</div>';
-  html += '<div class="profile-eval-section-body" id="profile-eval-section-body">';
+  html += '<div class="profile-eval-section-body collapsed" id="profile-eval-section-body">';
   html += '<ul class="eval-card-tasks" id="profile-eval-tasks"></ul>';
   html += '<div class="eval-card-action" id="profile-eval-action" onclick="handleEvalCardClick(\'' + esc(student.id) + '\')">View all &#x2192;</div>';
   html += '</div>';
@@ -7139,6 +7139,14 @@ function showDashboardSkeleton() {
 function showStudentProfileSkeleton() {
   var container = document.getElementById('student-form-container');
   var html = '<div class="skeleton-fade-in">';
+  // Eval section skeleton (collapsed)
+  html += '<div style="border:1px solid var(--md-outline-variant);border-radius:var(--md-shape-md);padding:16px 20px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;">' +
+    '<div style="display:flex;align-items:center;gap:12px;">' +
+      '<div class="skeleton skeleton-text" style="width:120px;margin:0;"></div>' +
+      '<div class="skeleton skeleton-chip" style="width:80px;height:20px;"></div>' +
+    '</div>' +
+    '<div class="skeleton skeleton-chip" style="width:24px;height:24px;border-radius:50%;"></div>' +
+  '</div>';
   // Academics card
   html += '<div class="profile-section-card">' +
     '<div class="skeleton skeleton-section-title" style="width:20%;margin-bottom:16px;"></div>' +
