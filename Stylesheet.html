@@ -5965,6 +5965,38 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   min-width: 0;
 }
 
+/* ─── Add File by URL Modal ─── */
+.url-file-dialog {
+  width: 400px;
+  max-width: 90vw;
+  padding: 0;
+}
+.url-file-body {
+  padding: 0 24px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.url-file-body .eval-file-url-input,
+.url-file-body .eval-file-name-input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.url-file-label {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  color: var(--md-on-surface-variant);
+  margin-bottom: -8px;
+}
+.url-file-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding: 12px 24px 20px;
+}
+
 /* ─── Editable Eval Items ─── */
 .eval-item-edit-input {
   font-size: 14px;
