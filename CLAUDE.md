@@ -290,6 +290,7 @@ Define constants, label arrays, and lookup maps in one place. Never redeclare lo
 - **Extract repeated DOM operations** into helpers. Don't copy-paste `getElementById` + `style.display` blocks.
 - **Extract repeated HTML fragments** into builder functions (`buildEvalTypeDropdown_`, `updateEvalBreadcrumb_`).
 - **Use `.view-title-row`** for header + action button layouts.
+- **No emoji icons in buttons:** Never use Unicode emoji or HTML emoji entities (e.g., `&#x1F504;`, `&#x2795;`) as button content. Always use inline SVGs with `fill="currentColor"` so icons inherit the button's color and respond to hover/active states. Use the `.btn-icon` class for icon-only buttons.
 
 ### Ripple Effect
 
