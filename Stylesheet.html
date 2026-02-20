@@ -330,6 +330,7 @@ body {
 .app-content {
   flex: 1;
   min-width: 0;
+  overflow-x: clip;
 }
 
 /* ─── MD3 Navigation Drawer ─── */
@@ -475,6 +476,9 @@ body {
 .nav-drawer-child {
   height: 48px;
   padding-left: 52px;
+}
+.nav-drawer-child.active {
+  padding-left: 49px; /* 52px - 3px active border-left */
 }
 .nav-drawer-child .nav-drawer-active-indicator {
   left: 12px;
