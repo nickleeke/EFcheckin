@@ -275,6 +275,7 @@ Define constants, label arrays, and lookup maps in one place. Never redeclare lo
 - **Eval types:** Use `EVAL_TYPES` + `EVAL_TYPE_ALIASES` + `getEvalTypeLabel()`. Never inline ternaries.
 - **GPA conversion:** Use the global `GPA_MAP` constant. Never redeclare a local `gradePoints` with different precision.
 - **Constants location:** Declare at the top of the file near other constants. Never mid-file above first usage.
+- **Column lookups:** Always use `buildColIdx_(headers)` for column access. Never hard-code column indices like `data[i][1]`. Use `findRowById_(sheet, id)` for ID-based lookups. Hard-coded indices break silently when sheet headers diverge from the expected schema.
 
 ### Dashboard Rendering
 

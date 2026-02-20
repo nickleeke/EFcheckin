@@ -479,24 +479,30 @@ function appendStudentNote(studentId, noteText) {
 function deleteStudent(studentId) {
   const ss = getSS_();
   const studentsSheet = ss.getSheetByName(SHEET_STUDENTS);
-  if (studentsSheet) {
+  if (studentsSheet && studentsSheet.getLastRow() > 1) {
     const sData = studentsSheet.getDataRange().getValues();
+    const sColIdx = buildColIdx_(sData[0]);
+    const sIdCol = sColIdx['id'] - 1;
     for (let i = sData.length - 1; i >= 1; i--) {
-      if (sData[i][0] === studentId) { studentsSheet.deleteRow(i + 1); break; }
+      if (sData[i][sIdCol] === studentId) { studentsSheet.deleteRow(i + 1); break; }
     }
   }
   const checkInsSheet = ss.getSheetByName(SHEET_CHECKINS);
   if (checkInsSheet && checkInsSheet.getLastRow() > 1) {
     const cData = checkInsSheet.getDataRange().getValues();
+    const cColIdx = buildColIdx_(cData[0]);
+    const cStudentIdCol = cColIdx['studentId'] - 1;
     for (let i = cData.length - 1; i >= 1; i--) {
-      if (cData[i][1] === studentId) checkInsSheet.deleteRow(i + 1);
+      if (cData[i][cStudentIdCol] === studentId) checkInsSheet.deleteRow(i + 1);
     }
   }
   const evalSheet = ss.getSheetByName(SHEET_EVALUATIONS);
   if (evalSheet && evalSheet.getLastRow() > 1) {
     const eData = evalSheet.getDataRange().getValues();
+    const eColIdx = buildColIdx_(eData[0]);
+    const eStudentIdCol = eColIdx['studentId'] - 1;
     for (let i = eData.length - 1; i >= 1; i--) {
-      if (eData[i][1] === studentId) evalSheet.deleteRow(i + 1);
+      if (eData[i][eStudentIdCol] === studentId) evalSheet.deleteRow(i + 1);
     }
   }
   invalidateCache_();
@@ -757,6 +763,7 @@ function getDashboardData() {
 
 var CACHE_PREFIX = 'cache_';
 var CACHE_TTL_MS = 120000; // 2-minute TTL — keeps co-teacher views reasonably fresh
+var CALENDAR_CACHE_TTL_MS = 300000; // 5-minute TTL — calendar events change less frequently
 
 function getCache_(key) {
   try {
@@ -787,9 +794,16 @@ function invalidateCache_() {
     props.deleteProperty(CACHE_PREFIX + 'dashboard');
     props.deleteProperty(CACHE_PREFIX + 'eval_summary');
     props.deleteProperty(CACHE_PREFIX + 'progress');
+    props.deleteProperty(CACHE_PREFIX + 'calendar_meetings');
     VALID_QUARTERS.forEach(function(q) {
       props.deleteProperty(CACHE_PREFIX + 'due_process_' + q);
     });
+  } catch(e) {}
+}
+
+function invalidateCalendarCache_() {
+  try {
+    PropertiesService.getUserProperties().deleteProperty(CACHE_PREFIX + 'calendar_meetings');
   } catch(e) {}
 }
 
@@ -1290,10 +1304,12 @@ function getEvalTimelineExtended_(numDays) {
  * Merge eval meetingDate values with standalone IEPMeetings rows.
  */
 /**
- * Public endpoint: returns all meetings (eval + standalone) for calendar views.
+ * Public endpoint: returns all meetings (eval + standalone + Google Calendar) for calendar views.
+ * Pass forceRefresh=true to bypass the calendar cache (e.g. from a manual refresh button).
  */
-function getAllMeetings() {
+function getAllMeetings(forceRefresh) {
   initializeSheetsIfNeeded_();
+  if (forceRefresh) invalidateCalendarCache_();
   var students = getStudents();
   return getAllMeetingsForCalendar_(students);
 }
@@ -1349,6 +1365,27 @@ function getAllMeetingsForCalendar_(students) {
     }
   }
 
+  // Source 3: Google Calendar events (IEP meetings matched by student initials)
+  var today = new Date();
+  var endDate = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days out
+  var calMeetings = getCalendarMeetings_(students, today, endDate);
+  if (calMeetings.length > 0) {
+    // Auto-populate eval meeting dates from calendar events
+    autoPopulateEvalMeetingDates_(calMeetings);
+
+    // Deduplicate: skip gcal meetings where an eval/standalone meeting
+    // already exists for the same student on the same date
+    var existingKey = {};
+    meetings.forEach(function(m) {
+      existingKey[m.studentId + '|' + m.date] = true;
+    });
+    calMeetings.forEach(function(cm) {
+      if (!existingKey[cm.studentId + '|' + cm.date]) {
+        meetings.push(cm);
+      }
+    });
+  }
+
   return meetings;
 }
 
@@ -1357,6 +1394,155 @@ function getEvalMeetingLabel_(evalType) {
   if (evalType === '3-year-reeval' || evalType === 'reeval') return 'Re-Eval Meeting';
   if (evalType === 'initial-eval' || evalType === 'eval') return 'Initial Eval Meeting';
   return 'Eval Meeting';
+}
+
+// ───── Google Calendar Integration ─────
+
+/**
+ * Fetch IEP-related meetings from the user's default Google Calendar.
+ * Searches for events matching "IEP Meeting" and parses the title convention:
+ *   {Initials} {optional format} IEP Meeting
+ *   e.g. "RT Virtual IEP Meeting", "JS In Person IEP Meeting"
+ *
+ * Returns array in the standard meeting shape:
+ *   { date, studentId, studentName, meetingType, source: 'gcal', calendarEventTitle }
+ *
+ * Uses a 5-minute cache in UserProperties to avoid repeated CalendarApp calls.
+ */
+function getCalendarMeetings_(students, startDate, endDate) {
+  // Check cache first
+  var cached = getCalendarCache_();
+  if (cached) return cached;
+
+  var results = [];
+  try {
+    var cal = CalendarApp.getDefaultCalendar();
+    var events = cal.getEvents(startDate, endDate, { search: 'IEP Meeting' });
+
+    // Build initials → student(s) lookup
+    var initialsMap = {};
+    students.forEach(function(s) {
+      var fn = (s.firstName || '').trim();
+      var ln = (s.lastName || '').trim();
+      if (!fn || !ln) return;
+      var key = (fn.charAt(0) + ln.charAt(0)).toUpperCase();
+      if (!initialsMap[key]) initialsMap[key] = [];
+      initialsMap[key].push({ id: s.id, name: fn + ' ' + ln });
+    });
+
+    events.forEach(function(evt) {
+      var title = (evt.getTitle() || '').trim();
+      if (!title) return;
+
+      // Extract initials (first token) and meeting type (rest of title)
+      var parts = title.split(/\s+/);
+      var initials = (parts[0] || '').toUpperCase();
+
+      // Derive meeting type from everything between initials and "IEP Meeting"
+      // e.g. "RT Virtual IEP Meeting" → "Virtual IEP Meeting"
+      var meetingType = parts.slice(1).join(' ') || 'IEP Meeting';
+
+      var matched = initialsMap[initials];
+      if (!matched || matched.length === 0) return; // no caseload student matched
+
+      var eventDate = formatDateValue_(evt.getStartTime());
+
+      matched.forEach(function(student) {
+        results.push({
+          date: eventDate,
+          studentId: student.id,
+          studentName: student.name,
+          meetingType: meetingType,
+          source: 'gcal',
+          calendarEventTitle: title
+        });
+      });
+    });
+  } catch(e) {
+    // CalendarApp may not be authorized yet — fail silently
+    Logger.log('getCalendarMeetings_ error: ' + e.message);
+  }
+
+  setCalendarCache_(results);
+  return results;
+}
+
+/** Read calendar meetings cache (5-min TTL). */
+function getCalendarCache_() {
+  try {
+    var raw = PropertiesService.getUserProperties().getProperty(CACHE_PREFIX + 'calendar_meetings');
+    if (raw) {
+      var cached = JSON.parse(raw);
+      if (cached && cached._ts && (Date.now() - cached._ts < CALENDAR_CACHE_TTL_MS)) {
+        return cached._data;
+      }
+    }
+  } catch(e) {}
+  return null;
+}
+
+/** Write calendar meetings cache. */
+function setCalendarCache_(data) {
+  try {
+    var wrapped = { _data: data, _ts: Date.now() };
+    PropertiesService.getUserProperties().setProperty(
+      CACHE_PREFIX + 'calendar_meetings', JSON.stringify(wrapped)
+    );
+  } catch(e) { /* exceeds property limit — skip silently */ }
+}
+
+/**
+ * Auto-populate meeting dates on active evals from calendar events.
+ * Only sets the date if the eval's meetingDate is empty and the calendar
+ * event date is today or in the future.
+ */
+function autoPopulateEvalMeetingDates_(calendarMeetings) {
+  if (!calendarMeetings || calendarMeetings.length === 0) return;
+
+  var ss = getSS_();
+  var evalSheet = ss.getSheetByName(SHEET_EVALUATIONS);
+  if (!evalSheet || evalSheet.getLastRow() <= 1) return;
+
+  var evalData = evalSheet.getDataRange().getValues();
+  var evalHeaders = evalData[0];
+  var colIdx = buildColIdx_(evalHeaders);
+
+  var todayStr = formatDateValue_(new Date());
+  var didWrite = false;
+
+  // Build lookup: studentId → [{rowIndex, meetingDate, evalId}]
+  var evalsByStudent = {};
+  for (var i = 1; i < evalData.length; i++) {
+    var sid = evalData[i][colIdx['studentId'] - 1];
+    var md = evalData[i][colIdx['meetingDate'] - 1];
+    if (!evalsByStudent[sid]) evalsByStudent[sid] = [];
+    evalsByStudent[sid].push({
+      rowIndex: i + 1,
+      meetingDate: md ? formatDateValue_(md) : '',
+      evalId: evalData[i][colIdx['id'] - 1]
+    });
+  }
+
+  calendarMeetings.forEach(function(m) {
+    if (m.date < todayStr) return; // skip past events
+    var evals = evalsByStudent[m.studentId];
+    if (!evals) return;
+
+    evals.forEach(function(ev) {
+      if (ev.meetingDate) return; // already has a meeting date — don't overwrite
+      // Set the meeting date from the calendar event
+      batchSetValues_(evalSheet, ev.rowIndex, colIdx, {
+        meetingDate: m.date,
+        updatedAt: new Date().toISOString()
+      });
+      ev.meetingDate = m.date; // prevent duplicate writes for same eval
+      didWrite = true;
+    });
+  });
+
+  if (didWrite) {
+    invalidateEvalCaches_();
+  }
 }
 
 /**
@@ -1691,9 +1877,11 @@ function getEvaluation(studentId) {
 
   var data = sheet.getDataRange().getValues();
   var headers = data[0];
+  var colIdx = buildColIdx_(headers);
+  var studentIdCol = colIdx['studentId'] - 1;
 
   for (var i = 1; i < data.length; i++) {
-    if (data[i][1] === studentId) {
+    if (data[i][studentIdCol] === studentId) {
       var row = {};
       headers.forEach(function(h, idx) { row[h] = data[i][idx]; });
       try { row.items = JSON.parse(row.itemsJson || '[]'); }
@@ -1861,13 +2049,11 @@ function deleteEvaluation(evalId) {
   var sheet = ss.getSheetByName(SHEET_EVALUATIONS);
   if (!sheet) return { success: false };
 
-  var data = sheet.getDataRange().getValues();
-  for (var i = data.length - 1; i >= 1; i--) {
-    if (data[i][0] === evalId) {
-      sheet.deleteRow(i + 1);
-      invalidateEvalCaches_();
-      return { success: true };
-    }
+  var found = findRowById_(sheet, evalId);
+  if (found) {
+    sheet.deleteRow(found.rowIndex);
+    invalidateEvalCaches_();
+    return { success: true };
   }
   return { success: false };
 }
@@ -2794,7 +2980,9 @@ function formatDateValue_(val) {
 
 function initializeSheetsIfNeeded_() {
   const ss = getSS_();
-  if (!ss.getSheetByName(SHEET_STUDENTS) || !ss.getSheetByName(SHEET_CHECKINS) || !ss.getSheetByName(SHEET_COTEACHERS) || !ss.getSheetByName(SHEET_IEP_MEETINGS)) {
+  if (!ss.getSheetByName(SHEET_STUDENTS) || !ss.getSheetByName(SHEET_CHECKINS) ||
+      !ss.getSheetByName(SHEET_COTEACHERS) || !ss.getSheetByName(SHEET_IEP_MEETINGS) ||
+      !ss.getSheetByName(SHEET_EVALUATIONS) || !ss.getSheetByName(SHEET_PROGRESS)) {
     initializeSheets();
   }
 }
