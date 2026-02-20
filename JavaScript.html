@@ -1686,6 +1686,28 @@ function hideEvalSections_() {
   if (b) b.style.display = 'none';
 }
 
+/** Force-refresh meetings from Google Calendar (bypasses 5-min cache). */
+function refreshCalendarMeetings() {
+  showToast('Refreshing calendar...');
+  google.script.run
+    .withSuccessHandler(function(meetings) {
+      appState.dashboardMeetings = meetings || [];
+      if (appState.evalSummary) {
+        renderEvalSummary(appState.evalSummary);
+      }
+      // Also refresh Due Process if that view is active
+      if (appState.dueProcessData) {
+        appState.dueProcessData.meetings = meetings || [];
+        renderDueProcess(appState.dueProcessData);
+      }
+      showToast('Calendar updated');
+    })
+    .withFailureHandler(function() {
+      showToast('Failed to refresh calendar');
+    })
+    .getAllMeetings(true);
+}
+
 function buildMetricCardsHtml_(summary) {
   var html = '<div class="eval-metric-cards">';
 
@@ -1785,6 +1807,9 @@ function buildTimelineHtml_(summary) {
   var html = '<div class="eval-timeline-strip">';
   html += '<div class="eval-timeline-header">' +
     '<span class="eval-timeline-title">Next 7 Days</span>' +
+    '<button class="btn-icon btn-icon-sm" onclick="refreshCalendarMeetings()" title="Refresh calendar" aria-label="Refresh calendar meetings">' +
+      '&#x1F504;' +
+    '</button>' +
   '</div>';
 
   html += '<div class="eval-timeline-days">';
@@ -1839,32 +1864,59 @@ function buildTimelineHtml_(summary) {
   // Expanded day details
   if (appState.timelineExpandedDay !== null) {
     var expandedDay = summary.timeline[appState.timelineExpandedDay];
-    if (expandedDay && expandedDay.tasks.length > 0) {
-      var isExpandedToday = (appState.timelineExpandedDay === 0);
-      var dayLabel = isExpandedToday ? 'Today' : (esc(expandedDay.dayAbbr) + ', ' + esc(expandedDay.monthShort) + ' ' + expandedDay.dayNum);
-      html += '<div class="eval-timeline-detail">';
-      html += '<div class="eval-timeline-detail-header">' +
-        dayLabel +
-        ' <span class="eval-timeline-detail-count">' + expandedDay.tasks.length + ' task' + (expandedDay.tasks.length !== 1 ? 's' : '') + '</span>' +
-      '</div>';
+    if (expandedDay) {
+      var dayMeetingsExpanded = meetingsByDate[expandedDay.date] || [];
+      var hasDayTasks = expandedDay.tasks.length > 0;
+      var hasDayMeetings = dayMeetingsExpanded.length > 0;
 
-      expandedDay.tasks.forEach(function(task) {
-        var typeLabel = getEvalTypeLabel(task.evalType);
-        html += '<div class="eval-timeline-task" role="button" tabindex="0" onclick="navigateToEvalTask(\'' + esc(task.studentId) + '\', \'' + esc(task.itemId || '') + '\')" onkeydown="if(event.key===\'Enter\')navigateToEvalTask(\'' + esc(task.studentId) + '\', \'' + esc(task.itemId || '') + '\')">' +
-          '<span class="eval-timeline-task-dot"></span>' +
-          '<div class="eval-timeline-task-info">' +
-            '<span class="eval-timeline-task-text">' + esc(task.text) + '</span>' +
-            '<span class="eval-timeline-task-student">' + esc(task.studentName) + ' &middot; ' + esc(typeLabel) + '</span>' +
-          '</div>' +
+      if (hasDayTasks || hasDayMeetings) {
+        var isExpandedToday = (appState.timelineExpandedDay === 0);
+        var dayLabel = isExpandedToday ? 'Today' : (esc(expandedDay.dayAbbr) + ', ' + esc(expandedDay.monthShort) + ' ' + expandedDay.dayNum);
+        html += '<div class="eval-timeline-detail">';
+        html += '<div class="eval-timeline-detail-header">' + dayLabel;
+        if (hasDayTasks) {
+          html += ' <span class="eval-timeline-detail-count">' + expandedDay.tasks.length + ' task' + (expandedDay.tasks.length !== 1 ? 's' : '') + '</span>';
+        }
+        html += '</div>';
+
+        // Meetings first
+        if (hasDayMeetings) {
+          dayMeetingsExpanded.forEach(function(m) {
+            var isGcal = m.source === 'gcal';
+            var badgeClass = 'dp-expanded-meeting-badge' + (isGcal ? ' dp-expanded-meeting-badge-gcal' : '');
+            var badgeLabel = isGcal ? '&#x1F4C5;' : 'IEP';
+            html += '<div class="dp-expanded-meeting" role="button" tabindex="0" onclick="showStudentProfile(\'' + esc(m.studentId) + '\')" onkeydown="if(event.key===\'Enter\')showStudentProfile(\'' + esc(m.studentId) + '\')">' +
+              '<span class="' + badgeClass + '">' + badgeLabel + '</span>' +
+              '<div class="dp-expanded-meeting-info">' +
+                '<span class="dp-expanded-meeting-type">' + esc(m.meetingType) + '</span>' +
+                '<span class="dp-expanded-meeting-student">' + esc(m.studentName) +
+                (m.notes ? ' &middot; ' + esc(m.notes) : '') + '</span>' +
+              '</div>' +
+            '</div>';
+          });
+        }
+
+        // Tasks
+        if (hasDayTasks) {
+          expandedDay.tasks.forEach(function(task) {
+            var typeLabel = getEvalTypeLabel(task.evalType);
+            html += '<div class="eval-timeline-task" role="button" tabindex="0" onclick="navigateToEvalTask(\'' + esc(task.studentId) + '\', \'' + esc(task.itemId || '') + '\')" onkeydown="if(event.key===\'Enter\')navigateToEvalTask(\'' + esc(task.studentId) + '\', \'' + esc(task.itemId || '') + '\')">' +
+              '<span class="eval-timeline-task-dot"></span>' +
+              '<div class="eval-timeline-task-info">' +
+                '<span class="eval-timeline-task-text">' + esc(task.text) + '</span>' +
+                '<span class="eval-timeline-task-student">' + esc(task.studentName) + ' &middot; ' + esc(typeLabel) + '</span>' +
+              '</div>' +
+            '</div>';
+          });
+        }
+
+        html += '</div>';
+      } else {
+        var emptyLabel = (appState.timelineExpandedDay === 0) ? 'today' : (esc(expandedDay.dayAbbr) + ', ' + esc(expandedDay.monthShort) + ' ' + expandedDay.dayNum);
+        html += '<div class="eval-timeline-detail eval-timeline-detail-empty">' +
+          '<span>Nothing scheduled ' + emptyLabel + '</span>' +
         '</div>';
-      });
-
-      html += '</div>';
-    } else if (expandedDay) {
-      var emptyLabel = (appState.timelineExpandedDay === 0) ? 'today' : (esc(expandedDay.dayAbbr) + ', ' + esc(expandedDay.monthShort) + ' ' + expandedDay.dayNum);
-      html += '<div class="eval-timeline-detail eval-timeline-detail-empty">' +
-        '<span>No tasks due ' + emptyLabel + '</span>' +
-      '</div>';
+      }
     }
   }
 
@@ -2148,10 +2200,11 @@ function buildDPMeetingsDropdownList_(meetings) {
       var parts = m.date.split('-');
       dateLabel = parseInt(parts[1], 10) + '/' + parseInt(parts[2], 10);
     }
+    var sourceTag = m.source === 'gcal' ? ' <span class="dp-gcal-tag">Cal</span>' : '';
     html += '<div class="eval-metric-dropdown-item" onclick="showStudentProfile(\'' + esc(m.studentId) + '\')" ' +
       'role="link" tabindex="0">' +
       '<div class="eval-metric-dropdown-item-main">' +
-        '<span class="eval-metric-dropdown-item-text">' + esc(m.meetingType) + '</span>' +
+        '<span class="eval-metric-dropdown-item-text">' + esc(m.meetingType) + sourceTag + '</span>' +
         '<span class="eval-metric-dropdown-item-date">' + dateLabel + '</span>' +
       '</div>' +
       '<span class="eval-metric-dropdown-item-student">' + esc(m.studentName) +
@@ -2248,8 +2301,13 @@ function buildDPCalendarSection_(data) {
   var html = '<div class="dp-section" id="dp-calendar-section">';
   html += '<div class="dp-calendar-header">';
   html += '<h2 class="dp-section-header">At a Glance</h2>';
-  html += '<button class="btn btn-sm" id="dp-cal-toggle-btn" onclick="toggleDPCalendarRange()">' +
-    (expanded ? 'This Week' : 'Show 4 Weeks') + '</button>';
+  html += '<div class="dp-calendar-header-actions">' +
+    '<button class="btn-icon btn-icon-sm" onclick="refreshCalendarMeetings()" title="Refresh calendar" aria-label="Refresh calendar meetings">' +
+      '&#x1F504;' +
+    '</button>' +
+    '<button class="btn btn-sm" id="dp-cal-toggle-btn" onclick="toggleDPCalendarRange()">' +
+      (expanded ? 'This Week' : 'Show 4 Weeks') + '</button>' +
+  '</div>';
   html += '</div>';
 
   // Always render all 4 weeks; weeks 2-4 in a collapsible wrapper
@@ -2348,8 +2406,13 @@ function buildDPExpandedDayHtml_(day) {
   // Meetings first
   if (hasMeetings) {
     day.meetings.forEach(function(m) {
-      html += '<div class="dp-expanded-meeting">' +
-        '<span class="dp-expanded-meeting-badge">IEP</span>' +
+      var isGcal = m.source === 'gcal';
+      var badgeClass = 'dp-expanded-meeting-badge' + (isGcal ? ' dp-expanded-meeting-badge-gcal' : '');
+      var badgeLabel = isGcal ? '&#x1F4C5;' : 'IEP';
+      html += '<div class="dp-expanded-meeting" role="button" tabindex="0" ' +
+        'onclick="showStudentProfile(\'' + esc(m.studentId) + '\')" ' +
+        'onkeydown="if(event.key===\'Enter\')showStudentProfile(\'' + esc(m.studentId) + '\')">' +
+        '<span class="' + badgeClass + '">' + badgeLabel + '</span>' +
         '<div class="dp-expanded-meeting-info">' +
           '<span class="dp-expanded-meeting-type">' + esc(m.meetingType) + '</span>' +
           '<span class="dp-expanded-meeting-student">' + esc(m.studentName) +
@@ -2449,6 +2512,9 @@ function buildDPUpcomingMeetingsList_(meetings, days) {
     var dateLabel = dayNames[meetDate.getDay()] + ', ' + monthAbbrs[meetDate.getMonth()] + ' ' + meetDate.getDate();
     var isToday = m.date === todayStr;
 
+    var isGcal = m.source === 'gcal';
+    var badgeClass = 'dp-upcoming-badge' + (isGcal ? ' dp-upcoming-badge-gcal' : '');
+    var badgeLabel = isGcal ? '&#x1F4C5;' : 'IEP';
     html += '<div class="dp-upcoming-row" role="button" tabindex="0" ' +
       'onclick="showStudentProfile(\'' + esc(m.studentId) + '\')" ' +
       'onkeydown="if(event.key===\'Enter\')showStudentProfile(\'' + esc(m.studentId) + '\')">' +
@@ -2459,7 +2525,7 @@ function buildDPUpcomingMeetingsList_(meetings, days) {
         '<span class="dp-upcoming-student">' + esc(m.studentName) +
         (m.notes ? ' &#x00B7; ' + esc(m.notes) : '') + '</span>' +
       '</div>' +
-      '<span class="dp-upcoming-badge">IEP</span>' +
+      '<span class="' + badgeClass + '">' + badgeLabel + '</span>' +
     '</div>';
   });
 

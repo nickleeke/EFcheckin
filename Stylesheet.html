@@ -4348,6 +4348,9 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 }
 
 .eval-timeline-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin-bottom: 12px;
 }
 
@@ -4814,6 +4817,12 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   flex-shrink: 0;
   margin-top: 2px;
 }
+.dp-expanded-meeting-badge-gcal {
+  background: #4285F4;
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+}
 .dp-expanded-meeting-info {
   display: flex;
   flex-direction: column;
@@ -4933,6 +4942,29 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   letter-spacing: 0.5px;
   text-transform: uppercase;
   flex-shrink: 0;
+}
+.dp-upcoming-badge-gcal {
+  background: #4285F4;
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.dp-gcal-tag {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: var(--md-shape-xs);
+  background: #4285F4;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+.dp-calendar-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* ── Progress Reports Section ── */
