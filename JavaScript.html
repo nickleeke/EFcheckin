@@ -1580,7 +1580,14 @@ function renderNeedsAttention(data) {
       html += '<span class="needs-attention-reason">' + r.icon + esc(r.text) + '</span>';
     });
     html += '</div>';
-    html += '<button class="needs-attention-action" onclick="event.stopPropagation(); startCheckIn(\'' + s.id + '\')">Check In &#x2192;</button>';
+    var hasStaleCheckIn = s.daysSinceCheckIn != null && s.daysSinceCheckIn >= 7;
+    var hasMissing = s.totalMissing >= 4;
+    if (hasStaleCheckIn) {
+      html += '<button class="needs-attention-action" onclick="event.stopPropagation(); startCheckIn(\'' + s.id + '\')">Check In &#x2192;</button>';
+    }
+    if (hasMissing) {
+      html += '<button class="needs-attention-action" onclick="event.stopPropagation(); showMissingAssignments(\'' + s.id + '\')">View Missing &#x2192;</button>';
+    }
     html += '</div>';
   });
 
