@@ -644,6 +644,29 @@ function closeNavDrawerIfMobile_() {
   if (window.innerWidth < 840) closeNavDrawer();
 }
 
+// Sync nav drawer active state to match whichever dashboard tab panel is active.
+// Use after showView('dashboard-view') when bypassing switchDashboardTab().
+function activateDashboardDrawerState_() {
+  document.querySelectorAll('.nav-drawer-child').forEach(function(t) { t.classList.remove('active'); });
+  document.querySelectorAll('.nav-drawer-items > .nav-drawer-item').forEach(function(t) { t.classList.remove('active'); });
+  document.querySelectorAll('.nav-drawer-parent').forEach(function(t) { t.classList.remove('active'); });
+  var studentsPanel = document.getElementById('tab-panel-students');
+  var adminPanel = document.getElementById('tab-panel-admin');
+  if (adminPanel && adminPanel.classList.contains('active')) {
+    var item = document.getElementById('drawer-admin');
+    if (item) item.classList.add('active');
+  } else if (studentsPanel && studentsPanel.classList.contains('active')) {
+    var tabId = appState.caseloadFilter === 'my' ? 'drawer-mycaseload' : 'drawer-caseload';
+    var item = document.getElementById(tabId);
+    if (item) item.classList.add('active');
+    var parent = document.querySelector('#nav-group-students .nav-drawer-parent');
+    if (parent) parent.classList.add('active');
+  } else {
+    var item = document.getElementById('drawer-dashboard');
+    if (item) item.classList.add('active');
+  }
+}
+
 // ─── Navigation Drawer Collapse (desktop) ───
 var _navDrawerCollapsed = false;
 var _tooltipEl = null;
@@ -3909,6 +3932,7 @@ function saveCheckIn() {
 
   // Optimistic UI: navigate immediately
   showView('dashboard-view');
+  activateDashboardDrawerState_();
   renderDashboard(applyFilter_(appState.dashboardData));
   showToast('Saving check-in\u2026');
 
@@ -3944,7 +3968,8 @@ function goBackFromCheckIn() {
         .saveCheckIn(data);
     }
   }
-  showDashboard();
+  showView('dashboard-view');
+  activateDashboardDrawerState_();
 }
 
 // ─── Check-In Autosave ───
@@ -4759,6 +4784,7 @@ function reRenderProfileAcademics(student) {
 function goBackFromMissing() {
   renderDashboard(applyFilter_(appState.dashboardData));
   showView('dashboard-view');
+  activateDashboardDrawerState_();
 }
 
 // ─── Add Missing Assignment (from Missing View) ───
@@ -6511,6 +6537,7 @@ function saveStudentForm() {
   } else {
     renderDashboard(applyFilter_(appState.dashboardData));
     showView('dashboard-view');
+    activateDashboardDrawerState_();
   }
   showToast('Saving\u2026');
   showGlobalProgress();
@@ -6546,6 +6573,7 @@ function doDeleteStudent(studentId) {
   appState.dashboardData = appState.dashboardData.filter(function(s) { return s.id !== studentId; });
   renderDashboard(applyFilter_(appState.dashboardData));
   showView('dashboard-view');
+  activateDashboardDrawerState_();
   showToast('Deleting\u2026');
   showGlobalProgress();
 
