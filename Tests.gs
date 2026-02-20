@@ -1339,3 +1339,166 @@ function test_contacts_preservesValidData() {
   assertEqual_(result[0].phone, '6125550000', 'Phone normalized');
   assert_(result[0].primary, 'Primary preserved');
 }
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 10. EVALUATION — CRUD & Deduplication
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+function runAllEvalTests() {
+  var tests = [
+    'test_eval_createAndRetrieve',
+    'test_eval_createRejectsInvalidType',
+    'test_eval_createBlocksDuplicate',
+    'test_eval_deleteRemovesRow',
+    'test_eval_getEvaluationUsesColIdx',
+    'test_eval_summaryNoDuplicateActiveEvals'
+  ];
+
+  var testFns = {
+    test_eval_createAndRetrieve: test_eval_createAndRetrieve,
+    test_eval_createRejectsInvalidType: test_eval_createRejectsInvalidType,
+    test_eval_createBlocksDuplicate: test_eval_createBlocksDuplicate,
+    test_eval_deleteRemovesRow: test_eval_deleteRemovesRow,
+    test_eval_getEvaluationUsesColIdx: test_eval_getEvaluationUsesColIdx,
+    test_eval_summaryNoDuplicateActiveEvals: test_eval_summaryNoDuplicateActiveEvals
+  };
+
+  var passed = 0, failed = 0, errors = [];
+  tests.forEach(function(name) {
+    try {
+      testFns[name]();
+      passed++;
+      Logger.log('PASS: ' + name);
+    } catch(e) {
+      failed++;
+      errors.push(name + ': ' + e.message);
+      Logger.log('FAIL: ' + name + ' — ' + e.message);
+    }
+  });
+
+  Logger.log('');
+  Logger.log('Eval Results: ' + passed + ' passed, ' + failed + ' failed');
+  if (errors.length > 0) {
+    Logger.log('Failures:');
+    errors.forEach(function(e) { Logger.log('  ' + e); });
+  }
+  return { passed: passed, failed: failed, errors: errors };
+}
+
+function test_eval_createAndRetrieve() {
+  var evalId = null;
+  try {
+    var result = createEvaluation('stu-test-eval-001', 'initial-eval');
+    assert_(result.success, 'Eval should create successfully');
+    assertNotNull_(result.id, 'Should return an ID');
+    evalId = result.id;
+    assertEqual_(result.type, 'initial-eval', 'Type should match');
+    assertEqual_(result.studentId, 'stu-test-eval-001', 'StudentId should match');
+    assert_(Array.isArray(result.items), 'Items should be an array');
+
+    var fetched = getEvaluation('stu-test-eval-001');
+    assertNotNull_(fetched, 'Should retrieve the eval');
+    assertEqual_(fetched.id, evalId, 'IDs should match');
+    assertEqual_(fetched.type, 'initial-eval', 'Type should match on fetch');
+  } finally {
+    if (evalId) deleteEvaluation(evalId);
+  }
+}
+
+function test_eval_createRejectsInvalidType() {
+  var result = createEvaluation('stu-test-eval-002', 'invalid-type');
+  assert_(!result.success, 'Should reject invalid type');
+  assertContains_(result.error, 'Invalid', 'Error should mention invalid type');
+}
+
+function test_eval_createBlocksDuplicate() {
+  var evalId = null;
+  try {
+    var first = createEvaluation('stu-test-eval-003', 'initial-eval');
+    assert_(first.success, 'First create should succeed');
+    evalId = first.id;
+
+    var second = createEvaluation('stu-test-eval-003', '3-year-reeval');
+    assert_(!second.success, 'Second create should fail');
+    assertContains_(second.error, 'already has', 'Error should mention existing checklist');
+  } finally {
+    if (evalId) deleteEvaluation(evalId);
+  }
+}
+
+function test_eval_deleteRemovesRow() {
+  var evalId = null;
+  try {
+    var result = createEvaluation('stu-test-eval-004', 'annual-iep');
+    assert_(result.success, 'Create should succeed');
+    evalId = result.id;
+
+    var delResult = deleteEvaluation(evalId);
+    assert_(delResult.success, 'Delete should succeed');
+    evalId = null; // Mark as already deleted
+
+    var fetched = getEvaluation('stu-test-eval-004');
+    assertNull_(fetched, 'Eval should be gone after delete');
+  } finally {
+    if (evalId) deleteEvaluation(evalId);
+  }
+}
+
+function test_eval_getEvaluationUsesColIdx() {
+  var evalId = null;
+  try {
+    var result = createEvaluation('stu-test-eval-005', '3-year-reeval');
+    assert_(result.success, 'Create should succeed');
+    evalId = result.id;
+
+    var fetched = getEvaluation('stu-test-eval-005');
+    assertNotNull_(fetched, 'Should find eval for stu-test-eval-005');
+    assertEqual_(fetched.studentId, 'stu-test-eval-005', 'StudentId should match');
+    assertEqual_(fetched.type, '3-year-reeval', 'Type should match');
+    assert_(Array.isArray(fetched.items), 'Items should be parsed array');
+    assert_(Array.isArray(fetched.files), 'Files should be parsed array');
+  } finally {
+    if (evalId) deleteEvaluation(evalId);
+  }
+}
+
+function test_eval_summaryNoDuplicateActiveEvals() {
+  var evalId = null;
+  var manualRowInserted = false;
+  try {
+    var result = createEvaluation('stu-test-eval-006', 'initial-eval');
+    assert_(result.success, 'Create should succeed');
+    evalId = result.id;
+
+    // Manually insert a duplicate row to simulate race condition
+    var ss = getSS_();
+    var sheet = ss.getSheetByName('Evaluations');
+    var now = new Date().toISOString();
+    sheet.appendRow(['dup-' + Utilities.getUuid().substr(0, 8), 'stu-test-eval-006', 'initial-eval', '[]', now, now, '[]', '']);
+    manualRowInserted = true;
+
+    // Clear caches so summary reads fresh data
+    invalidateCache_();
+    var summary = getEvalTaskSummary();
+    var count = 0;
+    (summary.activeEvals || []).forEach(function(ev) {
+      if (ev.studentId === 'stu-test-eval-006') count++;
+    });
+    assertEqual_(count, 1, 'Should have exactly 1 activeEvals entry for stu-test-eval-006, not ' + count);
+  } finally {
+    // Clean up all rows for the test student
+    try {
+      var ss2 = getSS_();
+      var sheet2 = ss2.getSheetByName('Evaluations');
+      if (sheet2) {
+        var data = sheet2.getDataRange().getValues();
+        for (var i = data.length - 1; i >= 1; i--) {
+          if (data[i][1] === 'stu-test-eval-006') {
+            sheet2.deleteRow(i + 1);
+          }
+        }
+      }
+    } catch(e) {}
+    invalidateCache_();
+  }
+}
