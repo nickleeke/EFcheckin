@@ -3824,6 +3824,65 @@ function collectCheckInData() {
   };
 }
 
+function updateStudentAfterCheckIn_(studentId, data) {
+  var student = getStudentById(studentId);
+  if (!student) return;
+
+  // daysSinceCheckIn: compute from weekOf vs today (mirrors backend code.gs:681-688)
+  if (data.weekOf) {
+    var parts = data.weekOf.split('-');
+    var ciDate = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    var today = new Date();
+    today.setHours(0, 0, 0, 0);
+    student.daysSinceCheckIn = Math.max(0, Math.floor((today - ciDate) / 86400000));
+  }
+
+  // avgRating: average of the 5 EF ratings (mirrors backend code.gs:652-662)
+  var ratings = [data.planningRating, data.followThroughRating,
+                 data.regulationRating, data.focusGoalRating, data.effortRating];
+  var validRatings = ratings.filter(function(r) { return r && Number(r) > 0; });
+  if (validRatings.length > 0) {
+    var oldAvg = student.avgRating;
+    student.avgRating = validRatings.reduce(function(sum, r) { return sum + Number(r); }, 0) / validRatings.length;
+
+    // trend: compare new avg to old using 0.3 threshold (mirrors backend code.gs:675-676)
+    if (oldAvg != null) {
+      if (student.avgRating > oldAvg + 0.3) student.trend = 'up';
+      else if (student.avgRating < oldAvg - 0.3) student.trend = 'down';
+      else student.trend = 'flat';
+    } else {
+      student.trend = 'none';
+    }
+
+    // efHistory: append new average, keep max 6 entries oldest-first
+    if (!student.efHistory) student.efHistory = [];
+    student.efHistory.push(student.avgRating);
+    if (student.efHistory.length > 6) {
+      student.efHistory = student.efHistory.slice(student.efHistory.length - 6);
+    }
+  }
+
+  // latestWeek and latestMicroGoal
+  student.latestWeek = data.weekOf;
+  student.latestMicroGoal = data.microGoal || '';
+
+  // academicData, totalMissing, and gpa
+  if (data.academicData) {
+    student.academicData = data.academicData;
+    recalcTotalMissing(student);
+
+    var gpaValues = [];
+    data.academicData.forEach(function(c) {
+      if (c.grade && GPA_MAP.hasOwnProperty(c.grade)) {
+        gpaValues.push(GPA_MAP[c.grade]);
+      }
+    });
+    student.gpa = gpaValues.length > 0
+      ? gpaValues.reduce(function(a, b) { return a + b; }, 0) / gpaValues.length
+      : null;
+  }
+}
+
 function saveCheckIn() {
   // Cancel any pending autosave
   if (_ciAutosaveTimer) {
@@ -3841,6 +3900,9 @@ function saveCheckIn() {
   // Reset autosave state
   _ciAutosaveDirty = false;
 
+  // Optimistically update appState so dashboard renders with fresh data
+  updateStudentAfterCheckIn_(data.studentId, data);
+
   // Optimistic UI: navigate immediately
   showView('dashboard-view');
   renderDashboard(applyFilter_(appState.dashboardData));
@@ -3849,6 +3911,8 @@ function saveCheckIn() {
   google.script.run
     .withSuccessHandler(function(result) {
       if (result.success) {
+        var student = getStudentById(data.studentId);
+        if (student && result.id) student.latestCheckInId = result.id;
         showToast('Check-in saved');
         renderDashboardFromState();
         _lastDashboardFetch = 0;
@@ -3872,6 +3936,7 @@ function goBackFromCheckIn() {
     if (data) {
       data.id = appState.editingCheckIn.id;
       _ciAutosaveDirty = false;
+      updateStudentAfterCheckIn_(data.studentId, data);
       google.script.run
         .withSuccessHandler(function() { renderDashboardFromState(); _lastDashboardFetch = 0; })
         .withFailureHandler(function() {})
