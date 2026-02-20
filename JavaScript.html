@@ -2473,7 +2473,7 @@ function buildDPProgressSection_(data) {
   var assignments = data.progressAssignments || [];
   var completionMap = data.completionMap || {};
   var completionFlags = data.completionFlags || {};
-  var quarter = data.currentQuarter || '';
+  var quarter = appState.dueProcessQuarter || data.currentQuarter || '';
   var filter = appState.dueProcessProgressFilter || 'all';
   var viewMode = appState.dueProcessProgressViewMode || 'grouped';
   var areaFilters = appState.dueProcessGoalAreaFilters || [];
@@ -2914,20 +2914,20 @@ function switchDPProgressQuarter(quarter) {
     tmp.innerHTML = skelHtml;
     section.parentNode.replaceChild(tmp.firstChild, section);
   }
+  var prevQuarter = appState.dueProcessData ? appState.dueProcessData.currentQuarter : null;
   google.script.run
     .withSuccessHandler(function(data) {
       if (_currentViewId !== 'dueprocess-view') return;
-      appState.dueProcessData.progressAssignments = data.progressAssignments;
       appState.dueProcessData.completionMap = data.completionMap;
-      appState.dueProcessData.completionFlags = data.completionFlags;
       appState.dueProcessData.currentQuarter = data.currentQuarter;
       renderDPProgressOnly_();
     })
     .withFailureHandler(function(err) {
-      showToast('Error: ' + (err && err.message ? err.message : String(err)));
+      showToast('Error switching quarter: ' + (err && err.message ? err.message : String(err)));
+      appState.dueProcessQuarter = prevQuarter;
       renderDPProgressOnly_();
     })
-    .getDueProcessData(quarter);
+    .getDPCompletionForQuarter(quarter);
 }
 
 function toggleDPReportItem(studentId, goalId, quarter, checked) {

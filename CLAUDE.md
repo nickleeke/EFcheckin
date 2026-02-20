@@ -85,6 +85,7 @@ Definitions: `EVAL_TYPES` array + `EVAL_TYPE_ALIASES` map (frontend), `VALID_EVA
 - **Dashboard enrichment:** `getDashboardData()` returns `daysSinceCheckIn` and `efHistory` (up to 6 weekly EF averages, oldest first) per student, used for urgency scoring and sparkline rendering.
 - **Keyboard shortcuts:** Dashboard supports arrow keys, Enter (side panel), `n` (check-in), `p` (profile), `?` (help). Guards against input/textarea/select focus. `highlightedRowIndex` resets on every `renderDashboard` call.
 - **Frontend staleness guard:** `loadDashboard(force)`, `loadEvalSummary(force)`, and `showDueProcess()` skip server calls if data was fetched within `DATA_FRESH_MS` (30s). Pass `force=true` after writes that need guaranteed fresh data (e.g., `doDeleteStudent`). Post-write success handlers should use `renderDashboardFromState(); _lastDashboardFetch = 0;` instead of `loadDashboard()` to avoid skeleton flash and redundant re-fetch.
+- **Sub-view filter endpoints:** When a view has sub-filters (e.g., quarter selector in due process), use a lightweight backend endpoint that returns only the filter-dependent data — never re-fetch the entire view payload. Example: `getDPCompletionForQuarter(quarter)` returns only `completionMap` instead of calling the full `getDueProcessData`. The UI selection state (e.g., `appState.dueProcessQuarter`) should be the source of truth for active button rendering, not the backend response.
 
 ## Helper Functions
 
@@ -104,6 +105,7 @@ Definitions: `EVAL_TYPES` array + `EVAL_TYPE_ALIASES` map (frontend), `VALID_EVA
 | `generateProgressReportHtml_(student, quarter, allEntries, summary)` | Full printable HTML report with inline CSS |
 | `generateProgressReport(studentId, quarter, summary)` | Public endpoint: single student report |
 | `generateBatchReports(quarter, summaries)` | Public endpoint: reports for entire caseload |
+| `getDPCompletionForQuarter(quarter)` | Lightweight quarter-switch endpoint: returns only `completionMap` + `currentQuarter` (avoids full `getDueProcessData` re-fetch) |
 | `getCurrentQuarter()` | Returns Q1-Q4 based on current date |
 | `invalidateStudentCaches_()` | Clear `cache_students` + `cache_dashboard` (student writes) |
 | `invalidateCheckInCaches_()` | Clear `cache_dashboard` (check-in writes) |

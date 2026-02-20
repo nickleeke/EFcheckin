@@ -1145,6 +1145,22 @@ function getDueProcessData(quarter) {
 }
 
 /**
+ * Lightweight quarter-switch endpoint — returns only the completion map for the
+ * requested quarter. Used by switchDPProgressQuarter to avoid re-fetching evals,
+ * meetings, and progress assignments that don't change with quarter.
+ */
+function getDPCompletionForQuarter(quarter) {
+  if (!quarter || VALID_QUARTERS.indexOf(quarter) === -1) {
+    quarter = getCurrentQuarter();
+  }
+  initializeSheetsIfNeeded_();
+  var email = (getCurrentUserEmail_() || '').toLowerCase();
+  var students = getStudents();
+  var completionMap = buildCompletionMap_(email, students, quarter);
+  return { completionMap: completionMap, currentQuarter: quarter };
+}
+
+/**
  * Extended eval timeline — same as getEvalTaskSummary() but builds N days instead of 7.
  */
 function getEvalTimelineExtended_(numDays) {
