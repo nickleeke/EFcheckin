@@ -3637,45 +3637,45 @@ function renderCheckInForm(student, checkIns, existingCheckIn) {
   if (classes.length > 0) {
     var grades = ['', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'D-', 'F'];
 
-    html += '<div class="missing-class-cards" id="ci-academic-cards">';
+    html += '<div id="ci-academic-cards">';
+    html += '<table class="profile-schedule-table ci-schedule-table">';
+    html += '<thead><tr><th class="pst-col-period">Period</th><th class="pst-col-class">Class</th><th class="pst-col-grade">Grade</th><th class="pst-col-missing">Missing</th></tr></thead><tbody>';
 
     classes.forEach(function(cls, clsIdx) {
       var className = cls.name || cls;
       var classPeriod = cls.period || '';
-      var displayName = classPeriod ? className + ' (P' + classPeriod + ')' : className;
       var existing = editAcademic[className] || prevAcademic[className] || {};
       var assignments = existing.missingAssignments || [];
       var missingCount = assignments.length || (Number(existing.missing) || 0);
-      var badgeClass = missingCount === 0 ? 'badge-green' : missingCount <= 3 ? 'badge-yellow' : 'badge-red';
+      var pillClass = missingCount === 0 ? 'badge-green' : missingCount <= 3 ? 'badge-yellow' : 'badge-red';
 
-      html += '<div class="missing-class-card" id="ci-card-' + clsIdx + '" data-class-name="' + esc(className) + '">' +
-        '<div class="missing-class-header" onclick="toggleCheckInMissing(' + clsIdx + ')">' +
-          '<div class="missing-class-info">' +
-            '<span class="missing-class-name">' + esc(displayName) + '</span>' +
-            '<select class="ci-grade-select" id="ci-grade-' + clsIdx + '" onclick="event.stopPropagation()">';
+      html += '<tr class="profile-schedule-row" id="ci-card-' + clsIdx + '" data-class-name="' + esc(className) + '" data-expandable="true" onclick="toggleCheckInMissing(' + clsIdx + ')">';
+      html += '<td class="pst-period">' + esc(classPeriod ? String(classPeriod) : '--') + '</td>';
+      html += '<td class="pst-class">' + esc(className) + '</td>';
 
+      // Grade column
+      html += '<td class="pst-grade"><select class="ci-grade-select profile-grade-select" id="ci-grade-' + clsIdx + '" onclick="event.stopPropagation()">';
       grades.forEach(function(g) {
         var sel = ((existing.grade || '') === g) ? ' selected' : '';
         html += '<option value="' + g + '"' + sel + '>' + (g || '--') + '</option>';
       });
+      html += '</select></td>';
 
-      html += '</select>' +
-          '</div>' +
-          '<div class="missing-class-right">' +
-            '<div class="missing-class-badge ' + badgeClass + '" id="ci-missing-badge-' + clsIdx + '">' +
-              '<span id="ci-missing-count-' + clsIdx + '">' + missingCount + '</span>' +
-            '</div>' +
-            '<svg class="expand-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>' +
-          '</div>' +
-        '</div>';
+      // Missing badge
+      html += '<td class="pst-missing">';
+      html += '<span class="profile-missing-pill ' + pillClass + '" id="ci-missing-badge-' + clsIdx + '">' +
+        '<span id="ci-missing-count-' + clsIdx + '">' + missingCount + '</span></span>';
+      html += '</td></tr>';
 
-      // Detail section (animated via .expanded class on parent card)
-      html += '<div class="missing-class-detail" id="ci-class-detail-' + clsIdx + '">';
+      // Expandable detail row
+      html += '<tr class="profile-row-detail" id="ci-row-detail-' + clsIdx + '">';
+      html += '<td colspan="4" class="profile-row-detail-cell">';
+      html += '<div id="ci-class-detail-' + clsIdx + '">';
       html += buildCiClassDetailHtml_(clsIdx, assignments);
-      html += '</div></div>';
+      html += '</div></td></tr>';
     });
 
-    html += '</div>';
+    html += '</tbody></table></div>';
   } else {
     html += '<p class="hint">No classes configured for this student.</p>' +
       '<button class="btn-ghost btn-sm" onclick="goBackFromCheckIn(); editStudent(\'' + student.id + '\')">Add Classes</button>';
@@ -3800,8 +3800,10 @@ function ciCollectAssignmentsForClass_(clsIdx) {
 }
 
 function toggleCheckInMissing(clsIdx) {
-  var card = document.getElementById('ci-card-' + clsIdx);
-  if (card) card.classList.toggle('expanded');
+  var row = document.getElementById('ci-card-' + clsIdx);
+  var detail = document.getElementById('ci-row-detail-' + clsIdx);
+  if (row) row.classList.toggle('expanded');
+  if (detail) detail.classList.toggle('expanded');
 }
 
 function removeCheckInMissing(clsIdx, origIdx) {
@@ -3810,8 +3812,10 @@ function removeCheckInMissing(clsIdx, origIdx) {
   var detail = document.getElementById('ci-class-detail-' + clsIdx);
   if (detail) detail.innerHTML = buildCiClassDetailHtml_(clsIdx, assignments);
   updateCheckInMissingCount(clsIdx, assignments.length);
-  var card = document.getElementById('ci-card-' + clsIdx);
-  if (card) card.classList.add('expanded');
+  var row = document.getElementById('ci-card-' + clsIdx);
+  var rowDetail = document.getElementById('ci-row-detail-' + clsIdx);
+  if (row) row.classList.add('expanded');
+  if (rowDetail) rowDetail.classList.add('expanded');
   scheduleCheckInAutosave();
 }
 
@@ -3835,8 +3839,10 @@ function ciConfirmAddMissing(clsIdx) {
   assignments.push({ name: name, type: type });
   var detail = document.getElementById('ci-class-detail-' + clsIdx);
   if (detail) detail.innerHTML = buildCiClassDetailHtml_(clsIdx, assignments);
-  var card = document.getElementById('ci-card-' + clsIdx);
-  if (card) card.classList.add('expanded');
+  var row = document.getElementById('ci-card-' + clsIdx);
+  var rowDetail = document.getElementById('ci-row-detail-' + clsIdx);
+  if (row) row.classList.add('expanded');
+  if (rowDetail) rowDetail.classList.add('expanded');
   updateCheckInMissingCount(clsIdx, assignments.length);
   scheduleCheckInAutosave();
   showToast('Assignment added');
@@ -3850,7 +3856,7 @@ function updateCheckInMissingCount(clsIdx, count) {
   if (countEl) countEl.textContent = count;
   var badge = document.getElementById('ci-missing-badge-' + clsIdx);
   if (badge) {
-    badge.className = 'missing-class-badge ' +
+    badge.className = 'profile-missing-pill ' +
       (count === 0 ? 'badge-green' : count <= 3 ? 'badge-yellow' : 'badge-red');
   }
 }
@@ -3858,11 +3864,11 @@ function updateCheckInMissingCount(clsIdx, count) {
 function getAcademicData() {
   var container = document.getElementById('ci-academic-cards');
   if (!container) return [];
-  var cards = container.querySelectorAll('.missing-class-card');
+  var rows = container.querySelectorAll('.profile-schedule-row[data-class-name]');
   var result = [];
-  cards.forEach(function(card, idx) {
-    var className = card.getAttribute('data-class-name') || '';
-    var gradeSelect = card.querySelector('.ci-grade-select');
+  rows.forEach(function(row, idx) {
+    var className = row.getAttribute('data-class-name') || '';
+    var gradeSelect = row.querySelector('.ci-grade-select');
     var grade = gradeSelect ? gradeSelect.value : '';
     var assignments = ciCollectAssignmentsForClass_(idx);
     result.push({
