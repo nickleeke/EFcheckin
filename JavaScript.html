@@ -96,6 +96,14 @@ var PROGRESS_RATING_BADGES = {
   'Objective Met': { label: 'Objective Met', bg: '#FFDEAB', text: '#2A1800', emoji: '&#x1F3C6; ' }
 };
 
+// ─── Accommodations at a Glance Categories ───
+var ACAG_DEFAULT_CATEGORIES = [
+  'Environmental/Physical',
+  'Instructional',
+  'Assignment',
+  'Testing'
+];
+
 // ─── Eval Type Definitions ───
 var EVAL_TYPES = [
   { value: 'annual-iep', label: 'Annual IEP' },
@@ -5183,7 +5191,12 @@ function renderStudentProfileDashboard(student) {
   html += '<div class="profile-section-card">';
   html += '<div class="profile-section-header">' +
     '<span class="profile-section-title">Goals &amp; Objectives</span>' +
-    '<span class="goals-autosave-status" id="goals-autosave-status"></span>' +
+    '<div class="profile-section-header-right">' +
+      '<span class="goals-autosave-status" id="goals-autosave-status"></span>' +
+      '<button class="btn-icon btn-icon-sm" onclick="printIepSummary()" title="Print IEP Summary">' +
+        '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>' +
+      '</button>' +
+    '</div>' +
   '</div>';
   html += '<div id="goals-autosave-container">';
 
@@ -6025,6 +6038,146 @@ function cancelStudentEdit() {
   }
 }
 
+// ─── Accommodations at a Glance (ACAG) Editor Helpers ───
+
+function parseAcagData(student) {
+  // Try structured JSON first
+  if (student.accommodationsJson) {
+    try {
+      var parsed = JSON.parse(student.accommodationsJson);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    } catch(e) { /* fall through */ }
+  }
+  // Build default categories
+  var data = ACAG_DEFAULT_CATEGORIES.map(function(cat) {
+    return { category: cat, items: [] };
+  });
+  // Migrate old free-text field
+  var oldText = (student.accommodations || '').trim();
+  if (oldText) {
+    data.push({ category: 'General', items: [oldText] });
+  }
+  return data;
+}
+
+function renderAcagCategoryEditor(cat, catIdx) {
+  var isDefault = ACAG_DEFAULT_CATEGORIES.indexOf(cat.category) >= 0;
+  var html = '<div class="acag-category" data-cat-idx="' + catIdx + '">';
+  html += '<div class="acag-category-header">';
+  html += '<span class="acag-category-name">' + esc(cat.category) + '</span>';
+  if (!isDefault) {
+    html += '<button type="button" class="btn-icon btn-icon-sm" onclick="removeAcagCategory(' + catIdx + ')" title="Remove category">' +
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>' +
+    '</button>';
+  }
+  html += '</div>';
+  html += '<div class="acag-items-list" id="acag-items-' + catIdx + '">';
+  (cat.items || []).forEach(function(item, itemIdx) {
+    html += '<div class="acag-item-row">' +
+      '<span class="acag-item-text">' + esc(item) + '</span>' +
+      '<button type="button" class="btn-icon btn-icon-sm acag-remove-btn" onclick="removeAcagItem(' + catIdx + ',' + itemIdx + ')" title="Remove">' +
+        '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>' +
+      '</button>' +
+    '</div>';
+  });
+  html += '</div>';
+  html += '<div class="acag-add-row">' +
+    '<input type="text" class="acag-add-input" id="acag-input-' + catIdx + '" placeholder="Add accommodation\u2026" onkeydown="if(event.key===\'Enter\'){event.preventDefault();addAcagItem(' + catIdx + ')}">' +
+    '<button type="button" class="btn btn-sm btn-secondary" onclick="addAcagItem(' + catIdx + ')">Add</button>' +
+  '</div>';
+  html += '</div>';
+  return html;
+}
+
+function getAcagState() {
+  var editor = document.getElementById('acag-editor');
+  if (!editor) return [];
+  var cats = editor.querySelectorAll('.acag-category');
+  var data = [];
+  for (var i = 0; i < cats.length; i++) {
+    var catEl = cats[i];
+    var name = catEl.querySelector('.acag-category-name').textContent;
+    var items = [];
+    var rows = catEl.querySelectorAll('.acag-item-text');
+    for (var j = 0; j < rows.length; j++) {
+      items.push(rows[j].textContent);
+    }
+    data.push({ category: name, items: items });
+  }
+  return data;
+}
+
+function addAcagItem(catIdx) {
+  var input = document.getElementById('acag-input-' + catIdx);
+  if (!input) return;
+  var text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  var data = getAcagState();
+  if (!data[catIdx]) return;
+  data[catIdx].items.push(text);
+  rerenderAcagEditor(data);
+}
+
+function removeAcagItem(catIdx, itemIdx) {
+  var data = getAcagState();
+  if (!data[catIdx]) return;
+  data[catIdx].items.splice(itemIdx, 1);
+  rerenderAcagEditor(data);
+}
+
+function addAcagCategory() {
+  var name = prompt('Enter category name:');
+  if (!name || !name.trim()) return;
+  var data = getAcagState();
+  data.push({ category: name.trim(), items: [] });
+  rerenderAcagEditor(data);
+}
+
+function removeAcagCategory(catIdx) {
+  var data = getAcagState();
+  if (!data[catIdx]) return;
+  if (data[catIdx].items.length > 0) {
+    if (!confirm('Remove "' + data[catIdx].category + '" and its ' + data[catIdx].items.length + ' accommodation(s)?')) return;
+  }
+  data.splice(catIdx, 1);
+  rerenderAcagEditor(data);
+}
+
+function rerenderAcagEditor(data) {
+  var editor = document.getElementById('acag-editor');
+  if (!editor) return;
+  var html = '';
+  data.forEach(function(cat, catIdx) {
+    html += renderAcagCategoryEditor(cat, catIdx);
+  });
+  editor.innerHTML = html;
+}
+
+function collectAccommodations() {
+  var data = getAcagState();
+  // Build result preserving default categories in canonical order
+  var result = [];
+  ACAG_DEFAULT_CATEGORIES.forEach(function(defCat) {
+    var found = data.find(function(c) { return c.category === defCat; });
+    result.push(found || { category: defCat, items: [] });
+  });
+  // Append custom (non-default) categories
+  data.forEach(function(cat) {
+    if (ACAG_DEFAULT_CATEGORIES.indexOf(cat.category) < 0) {
+      result.push(cat);
+    }
+  });
+  var json = JSON.stringify(result);
+  // Flat text summary for backward compat
+  var allItems = [];
+  result.forEach(function(cat) {
+    cat.items.forEach(function(item) { allItems.push(item); });
+  });
+  var flat = allItems.join('; ');
+  return { json: json, flat: flat };
+}
+
 function renderStudentForm(student) {
   var container = document.getElementById('student-form-container');
   var html = '<div class="form-card">';
@@ -6081,10 +6234,20 @@ function renderStudentForm(student) {
     '<div class="form-section-title">Focus &amp; Support</div>' +
     '<div class="form-group"><label>Focus Goal</label>' +
       '<input type="text" id="st-focusGoal" value="' + esc(student.focusGoal || '') + '" placeholder="Executive function focus area"></div>' +
-    '<div class="form-group"><label>Accommodations</label>' +
-      '<textarea id="st-accommodations" placeholder="IEP accommodations, 504 plan details, etc.">' + esc(student.accommodations || '') + '</textarea></div>' +
     '<div class="form-group"><label>Notes</label>' +
       '<textarea id="st-notes" placeholder="Additional notes">' + esc(student.notes || '') + '</textarea></div>' +
+  '</div>';
+
+  // Accommodations at a Glance
+  var acagData = parseAcagData(student);
+  html += '<div class="form-section">' +
+    '<div class="form-section-title">Accommodations at a Glance</div>' +
+    '<div id="acag-editor">';
+  acagData.forEach(function(cat, catIdx) {
+    html += renderAcagCategoryEditor(cat, catIdx);
+  });
+  html += '</div>' +
+    '<button type="button" class="btn btn-sm btn-secondary acag-add-category-btn" onclick="addAcagCategory()">+ Add Category</button>' +
   '</div>';
 
   // IEP Goal
@@ -6694,6 +6857,7 @@ function saveStudentForm() {
   // Preserve goalsJson from existing student data so save doesn't erase it
   var existingStudent = appState.currentStudentId ? getStudentById(appState.currentStudentId) : null;
 
+  var acagResult = collectAccommodations();
   var profile = {
     id: appState.currentStudentId || null,
     firstName: document.getElementById('st-firstName').value.trim(),
@@ -6701,7 +6865,8 @@ function saveStudentForm() {
     grade: document.getElementById('st-grade').value,
     period: '',
     focusGoal: document.getElementById('st-focusGoal').value.trim(),
-    accommodations: document.getElementById('st-accommodations').value.trim(),
+    accommodations: acagResult.flat,
+    accommodationsJson: acagResult.json,
     iepGoal: document.getElementById('st-iepGoal').value.trim(),
     notes: document.getElementById('st-notes').value.trim(),
     caseManagerEmail: document.getElementById('st-caseManager').value,
@@ -6737,6 +6902,8 @@ function saveStudentForm() {
         s.birthday = profile.birthday;
         s.contacts = profile.contacts;
         s.contactsJson = JSON.stringify(profile.contacts);
+        s.accommodations = profile.accommodations;
+        s.accommodationsJson = profile.accommodationsJson;
       }
     });
   } else {
@@ -6751,6 +6918,8 @@ function saveStudentForm() {
       birthday: profile.birthday,
       contacts: profile.contacts,
       contactsJson: JSON.stringify(profile.contacts),
+      accommodations: profile.accommodations,
+      accommodationsJson: profile.accommodationsJson,
       totalCheckIns: 0, latestWeek: null, latestMicroGoal: null,
       avgRating: null, trend: 'none', gpa: null,
       totalMissing: 0, academicData: []
@@ -6939,6 +7108,7 @@ function renderStudentMenu(studentId) {
   var items =
     '<button class="dropdown-item" onclick="editStudentInfo()">Edit Student</button>' +
     '<button class="dropdown-item" onclick="printStudentReport()">Print Missing Work &amp; Grades</button>' +
+    '<button class="dropdown-item" onclick="printAcag()">Print Accommodations (ACAG)</button>' +
     '<button class="dropdown-item" onclick="handleFeedbackClick()">Request Teacher Feedback</button>';
   if (hasSheet) {
     items += '<button class="dropdown-item" onclick="handleViewFeedbackClick()">View Teacher Feedback</button>';
@@ -7161,6 +7331,204 @@ function printStudentReport() {
     printWindow.print();
   } else {
     showToast('Please allow pop-ups to print the report');
+  }
+}
+
+function printIepSummary() {
+  var student = appState.currentStudent;
+  if (!student) {
+    student = appState.dashboardData.find(function(s) { return s.id === appState.currentStudentId; });
+  }
+  if (!student) { showToast('Student data not available'); return; }
+
+  var name = (student.firstName || '') + ' ' + (student.lastName || '');
+  var grade = student.grade || '--';
+
+  // Parse goals (same backward-compat logic as renderStudentProfileDashboard)
+  var goals = [];
+  if (student.goalsJson) {
+    try { goals = JSON.parse(student.goalsJson); } catch(e) { goals = []; }
+  } else if (student.goals && student.goals.length > 0) {
+    goals = student.goals;
+  }
+  if (goals.length === 0 && student.iepGoal) {
+    goals = [{ id: 'migrated', text: student.iepGoal, objectives: [] }];
+  }
+
+  var html = '<!DOCTYPE html><html><head><title>IEP Summary - ' + esc(name) + '</title>' +
+    '<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">' +
+    '<style>' +
+    'body { font-family: "Roboto", sans-serif; color: #1C1B1F; margin: 0; padding: 24px 32px; font-size: 13px; -webkit-font-smoothing: antialiased; }' +
+    '.report-logo { text-align: center; margin-bottom: 16px; }' +
+    '.report-logo img { height: 48px; }' +
+    'h1 { font-size: 20px; margin: 0 0 4px; }' +
+    '.subtitle { color: #49454F; font-size: 13px; margin-bottom: 20px; }' +
+    'h2 { font-size: 15px; font-weight: 500; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 2px solid #C41E3A; }' +
+    '.focus-table { width: 100%; margin-bottom: 8px; }' +
+    '.focus-table td { padding: 4px 0; vertical-align: top; font-size: 13px; }' +
+    '.focus-label { font-weight: 500; color: #49454F; width: 130px; padding-right: 12px; }' +
+    '.goal-card { border: 1px solid #C8C8C8; border-radius: 8px; padding: 16px; margin-bottom: 12px; page-break-inside: avoid; }' +
+    '.goal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }' +
+    '.goal-num { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #49454F; }' +
+    '.goal-area { display: inline-block; font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 12px; background: #FFDAD6; color: #410006; }' +
+    '.goal-text { font-size: 13px; line-height: 1.5; margin-bottom: 10px; }' +
+    '.obj-label { font-size: 12px; font-weight: 500; color: #49454F; margin-bottom: 4px; }' +
+    '.obj-list { margin: 0; padding-left: 20px; font-size: 13px; line-height: 1.6; list-style-type: lower-alpha; }' +
+    '.legacy-text { font-size: 13px; line-height: 1.5; }' +
+    '.footer { margin-top: 24px; font-size: 11px; color: #757575; text-align: center; }' +
+    '@media print { body { padding: 12px 16px; } .goal-card { break-inside: avoid; } }' +
+    '</style></head><body>';
+
+  // Logo + Header
+  html += '<div class="report-logo"><img src="https://resources.finalsite.net/images/f_auto,q_auto/v1593114034/richfieldschoolsorg/nevtdqxgci8pdkldabzj/MS_Horiz_C.png" alt="Richfield Middle School"></div>';
+  html += '<h1>' + esc(name) + '</h1>';
+  var subtitleParts = ['Grade ' + esc(grade)];
+  var cmEmail = student.caseManagerEmail || '';
+  if (cmEmail) {
+    var cmName = getCaseManagerName(cmEmail);
+    subtitleParts.push('Case Manager: ' + esc(cmName) + ' (' + esc(cmEmail) + ')');
+  }
+  subtitleParts.push('Printed ' + new Date().toLocaleDateString());
+  html += '<div class="subtitle">' + subtitleParts.join(' &bull; ') + '</div>';
+
+  // Focus & Support section
+  var focusGoal = student.focusGoal || '';
+  var acagData = parseAcagData(student);
+  var hasAccom = acagData.some(function(cat) { return cat.items && cat.items.length > 0; });
+  if (focusGoal || hasAccom) {
+    html += '<h2>Focus &amp; Support</h2>';
+    if (focusGoal) {
+      html += '<table class="focus-table"><tr><td class="focus-label">Focus Goal</td><td>' + esc(focusGoal) + '</td></tr></table>';
+    }
+    if (hasAccom) {
+      acagData.forEach(function(cat) {
+        if (!cat.items || cat.items.length === 0) return;
+        html += '<div style="margin-bottom:6px;font-weight:500;font-size:12px;color:#49454F;">' + esc(cat.category) + '</div>';
+        html += '<ul style="margin:0 0 8px;padding-left:20px;font-size:13px;">';
+        cat.items.forEach(function(item) {
+          html += '<li>' + esc(item) + '</li>';
+        });
+        html += '</ul>';
+      });
+    }
+  }
+
+  // IEP Goals & Objectives
+  html += '<h2>IEP Goals &amp; Objectives</h2>';
+  if (goals.length > 0) {
+    goals.forEach(function(goal, idx) {
+      html += '<div class="goal-card">';
+      html += '<div class="goal-header">';
+      html += '<span class="goal-num">Goal ' + (idx + 1) + '</span>';
+      if (goal.goalArea) {
+        html += '<span class="goal-area">' + esc(goal.goalArea) + '</span>';
+      }
+      html += '</div>';
+      html += '<div class="goal-text">' + esc(goal.text || 'No goal text') + '</div>';
+      var objectives = goal.objectives || [];
+      if (objectives.length > 0) {
+        html += '<div class="obj-label">Objectives:</div>';
+        html += '<ol class="obj-list">';
+        objectives.forEach(function(obj) {
+          html += '<li>' + esc(obj.text || '') + '</li>';
+        });
+        html += '</ol>';
+      }
+      html += '</div>';
+    });
+  } else {
+    html += '<p style="color:#49454F;">No IEP goals on file.</p>';
+  }
+
+  // Legacy IEP Goal (only if separate from migrated goals)
+  var legacyGoal = student.iepGoal || '';
+  if (legacyGoal && student.goalsJson) {
+    html += '<h2>Legacy IEP Goal</h2>';
+    html += '<div class="legacy-text">' + esc(legacyGoal) + '</div>';
+  }
+
+  html += '<div class="footer">Richfield Public Schools &bull; Generated from EF Caseload Dashboard</div>';
+  html += '</body></html>';
+
+  var printWindow = window.open('', '_blank');
+  if (printWindow) {
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  } else {
+    showToast('Please allow pop-ups to print the IEP summary');
+  }
+}
+
+function printAcag() {
+  closeStudentMenu();
+  var student = appState.currentStudent;
+  if (!student) {
+    student = appState.dashboardData.find(function(s) { return s.id === appState.currentStudentId; });
+  }
+  if (!student) { showToast('Student data not available'); return; }
+
+  var firstName = student.firstName || '';
+  var lastName = student.lastName || '';
+  var name = firstName + ' ' + lastName;
+  var acagData = parseAcagData(student);
+
+  // Filter to non-empty categories for print
+  var printCats = acagData.filter(function(cat) { return cat.items && cat.items.length > 0; });
+
+  if (printCats.length === 0) {
+    showToast('No accommodations to print');
+    return;
+  }
+
+  var html = '<!DOCTYPE html><html><head><title>ACAG - ' + esc(name) + '</title>' +
+    '<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">' +
+    '<style>' +
+    'body { font-family: "Roboto", sans-serif; color: #1C1B1F; margin: 0; padding: 24px 32px; font-size: 14px; -webkit-font-smoothing: antialiased; }' +
+    '.acag-title-block { margin-bottom: 24px; }' +
+    '.acag-title-name { font-size: 36px; font-weight: 400; line-height: 1.1; margin: 0; }' +
+    '.acag-title-label { font-size: 36px; font-weight: 400; line-height: 1.1; margin: 0; }' +
+    '.acag-title-sub { font-size: 20px; font-weight: 400; font-style: italic; margin: 2px 0 0; }' +
+    '.acag-card { border: 1px solid #C8C8C8; border-radius: 8px; margin-bottom: 16px; overflow: hidden; page-break-inside: avoid; }' +
+    '.acag-card-header { background: #D6E8F7; padding: 10px 16px; font-size: 16px; font-weight: 500; }' +
+    '.acag-card-body { padding: 12px 16px; }' +
+    '.acag-card-body ul { margin: 0; padding-left: 20px; }' +
+    '.acag-card-body li { padding: 3px 0; font-size: 14px; line-height: 1.5; }' +
+    '.footer { margin-top: 24px; font-size: 11px; color: #757575; text-align: center; }' +
+    '@media print { body { padding: 12px 16px; } .acag-card { break-inside: avoid; } }' +
+    '</style></head><body>';
+
+  // Title block
+  var possessive = firstName ? (firstName + (firstName.slice(-1) === 's' ? '\u2019' : '\u2019s')) : 'Student\u2019s';
+  html += '<div class="acag-title-block">';
+  html += '<div class="acag-title-name">' + esc(possessive) + '</div>';
+  html += '<div class="acag-title-label">Accommodations</div>';
+  html += '<div class="acag-title-sub">At a Glance</div>';
+  html += '</div>';
+
+  // Category cards
+  printCats.forEach(function(cat) {
+    html += '<div class="acag-card">';
+    html += '<div class="acag-card-header">' + esc(cat.category) + '</div>';
+    html += '<div class="acag-card-body"><ul>';
+    cat.items.forEach(function(item) {
+      html += '<li>' + esc(item) + '</li>';
+    });
+    html += '</ul></div></div>';
+  });
+
+  html += '<div class="footer">Richfield Public Schools &bull; EF Caseload Dashboard</div>';
+  html += '</body></html>';
+
+  var printWindow = window.open('', '_blank');
+  if (printWindow) {
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  } else {
+    showToast('Please allow pop-ups to print the ACAG');
   }
 }
 

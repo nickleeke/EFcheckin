@@ -175,7 +175,7 @@ var STUDENT_HEADERS = [
   'id','firstName','lastName','grade','period',
   'focusGoal','accommodations','notes','classesJson',
   'createdAt','updatedAt','iepGoal','goalsJson','caseManagerEmail',
-  'online','contactsJson','birthday'
+  'online','contactsJson','birthday','accommodationsJson'
 ];
 var CHECKIN_HEADERS = [
   'id','studentId','weekOf',
@@ -393,6 +393,7 @@ function saveStudent(profile) {
         online: profile.online ? 'TRUE' : '',
         contactsJson: contactsJson,
         birthday: profile.birthday || '',
+        accommodationsJson: profile.accommodationsJson || '',
         updatedAt: now
       });
       invalidateStudentCaches_();
@@ -407,7 +408,8 @@ function saveStudent(profile) {
     profile.focusGoal||'', profile.accommodations||'',
     profile.notes||'', classesJson, now, now,
     profile.iepGoal||'', profile.goalsJson||'', profile.caseManagerEmail||'',
-    profile.online ? 'TRUE' : '', contactsJson, profile.birthday || ''
+    profile.online ? 'TRUE' : '', contactsJson, profile.birthday || '',
+    profile.accommodationsJson || ''
   ]);
   invalidateStudentCaches_();
   return { success: true, id: id };
@@ -731,6 +733,7 @@ function getDashboardData() {
       grade: s.grade, period: s.period,
       focusGoal: s.focusGoal,
       accommodations: s.accommodations || '',
+      accommodationsJson: s.accommodationsJson || '',
       notes: s.notes || '',
       iepGoal: s.iepGoal || '',
       goalsJson: s.goalsJson || '',
@@ -2982,6 +2985,149 @@ function getDPCompletionFlags_() {
   var props = PropertiesService.getUserProperties();
   var flagsJson = props.getProperty('dp_completion_flags') || '{}';
   return JSON.parse(flagsJson);
+}
+
+// ───── Gemini AI ─────
+
+var GEMINI_MODEL_ = 'gemini-2.0-flash';
+var GEMINI_API_URL_ = 'https://generativelanguage.googleapis.com/v1beta/models/';
+
+/**
+ * One-time setup: run this function from the Script Editor to store
+ * your Gemini API key in Script Properties. It is shared across all
+ * users of the web app but never sent to the frontend.
+ *
+ * Usage: In the Script Editor, select setGeminiApiKey and click Run.
+ *        When prompted, enter your API key.
+ */
+function setGeminiApiKey(key) {
+  if (!key) {
+    // When run manually from Script Editor, prompt via Logger
+    throw new Error('Usage: call setGeminiApiKey("your-api-key-here") from the Script Editor console, or set the script property GEMINI_API_KEY manually in Project Settings > Script Properties.');
+  }
+  PropertiesService.getScriptProperties().setProperty('GEMINI_API_KEY', key);
+  Logger.log('Gemini API key stored successfully.');
+  return { success: true };
+}
+
+/** Retrieve the stored API key. Returns null if not set. */
+function getGeminiApiKey_() {
+  return PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY') || null;
+}
+
+/**
+ * Core Gemini API call. All AI features should use this function.
+ *
+ * @param {string} prompt - The user/system prompt text
+ * @param {Object} [opts] - Optional configuration
+ * @param {string} [opts.model] - Model name (default: GEMINI_MODEL_)
+ * @param {string} [opts.systemInstruction] - System instruction for the model
+ * @param {number} [opts.temperature] - Temperature 0-2 (default: 0.7)
+ * @param {number} [opts.maxOutputTokens] - Max tokens in response (default: 1024)
+ * @returns {string} The generated text response
+ * @throws {Error} If API key is missing or the API call fails
+ */
+function callGemini_(prompt, opts) {
+  var apiKey = getGeminiApiKey_();
+  if (!apiKey) {
+    throw new Error('Gemini API key not configured. Run setGeminiApiKey() or add GEMINI_API_KEY in Script Properties.');
+  }
+
+  opts = opts || {};
+  var model = opts.model || GEMINI_MODEL_;
+  var temperature = opts.temperature != null ? opts.temperature : 0.7;
+  var maxOutputTokens = opts.maxOutputTokens || 1024;
+
+  var url = GEMINI_API_URL_ + model + ':generateContent?key=' + apiKey;
+
+  var requestBody = {
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: {
+      temperature: temperature,
+      maxOutputTokens: maxOutputTokens
+    }
+  };
+
+  if (opts.systemInstruction) {
+    requestBody.systemInstruction = {
+      parts: [{ text: opts.systemInstruction }]
+    };
+  }
+
+  var response = UrlFetchApp.fetch(url, {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify(requestBody),
+    muteHttpExceptions: true
+  });
+
+  var code = response.getResponseCode();
+  var body = JSON.parse(response.getContentText());
+
+  if (code !== 200) {
+    var errMsg = (body.error && body.error.message) || ('Gemini API error: HTTP ' + code);
+    throw new Error(errMsg);
+  }
+
+  if (!body.candidates || !body.candidates.length ||
+      !body.candidates[0].content || !body.candidates[0].content.parts ||
+      !body.candidates[0].content.parts.length) {
+    throw new Error('Gemini returned an empty response.');
+  }
+
+  return body.candidates[0].content.parts[0].text;
+}
+
+/**
+ * Structured Gemini call that returns parsed JSON.
+ * Use for features that need structured data (e.g., suggested goals, categorization).
+ *
+ * @param {string} prompt - The prompt (should instruct the model to return JSON)
+ * @param {Object} [opts] - Same options as callGemini_, plus:
+ * @param {Object} [opts.responseSchema] - JSON schema for structured output
+ * @returns {Object} Parsed JSON response
+ */
+function callGeminiJson_(prompt, opts) {
+  opts = opts || {};
+  opts.temperature = opts.temperature != null ? opts.temperature : 0.3;
+
+  var requestOpts = {
+    model: opts.model,
+    systemInstruction: opts.systemInstruction,
+    temperature: opts.temperature,
+    maxOutputTokens: opts.maxOutputTokens
+  };
+
+  var text = callGemini_(prompt, requestOpts);
+
+  // Strip markdown code fences if present
+  text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    throw new Error('Gemini returned invalid JSON: ' + text.substring(0, 200));
+  }
+}
+
+/**
+ * Public endpoint: check whether Gemini is configured and reachable.
+ * Called from frontend to show/hide AI features.
+ */
+function getAiStatus() {
+  var key = getGeminiApiKey_();
+  if (!key) {
+    return { available: false, reason: 'API key not configured' };
+  }
+  try {
+    var result = callGemini_('Respond with exactly: OK', {
+      temperature: 0,
+      maxOutputTokens: 10
+    });
+    return { available: true, model: GEMINI_MODEL_ };
+  } catch (e) {
+    return { available: false, reason: e.message };
+  }
 }
 
 // ───── Helpers ─────
