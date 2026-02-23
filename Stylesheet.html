@@ -2011,6 +2011,11 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   justify-content: space-between;
   margin-bottom: 12px;
 }
+.profile-contacts-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
 .profile-contacts-list {
   display: flex;
   flex-wrap: wrap;
@@ -2063,6 +2068,50 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .profile-contact-detail:hover {
   text-decoration: underline;
 }
+/* ─── Email Row: Slide-to-Reveal Copy Button ─── */
+.profile-contact-email-row {
+  display: flex;
+  align-items: center;
+}
+.contact-copy-email-btn {
+  width: 0;
+  min-width: 0;
+  height: 28px;
+  opacity: 0;
+  overflow: hidden;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--md-on-surface-variant);
+  transition: width var(--md-duration-short4) var(--md-easing-standard),
+              opacity var(--md-duration-short4) var(--md-easing-standard),
+              padding var(--md-duration-short4) var(--md-easing-standard);
+}
+.contact-copy-email-btn:hover {
+  color: var(--md-primary);
+}
+.contact-copy-check {
+  display: none;
+  color: var(--color-tier-green-text);
+}
+.profile-contact-email-row:hover .contact-copy-email-btn,
+.profile-contact-email-row:focus-within .contact-copy-email-btn {
+  width: 28px;
+  opacity: 1;
+  padding: 0 2px;
+}
+@media (hover: none) {
+  .contact-copy-email-btn {
+    width: 28px;
+    opacity: 1;
+    padding: 0 2px;
+  }
+}
 .profile-contact-actions {
   display: flex;
   gap: 2px;
@@ -2073,6 +2122,49 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 }
 .profile-contact-actions .btn-icon:hover {
   color: var(--md-primary);
+}
+
+/* ─── Email Picker Dialog ─── */
+.email-picker-dialog {
+  min-width: 300px;
+  max-width: 400px;
+}
+.email-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+.email-picker-row {
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-sm);
+  cursor: pointer;
+  transition: background var(--md-duration-short4) var(--md-easing-standard);
+}
+.email-picker-row:hover {
+  background: var(--md-surface-container);
+}
+.email-picker-row:focus-visible {
+  outline: 2px solid var(--md-primary);
+  outline-offset: -2px;
+}
+.email-picker-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--md-on-surface);
+}
+.email-picker-rel {
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--md-on-surface-variant);
+}
+.email-picker-email {
+  font-size: 12px;
+  color: var(--md-primary);
+  margin-top: 2px;
 }
 
 /* ─── Contact Form Dialog ─── */
@@ -2974,7 +3066,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 }
 
 /* ─── Button Ripple Effect ─── */
-.btn, .btn-icon, .btn-ghost, .btn-outlined, .action-btn, .rating-btn, .nav-drawer-item, .goal-met-btn, .eval-filter-chip, .eval-nav-btn, .dp-cal-day, .header-search-result-item, .dp-progress-checkbox-row, .dp-progress-flat-card {
+.btn, .btn-icon, .btn-ghost, .btn-outlined, .action-btn, .rating-btn, .nav-drawer-item, .goal-met-btn, .eval-filter-chip, .eval-nav-btn, .dp-cal-day, .header-search-result-item, .dp-progress-checkbox-row, .dp-progress-flat-card, .email-picker-row {
   position: relative;
   overflow: hidden;
 }

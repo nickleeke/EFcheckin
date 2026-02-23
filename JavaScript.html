@@ -5157,9 +5157,14 @@ function renderStudentProfileDashboard(student) {
   html += '<div class="profile-contacts-card" id="profile-contacts-card">';
   html += '<div class="profile-contacts-header">';
   html += '<span class="profile-section-title">Contacts</span>';
+  html += '<div class="profile-contacts-header-actions">';
+  html += '<button class="btn-icon btn-sm" onclick="emailStudentContacts(\'' + esc(student.id) + '\')" title="Email contacts" aria-label="Email contacts">' +
+    '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>' +
+  '</button>';
   html += '<button class="btn-icon btn-sm" onclick="addProfileContact(\'' + esc(student.id) + '\')" title="Add contact">' +
     '<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>' +
   '</button>';
+  html += '</div>';
   html += '</div>';
   html += '<div class="profile-contacts-list" id="profile-contacts-list">';
   if (contacts.length === 0) {
@@ -6273,9 +6278,21 @@ function renderProfileContactItem(studentId, contact, idx) {
     (contact.relationship ? ' <span class="profile-contact-rel">(' + esc(contact.relationship) + ')</span>' : '') +
   '</div>';
   if (contact.email) {
+    html += '<div class="profile-contact-email-row">';
+    html += '<button class="btn-icon contact-copy-email-btn" ' +
+      'onclick="event.stopPropagation(); copyContactEmail(this, \'' + esc(contact.email) + '\')" ' +
+      'title="Copy email" aria-label="Copy email address">' +
+      '<svg class="contact-copy-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">' +
+        '<path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>' +
+      '</svg>' +
+      '<svg class="contact-copy-check" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">' +
+        '<path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>' +
+      '</svg>' +
+    '</button>';
     html += '<a href="mailto:' + esc(contact.email) + '" class="profile-contact-detail" onclick="event.stopPropagation()">' +
       '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg> ' +
       esc(contact.email) + '</a>';
+    html += '</div>';
   }
   if (contact.phone) {
     html += '<a href="tel:' + esc(contact.phone) + '" class="profile-contact-detail" onclick="event.stopPropagation()">' +
@@ -6302,6 +6319,114 @@ function getStudentContacts_(studentId) {
     try { contacts = JSON.parse(student.contactsJson); } catch(e) { contacts = []; }
   }
   return contacts;
+}
+
+function emailStudentContacts(studentId) {
+  var contacts = getStudentContacts_(studentId);
+  var withEmail = contacts.filter(function(c) { return c.email; });
+  if (withEmail.length === 0) {
+    showToast('No contacts have email addresses');
+    return;
+  }
+  if (withEmail.length === 1) {
+    var a = document.createElement('a');
+    a.href = 'mailto:' + withEmail[0].email;
+    a.target = '_top';
+    a.click();
+    return;
+  }
+  showEmailPickerDialog_(withEmail);
+}
+
+function showEmailPickerDialog_(contactsWithEmail) {
+  var overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+  overlay.innerHTML =
+    '<div class="confirm-dialog email-picker-dialog">' +
+      '<h3>Email Contact</h3>' +
+      '<p>Choose a contact to email:</p>' +
+      '<div class="email-picker-list"></div>' +
+      '<div class="confirm-actions">' +
+        '<button class="btn btn-secondary" onclick="closeConfirmDialog(this.closest(\'.confirm-overlay\'))">Cancel</button>' +
+      '</div>' +
+    '</div>';
+  var listEl = overlay.querySelector('.email-picker-list');
+  contactsWithEmail.forEach(function(c) {
+    var row = document.createElement('div');
+    row.className = 'email-picker-row';
+    row.setAttribute('role', 'button');
+    row.setAttribute('tabindex', '0');
+    row.innerHTML =
+      '<div class="email-picker-name">' + esc(c.name || 'Unnamed') +
+        (c.relationship ? ' <span class="email-picker-rel">(' + esc(c.relationship) + ')</span>' : '') +
+      '</div>' +
+      '<div class="email-picker-email">' + esc(c.email) + '</div>';
+    var handler = function() {
+      var a = document.createElement('a');
+      a.href = 'mailto:' + c.email;
+      a.target = '_top';
+      a.click();
+      closeConfirmDialog(overlay);
+    };
+    row.addEventListener('click', handler);
+    row.addEventListener('keydown', function(e) { if (e.key === 'Enter') handler(); });
+    listEl.appendChild(row);
+  });
+  document.body.appendChild(overlay);
+  requestAnimationFrame(function() {
+    overlay.classList.add('visible');
+    var first = overlay.querySelector('.email-picker-row');
+    if (first) first.focus();
+  });
+}
+
+function copyContactEmail(buttonEl, email) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(email).then(function() {
+      showCopySuccess_(buttonEl);
+      showToast('Email copied');
+    }).catch(function() {
+      if (fallbackCopyText_(email)) {
+        showCopySuccess_(buttonEl);
+        showToast('Email copied');
+      } else {
+        showToast('Unable to copy email');
+      }
+    });
+    return;
+  }
+  if (fallbackCopyText_(email)) {
+    showCopySuccess_(buttonEl);
+    showToast('Email copied');
+  } else {
+    showToast('Unable to copy email');
+  }
+}
+
+function fallbackCopyText_(text) {
+  var textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.style.position = 'fixed';
+  textarea.style.left = '-9999px';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+  var ok = false;
+  try { ok = document.execCommand('copy'); } catch(e) { ok = false; }
+  textarea.remove();
+  return ok;
+}
+
+function showCopySuccess_(buttonEl) {
+  var copyIcon = buttonEl.querySelector('.contact-copy-icon');
+  var checkIcon = buttonEl.querySelector('.contact-copy-check');
+  if (!copyIcon || !checkIcon) return;
+  copyIcon.style.display = 'none';
+  checkIcon.style.display = '';
+  setTimeout(function() {
+    copyIcon.style.display = '';
+    checkIcon.style.display = 'none';
+  }, 1500);
 }
 
 function saveContactsToServer_(studentId, contacts) {
