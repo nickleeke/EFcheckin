@@ -7210,7 +7210,7 @@ function printStudentReport() {
     '.report-logo img { height: 48px; }' +
     'h1 { font-size: 20px; margin: 0 0 4px; }' +
     '.subtitle { color: #49454F; font-size: 13px; margin-bottom: 20px; }' +
-    'h2 { font-size: 15px; font-weight: 500; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 2px solid #C41E3A; }' +
+    'h2 { font-size: 16px; font-weight: 500; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 2px solid #C41E3A; }' +
     'table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }' +
     'th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid #C8C8C8; }' +
     'th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #49454F; background: #EEEEEE; font-weight: 500; }' +
@@ -7363,10 +7363,7 @@ function printIepSummary() {
     '.report-logo img { height: 48px; }' +
     'h1 { font-size: 20px; margin: 0 0 4px; }' +
     '.subtitle { color: #49454F; font-size: 13px; margin-bottom: 20px; }' +
-    'h2 { font-size: 15px; font-weight: 500; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 2px solid #C41E3A; }' +
-    '.focus-table { width: 100%; margin-bottom: 8px; }' +
-    '.focus-table td { padding: 4px 0; vertical-align: top; font-size: 13px; }' +
-    '.focus-label { font-weight: 500; color: #49454F; width: 130px; padding-right: 12px; }' +
+    'h2 { font-size: 16px; font-weight: 500; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 2px solid #C41E3A; }' +
     '.goal-card { border: 1px solid #C8C8C8; border-radius: 8px; padding: 16px; margin-bottom: 12px; page-break-inside: avoid; }' +
     '.goal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }' +
     '.goal-num { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #49454F; }' +
@@ -7374,7 +7371,6 @@ function printIepSummary() {
     '.goal-text { font-size: 13px; line-height: 1.5; margin-bottom: 10px; }' +
     '.obj-label { font-size: 12px; font-weight: 500; color: #49454F; margin-bottom: 4px; }' +
     '.obj-list { margin: 0; padding-left: 20px; font-size: 13px; line-height: 1.6; list-style-type: lower-alpha; }' +
-    '.legacy-text { font-size: 13px; line-height: 1.5; }' +
     '.footer { margin-top: 24px; font-size: 11px; color: #757575; text-align: center; }' +
     '@media print { body { padding: 12px 16px; } .goal-card { break-inside: avoid; } }' +
     '</style></head><body>';
@@ -7391,26 +7387,20 @@ function printIepSummary() {
   subtitleParts.push('Printed ' + new Date().toLocaleDateString());
   html += '<div class="subtitle">' + subtitleParts.join(' &bull; ') + '</div>';
 
-  // Focus & Support section
-  var focusGoal = student.focusGoal || '';
+  // Accommodations section
   var acagData = parseAcagData(student);
   var hasAccom = acagData.some(function(cat) { return cat.items && cat.items.length > 0; });
-  if (focusGoal || hasAccom) {
-    html += '<h2>Focus &amp; Support</h2>';
-    if (focusGoal) {
-      html += '<table class="focus-table"><tr><td class="focus-label">Focus Goal</td><td>' + esc(focusGoal) + '</td></tr></table>';
-    }
-    if (hasAccom) {
-      acagData.forEach(function(cat) {
-        if (!cat.items || cat.items.length === 0) return;
-        html += '<div style="margin-bottom:6px;font-weight:500;font-size:12px;color:#49454F;">' + esc(cat.category) + '</div>';
-        html += '<ul style="margin:0 0 8px;padding-left:20px;font-size:13px;">';
-        cat.items.forEach(function(item) {
-          html += '<li>' + esc(item) + '</li>';
-        });
-        html += '</ul>';
+  if (hasAccom) {
+    html += '<h2>Accommodations</h2>';
+    acagData.forEach(function(cat) {
+      if (!cat.items || cat.items.length === 0) return;
+      html += '<div style="margin-bottom:6px;font-weight:500;font-size:12px;color:#49454F;">' + esc(cat.category) + '</div>';
+      html += '<ul style="margin:0 0 8px;padding-left:20px;font-size:13px;">';
+      cat.items.forEach(function(item) {
+        html += '<li>' + esc(item) + '</li>';
       });
-    }
+      html += '</ul>';
+    });
   }
 
   // IEP Goals & Objectives
@@ -7440,14 +7430,7 @@ function printIepSummary() {
     html += '<p style="color:#49454F;">No IEP goals on file.</p>';
   }
 
-  // Legacy IEP Goal (only if separate from migrated goals)
-  var legacyGoal = student.iepGoal || '';
-  if (legacyGoal && student.goalsJson) {
-    html += '<h2>Legacy IEP Goal</h2>';
-    html += '<div class="legacy-text">' + esc(legacyGoal) + '</div>';
-  }
-
-  html += '<div class="footer">Richfield Public Schools &bull; Generated from EF Caseload Dashboard</div>';
+  html += '<div class="footer">Richfield Public Schools</div>';
   html += '</body></html>';
 
   var printWindow = window.open('', '_blank');
@@ -7491,7 +7474,7 @@ function printAcag() {
     '.acag-title-label { font-size: 36px; font-weight: 400; line-height: 1.1; margin: 0; }' +
     '.acag-title-sub { font-size: 20px; font-weight: 400; font-style: italic; margin: 2px 0 0; }' +
     '.acag-card { border: 1px solid #C8C8C8; border-radius: 8px; margin-bottom: 16px; overflow: hidden; page-break-inside: avoid; }' +
-    '.acag-card-header { background: #D6E8F7; padding: 10px 16px; font-size: 16px; font-weight: 500; }' +
+    '.acag-card-header { background: #942022; color: #FFFFFF; padding: 10px 16px; font-size: 16px; font-weight: 500; }' +
     '.acag-card-body { padding: 12px 16px; }' +
     '.acag-card-body ul { margin: 0; padding-left: 20px; }' +
     '.acag-card-body li { padding: 3px 0; font-size: 14px; line-height: 1.5; }' +
@@ -7518,7 +7501,7 @@ function printAcag() {
     html += '</ul></div></div>';
   });
 
-  html += '<div class="footer">Richfield Public Schools &bull; EF Caseload Dashboard</div>';
+  html += '<div class="footer">Richfield Public Schools</div>';
   html += '</body></html>';
 
   var printWindow = window.open('', '_blank');
