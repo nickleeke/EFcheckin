@@ -6339,39 +6339,77 @@ function emailStudentContacts(studentId) {
 }
 
 function showEmailPickerDialog_(contactsWithEmail) {
+  var uncheckedSvg = '<svg class="email-picker-cb-unchecked" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">' +
+    '<path d="M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/></svg>';
+  var checkedSvg = '<svg class="email-picker-cb-checked" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">' +
+    '<path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 14l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>';
   var overlay = document.createElement('div');
   overlay.className = 'confirm-overlay';
   overlay.innerHTML =
     '<div class="confirm-dialog email-picker-dialog">' +
-      '<h3>Email Contact</h3>' +
-      '<p>Choose a contact to email:</p>' +
+      '<h3>Email Contacts</h3>' +
+      '<p>Select contacts to email:</p>' +
       '<div class="email-picker-list"></div>' +
       '<div class="confirm-actions">' +
-        '<button class="btn btn-secondary" onclick="closeConfirmDialog(this.closest(\'.confirm-overlay\'))">Cancel</button>' +
+        '<button class="btn btn-secondary email-picker-cancel">Cancel</button>' +
+        '<button class="btn btn-primary email-picker-compose" disabled>Compose Email</button>' +
       '</div>' +
     '</div>';
   var listEl = overlay.querySelector('.email-picker-list');
+  var composeBtn = overlay.querySelector('.email-picker-compose');
+  var cancelBtn = overlay.querySelector('.email-picker-cancel');
+
+  function updateComposeBtn() {
+    var count = overlay.querySelectorAll('.email-picker-row.selected').length;
+    composeBtn.disabled = count === 0;
+    composeBtn.textContent = count > 0 ? 'Compose Email (' + count + ')' : 'Compose Email';
+  }
+
   contactsWithEmail.forEach(function(c) {
     var row = document.createElement('div');
     row.className = 'email-picker-row';
-    row.setAttribute('role', 'button');
+    row.setAttribute('role', 'checkbox');
+    row.setAttribute('aria-checked', 'false');
     row.setAttribute('tabindex', '0');
+    row.dataset.email = c.email;
     row.innerHTML =
-      '<div class="email-picker-name">' + esc(c.name || 'Unnamed') +
-        (c.relationship ? ' <span class="email-picker-rel">(' + esc(c.relationship) + ')</span>' : '') +
-      '</div>' +
-      '<div class="email-picker-email">' + esc(c.email) + '</div>';
-    var handler = function() {
-      var a = document.createElement('a');
-      a.href = 'mailto:' + c.email;
-      a.target = '_top';
-      a.click();
-      closeConfirmDialog(overlay);
+      '<div class="email-picker-checkbox">' + uncheckedSvg + checkedSvg + '</div>' +
+      '<div class="email-picker-row-content">' +
+        '<div class="email-picker-name">' + esc(c.name || 'Unnamed') +
+          (c.relationship ? ' <span class="email-picker-rel">(' + esc(c.relationship) + ')</span>' : '') +
+        '</div>' +
+        '<div class="email-picker-email">' + esc(c.email) + '</div>' +
+      '</div>';
+    var toggle = function() {
+      var isSelected = row.classList.toggle('selected');
+      row.setAttribute('aria-checked', isSelected ? 'true' : 'false');
+      updateComposeBtn();
     };
-    row.addEventListener('click', handler);
-    row.addEventListener('keydown', function(e) { if (e.key === 'Enter') handler(); });
+    row.addEventListener('click', toggle);
+    row.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+    });
     listEl.appendChild(row);
   });
+
+  composeBtn.addEventListener('click', function() {
+    var emails = [];
+    overlay.querySelectorAll('.email-picker-row.selected').forEach(function(r) {
+      emails.push(r.dataset.email);
+    });
+    if (emails.length) {
+      var a = document.createElement('a');
+      a.href = 'mailto:' + emails.join(',');
+      a.target = '_top';
+      a.click();
+    }
+    closeConfirmDialog(overlay);
+  });
+  cancelBtn.addEventListener('click', function() { closeConfirmDialog(overlay); });
+  overlay.addEventListener('click', function(e) {
+    if (e.target === overlay) closeConfirmDialog(overlay);
+  });
+
   document.body.appendChild(overlay);
   requestAnimationFrame(function() {
     overlay.classList.add('visible');
@@ -6418,14 +6456,10 @@ function fallbackCopyText_(text) {
 }
 
 function showCopySuccess_(buttonEl) {
-  var copyIcon = buttonEl.querySelector('.contact-copy-icon');
-  var checkIcon = buttonEl.querySelector('.contact-copy-check');
-  if (!copyIcon || !checkIcon) return;
-  copyIcon.style.display = 'none';
-  checkIcon.style.display = '';
+  if (buttonEl.classList.contains('copy-success')) return;
+  buttonEl.classList.add('copy-success');
   setTimeout(function() {
-    copyIcon.style.display = '';
-    checkIcon.style.display = 'none';
+    buttonEl.classList.remove('copy-success');
   }, 1500);
 }
 
