@@ -1602,3 +1602,44 @@ function test_permissions_caseManagerGetsAllTrue() {
   assertEqual_(perms.viewAcademics, true, 'CM resolve fallback should get view perms');
   // The actual all-true path is in getCallerPermissions_ — tested via integration
 }
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 13. SPED LEAD — Helper Functions
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+function runAllSpedLeadTests() {
+  var tests = [
+    'test_spedlead_getSpedLeadsReturnsArray',
+    'test_spedlead_getSpedLeadsReturnsEmptyWhenNone'
+  ];
+
+  var testFns = {
+    test_spedlead_getSpedLeadsReturnsArray: test_spedlead_getSpedLeadsReturnsArray,
+    test_spedlead_getSpedLeadsReturnsEmptyWhenNone: test_spedlead_getSpedLeadsReturnsEmptyWhenNone
+  };
+
+  tests.forEach(function(name) {
+    testFns[name]();
+  });
+
+  Logger.log('All SPED Lead tests passed');
+}
+
+function test_spedlead_getSpedLeadsReturnsArray() {
+  var testEmails = ['lead1@test.org', 'lead2@test.org'];
+  PropertiesService.getScriptProperties().setProperty('sped_leads', JSON.stringify(testEmails));
+
+  var result = getSpedLeads_();
+  assertEqual_(result.length, 2);
+  assertEqual_(result[0], 'lead1@test.org');
+  assertEqual_(result[1], 'lead2@test.org');
+
+  // Cleanup
+  PropertiesService.getScriptProperties().deleteProperty('sped_leads');
+}
+
+function test_spedlead_getSpedLeadsReturnsEmptyWhenNone() {
+  PropertiesService.getScriptProperties().deleteProperty('sped_leads');
+  var result = getSpedLeads_();
+  assertEqual_(result.length, 0);
+}

@@ -3703,3 +3703,40 @@ function assignCaseManager(studentId, caseManagerEmail) {
   invalidateStudentCaches_();
   return { success: true };
 }
+
+// ─── SPED Lead Functions ───
+
+/** Get list of SPED Lead emails from ScriptProperties. */
+function getSpedLeads_() {
+  var raw = PropertiesService.getScriptProperties().getProperty('sped_leads');
+  if (!raw) return [];
+  try {
+    return JSON.parse(raw);
+  } catch(e) {
+    Logger.log('Error parsing sped_leads: ' + e.message);
+    return [];
+  }
+}
+
+/** Get case manager caseloads for a SPED Lead. */
+function getSpedLeadCaseloads_(spedLeadEmail) {
+  var raw = PropertiesService.getScriptProperties().getProperty('sped_lead_caseloads_' + spedLeadEmail);
+  if (!raw) return [];
+  try {
+    return JSON.parse(raw);
+  } catch(e) {
+    Logger.log('Error parsing sped_lead_caseloads: ' + e.message);
+    return [];
+  }
+}
+
+/** Get SPED Lead's spreadsheet ID. */
+function getSpedLeadSpreadsheetId_(spedLeadEmail) {
+  return PropertiesService.getScriptProperties().getProperty('sped_lead_spreadsheet_' + spedLeadEmail);
+}
+
+/** Check if email is a SPED Lead. */
+function isSpedLead_(email) {
+  var spedLeads = getSpedLeads_();
+  return spedLeads.indexOf(email) !== -1;
+}
