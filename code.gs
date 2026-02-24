@@ -479,83 +479,111 @@ function appendStudentNote(studentId, noteText) {
 }
 
 function deleteStudent(studentId) {
+  initializeSheetsIfNeeded_();
   const ss = getSS_();
   const studentsSheet = ss.getSheetByName(SHEET_STUDENTS);
+  var found = false;
   if (studentsSheet && studentsSheet.getLastRow() > 1) {
     const sData = studentsSheet.getDataRange().getValues();
     const sColIdx = buildColIdx_(sData[0]);
     const sIdCol = sColIdx['id'] - 1;
     for (let i = sData.length - 1; i >= 1; i--) {
-      if (sData[i][sIdCol] === studentId) { studentsSheet.deleteRow(i + 1); break; }
+      if (sData[i][sIdCol] === studentId) { studentsSheet.deleteRow(i + 1); found = true; break; }
     }
   }
-  const checkInsSheet = ss.getSheetByName(SHEET_CHECKINS);
-  if (checkInsSheet && checkInsSheet.getLastRow() > 1) {
-    const cData = checkInsSheet.getDataRange().getValues();
-    const cColIdx = buildColIdx_(cData[0]);
-    const cStudentIdCol = cColIdx['studentId'] - 1;
-    for (let i = cData.length - 1; i >= 1; i--) {
-      if (cData[i][cStudentIdCol] === studentId) checkInsSheet.deleteRow(i + 1);
-    }
-  }
-  const evalSheet = ss.getSheetByName(SHEET_EVALUATIONS);
-  if (evalSheet && evalSheet.getLastRow() > 1) {
-    const eData = evalSheet.getDataRange().getValues();
-    const eColIdx = buildColIdx_(eData[0]);
-    const eStudentIdCol = eColIdx['studentId'] - 1;
-    for (let i = eData.length - 1; i >= 1; i--) {
-      if (eData[i][eStudentIdCol] === studentId) evalSheet.deleteRow(i + 1);
-    }
-  }
+  if (!found) return { success: false, error: 'Student not found' };
+
+  deleteRowsByStudentId_(ss, SHEET_CHECKINS, studentId);
+  deleteRowsByStudentId_(ss, SHEET_EVALUATIONS, studentId);
+  deleteRowsByStudentId_(ss, SHEET_PROGRESS, studentId);
+  deleteRowsByStudentId_(ss, SHEET_IEP_MEETINGS, studentId);
+
   invalidateCache_();
   return { success: true };
+}
+
+/** Delete all rows matching a studentId in a given sheet. */
+function deleteRowsByStudentId_(ss, sheetName, studentId) {
+  var sheet = ss.getSheetByName(sheetName);
+  if (!sheet || sheet.getLastRow() <= 1) return;
+  var data = sheet.getDataRange().getValues();
+  var colIdx = buildColIdx_(data[0]);
+  var col = colIdx['studentId'] - 1;
+  for (var i = data.length - 1; i >= 1; i--) {
+    if (data[i][col] === studentId) sheet.deleteRow(i + 1);
+  }
+}
+
+/** Build { id: { firstName, lastName } } lookup map from students array. */
+function buildStudentNameMap_(students) {
+  var map = {};
+  students.forEach(function(s) {
+    map[s.id] = { firstName: s.firstName, lastName: s.lastName };
+  });
+  return map;
+}
+
+/** Compute EF average from a check-in row's 5 rating fields. Returns null if no valid ratings. */
+function computeEfAvg_(checkIn) {
+  var ratings = [
+    Number(checkIn.planningRating), Number(checkIn.followThroughRating),
+    Number(checkIn.regulationRating), Number(checkIn.focusGoalRating),
+    Number(checkIn.effortRating)
+  ].filter(function(r) { return !isNaN(r) && r > 0; });
+  return ratings.length > 0 ? ratings.reduce(function(a, b) { return a + b; }, 0) / ratings.length : null;
 }
 
 // ───── Check-In CRUD ─────
 
 function saveCheckIn(data) {
   initializeSheetsIfNeeded_();
-  const ss = getSS_();
-  const sheet = ss.getSheetByName(SHEET_CHECKINS);
-  const now = new Date().toISOString();
-  const academicJson = JSON.stringify(data.academicData || []);
+  var lock = LockService.getUserLock();
+  lock.waitLock(10000);
+  try {
+    const ss = getSS_();
+    const sheet = ss.getSheetByName(SHEET_CHECKINS);
+    const now = new Date().toISOString();
+    const academicJson = JSON.stringify(data.academicData || []);
 
-  if (data.id) {
-    var found = findRowById_(sheet, data.id);
-    if (found) {
-      batchSetValues_(sheet, found.rowIndex, found.colIdx, {
-        weekOf: data.weekOf || '',
-        planningRating: data.planningRating || '',
-        followThroughRating: data.followThroughRating || '',
-        regulationRating: data.regulationRating || '',
-        focusGoalRating: data.focusGoalRating || '',
-        effortRating: data.effortRating || '',
-        whatWentWell: data.whatWentWell || '',
-        barrier: data.barrier || '',
-        microGoal: data.microGoal || '',
-        microGoalCategory: data.microGoalCategory || '',
-        teacherNotes: data.teacherNotes || '',
-        academicDataJson: academicJson,
-        goalMet: data.goalMet || ''
-      });
-      invalidateCheckInCaches_();
-      return { success: true, id: data.id };
+    if (data.id) {
+      var found = findRowById_(sheet, data.id);
+      if (found) {
+        batchSetValues_(sheet, found.rowIndex, found.colIdx, {
+          weekOf: data.weekOf || '',
+          planningRating: data.planningRating || '',
+          followThroughRating: data.followThroughRating || '',
+          regulationRating: data.regulationRating || '',
+          focusGoalRating: data.focusGoalRating || '',
+          effortRating: data.effortRating || '',
+          whatWentWell: data.whatWentWell || '',
+          barrier: data.barrier || '',
+          microGoal: data.microGoal || '',
+          microGoalCategory: data.microGoalCategory || '',
+          teacherNotes: data.teacherNotes || '',
+          academicDataJson: academicJson,
+          goalMet: data.goalMet || ''
+        });
+        invalidateCheckInCaches_();
+        return { success: true, id: data.id };
+      }
     }
-  }
 
-  const id = Utilities.getUuid();
-  sheet.appendRow([
-    id, data.studentId, data.weekOf||'',
-    data.planningRating||'', data.followThroughRating||'',
-    data.regulationRating||'', data.focusGoalRating||'',
-    data.effortRating||'',
-    data.whatWentWell||'', data.barrier||'',
-    data.microGoal||'', data.microGoalCategory||'',
-    data.teacherNotes||'', academicJson, now,
-    data.goalMet||''
-  ]);
-  invalidateCheckInCaches_();
-  return { success: true, id: id };
+    const id = Utilities.getUuid();
+    sheet.appendRow([
+      id, data.studentId, data.weekOf||'',
+      data.planningRating||'', data.followThroughRating||'',
+      data.regulationRating||'', data.focusGoalRating||'',
+      data.effortRating||'',
+      data.whatWentWell||'', data.barrier||'',
+      data.microGoal||'', data.microGoalCategory||'',
+      data.teacherNotes||'', academicJson, now,
+      data.goalMet||''
+    ]);
+    invalidateCheckInCaches_();
+    return { success: true, id: id };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function getCheckIns(studentId) {
@@ -585,12 +613,15 @@ function getCheckIns(studentId) {
 }
 
 function deleteCheckIn(checkInId) {
+  initializeSheetsIfNeeded_();
   const ss = getSS_();
   const sheet = ss.getSheetByName(SHEET_CHECKINS);
   if (!sheet) return { success: false };
   const data = sheet.getDataRange().getValues();
+  const colIdx = buildColIdx_(data[0]);
+  const idCol = colIdx['id'] - 1;
   for (let i = data.length - 1; i >= 1; i--) {
-    if (data[i][0] === checkInId) { sheet.deleteRow(i + 1); invalidateCheckInCaches_(); return { success: true }; }
+    if (data[i][idCol] === checkInId) { sheet.deleteRow(i + 1); invalidateCheckInCaches_(); return { success: true }; }
   }
   return { success: false };
 }
@@ -658,29 +689,13 @@ function getDashboardData() {
     const totalCheckIns = checkIns.length;
 
     // EF average
-    let avgRating = null;
-    if (latest) {
-      const ratings = [
-        Number(latest.planningRating), Number(latest.followThroughRating),
-        Number(latest.regulationRating), Number(latest.focusGoalRating),
-        Number(latest.effortRating)
-      ].filter(function(r) { return !isNaN(r) && r > 0; });
-      if (ratings.length > 0) {
-        avgRating = ratings.reduce(function(a, b) { return a + b; }, 0) / ratings.length;
-      }
-    }
+    let avgRating = latest ? computeEfAvg_(latest) : null;
 
     // Trend
     let trend = 'none';
     if (checkIns.length >= 2 && avgRating !== null) {
-      const prev = checkIns[1];
-      const prevRatings = [
-        Number(prev.planningRating), Number(prev.followThroughRating),
-        Number(prev.regulationRating), Number(prev.focusGoalRating),
-        Number(prev.effortRating)
-      ].filter(function(r) { return !isNaN(r) && r > 0; });
-      if (prevRatings.length > 0) {
-        const prevAvg = prevRatings.reduce(function(a, b) { return a + b; }, 0) / prevRatings.length;
+      const prevAvg = computeEfAvg_(checkIns[1]);
+      if (prevAvg !== null) {
         if (avgRating > prevAvg + 0.3) trend = 'up';
         else if (avgRating < prevAvg - 0.3) trend = 'down';
         else trend = 'flat';
@@ -699,16 +714,9 @@ function getDashboardData() {
 
     // EF history (last 6 weeks, oldest first)
     const efHistory = [];
-    const historySlice = checkIns.slice(0, 6).reverse();
-    historySlice.forEach(function(ci) {
-      const rs = [
-        Number(ci.planningRating), Number(ci.followThroughRating),
-        Number(ci.regulationRating), Number(ci.focusGoalRating),
-        Number(ci.effortRating)
-      ].filter(function(r) { return !isNaN(r) && r > 0; });
-      if (rs.length > 0) {
-        efHistory.push(rs.reduce(function(a, b) { return a + b; }, 0) / rs.length);
-      }
+    checkIns.slice(0, 6).reverse().forEach(function(ci) {
+      var avg = computeEfAvg_(ci);
+      if (avg !== null) efHistory.push(avg);
     });
 
     // Academic from latest
@@ -863,141 +871,7 @@ function invalidateProgressCaches_() {
 function getEvalTaskSummary() {
   var cached = getCache_('eval_summary');
   if (cached) return cached;
-
-  initializeSheetsIfNeeded_();
-  var ss = getSS_();
-  var evalSheet = ss.getSheetByName(SHEET_EVALUATIONS);
-  if (!evalSheet || evalSheet.getLastRow() <= 1) {
-    return { dueThisWeekCount: 0, overdueCount: 0, timeline: [] };
-  }
-
-  // Build student name lookup
-  var students = getStudents();
-  var studentMap = {};
-  students.forEach(function(s) {
-    studentMap[s.id] = { firstName: s.firstName, lastName: s.lastName };
-  });
-
-  var evalData = evalSheet.getDataRange().getValues();
-  var evalHeaders = evalData[0];
-  var evalColIdx = buildColIdx_(evalHeaders);
-
-  var now = new Date();
-  var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  var todayStr = formatDateValue_(today);
-
-  // Build 7-day range
-  var dayAbbrs = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  var monthAbbrs = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  var timelineDays = [];
-  for (var d = 0; d < 7; d++) {
-    var dayDate = new Date(today.getTime() + d * 86400000);
-    timelineDays.push({
-      date: formatDateValue_(dayDate),
-      dayOfWeek: dayDate.getDay(),
-      dayAbbr: dayAbbrs[dayDate.getDay()],
-      dayNum: dayDate.getDate(),
-      monthShort: monthAbbrs[dayDate.getMonth()],
-      tasks: []
-    });
-  }
-  var endDateStr = timelineDays[6].date;
-
-  var overdueCount = 0;
-  var dueThisWeekCount = 0;
-  var activeEvals = [];
-  var overdueTasks = [];
-  var dueThisWeekTasks = [];
-  var seenStudents = {};
-
-  for (var i = 1; i < evalData.length; i++) {
-    var studentId = evalData[i][evalColIdx['studentId'] - 1];
-    var itemsRaw = evalData[i][evalColIdx['itemsJson'] - 1];
-    var evalType = evalData[i][evalColIdx['type'] - 1];
-    var evalId = evalData[i][evalColIdx['id'] - 1];
-    var items;
-    try { items = JSON.parse(itemsRaw || '[]'); } catch(e) { items = []; }
-
-    var studentInfo = studentMap[studentId] || { firstName: 'Unknown', lastName: '' };
-    var studentFullName = studentInfo.firstName + ' ' + studentInfo.lastName;
-
-    var evalDone = 0;
-    var evalOverdue = 0;
-    items.forEach(function(item) {
-      if (item.checked) { evalDone++; return; }
-      if (!item.dueDate) return;
-
-      if (item.dueDate < todayStr) {
-        overdueCount++;
-        evalOverdue++;
-        overdueTasks.push({
-          itemId: item.id,
-          text: item.text,
-          dueDate: item.dueDate,
-          studentId: studentId,
-          evalId: evalId,
-          studentName: studentFullName,
-          evalType: evalType
-        });
-        return;
-      }
-
-      if (item.dueDate >= todayStr && item.dueDate <= endDateStr) {
-        dueThisWeekCount++;
-        dueThisWeekTasks.push({
-          itemId: item.id,
-          text: item.text,
-          dueDate: item.dueDate,
-          studentId: studentId,
-          evalId: evalId,
-          studentName: studentFullName,
-          evalType: evalType
-        });
-        for (var t = 0; t < timelineDays.length; t++) {
-          if (timelineDays[t].date === item.dueDate) {
-            timelineDays[t].tasks.push({
-              itemId: item.id,
-              text: item.text,
-              studentId: studentId,
-              evalId: evalId,
-              studentName: studentFullName,
-              evalType: evalType
-            });
-            break;
-          }
-        }
-      }
-    });
-
-    if (!seenStudents[studentId]) {
-      seenStudents[studentId] = true;
-      activeEvals.push({
-        evalId: evalId,
-        studentId: studentId,
-        studentName: studentFullName,
-        type: evalType,
-        done: evalDone,
-        total: items.length,
-        overdueCount: evalOverdue
-      });
-    }
-  }
-
-  // Sort overdue by date ascending (oldest first)
-  overdueTasks.sort(function(a, b) { return a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0; });
-  // Sort due this week by date ascending
-  dueThisWeekTasks.sort(function(a, b) { return a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0; });
-
-  var result = {
-    dueThisWeekCount: dueThisWeekCount,
-    overdueCount: overdueCount,
-    timeline: timelineDays,
-    activeEvals: activeEvals,
-    overdueTasks: overdueTasks,
-    dueThisWeekTasks: dueThisWeekTasks
-  };
-
+  var result = getEvalTimelineExtended_(7);
   setCache_('eval_summary', result);
   return result;
 }
@@ -1194,10 +1068,7 @@ function getEvalTimelineExtended_(numDays) {
   }
 
   var students = getStudents();
-  var studentMap = {};
-  students.forEach(function(s) {
-    studentMap[s.id] = { firstName: s.firstName, lastName: s.lastName };
-  });
+  var studentMap = buildStudentNameMap_(students);
 
   var evalData = evalSheet.getDataRange().getValues();
   var evalHeaders = evalData[0];
@@ -1874,10 +1745,6 @@ function leaveCoTeacherTeam() {
 }
 
 /** Force-refresh: invalidate cache and return fresh dashboard data. */
-function refreshDashboardData() {
-  invalidateCache_();
-  return getDashboardData();
-}
 
 // ───── Evaluation Checklist CRUD ─────
 
@@ -2019,55 +1886,9 @@ function saveEvaluationItems(evalId, items) {
   return { success: true, items: sanitized };
 }
 
-// Deprecated: use saveEvaluationItems instead
-function updateEvaluationItem(evalId, itemId, updates) {
-  // Backward compat: old callers pass a boolean for checked
-  if (typeof updates === 'boolean') {
-    updates = { checked: updates };
-  }
-
-  initializeSheetsIfNeeded_();
-  var ss = getSS_();
-  var sheet = ss.getSheetByName(SHEET_EVALUATIONS);
-  if (!sheet) return { success: false, error: 'Evaluations sheet not found.' };
-
-  var found = findRowById_(sheet, evalId);
-  if (!found) return { success: false, error: 'Evaluation not found.' };
-
-  var itemsRaw = sheet.getRange(found.rowIndex, found.colIdx['itemsJson']).getValue();
-  var items;
-  try { items = JSON.parse(itemsRaw || '[]'); }
-  catch(e) { items = []; }
-
-  var updated = false;
-  for (var i = 0; i < items.length; i++) {
-    if (items[i].id === itemId) {
-      if (updates.hasOwnProperty('checked')) {
-        items[i].checked = !!updates.checked;
-        items[i].completedAt = updates.checked ? new Date().toISOString() : null;
-      }
-      if (updates.hasOwnProperty('text')) {
-        items[i].text = String(updates.text).trim();
-      }
-      if (updates.hasOwnProperty('dueDate')) {
-        items[i].dueDate = updates.dueDate || null;
-      }
-      updated = true;
-      break;
-    }
-  }
-
-  if (!updated) return { success: false, error: 'Item not found.' };
-
-  batchSetValues_(sheet, found.rowIndex, found.colIdx, {
-    itemsJson: JSON.stringify(items),
-    updatedAt: new Date().toISOString()
-  });
-
-  return { success: true, items: items };
-}
 
 function deleteEvaluation(evalId) {
+  initializeSheetsIfNeeded_();
   var ss = getSS_();
   var sheet = ss.getSheetByName(SHEET_EVALUATIONS);
   if (!sheet) return { success: false };
@@ -2081,66 +1902,6 @@ function deleteEvaluation(evalId) {
   return { success: false };
 }
 
-// Deprecated: use saveEvaluationItems instead
-function addEvaluationItem(evalId, itemData) {
-  initializeSheetsIfNeeded_();
-  var ss = getSS_();
-  var sheet = ss.getSheetByName(SHEET_EVALUATIONS);
-  if (!sheet) return { success: false, error: 'Evaluations sheet not found.' };
-
-  var found = findRowById_(sheet, evalId);
-  if (!found) return { success: false, error: 'Evaluation not found.' };
-
-  var itemsRaw = sheet.getRange(found.rowIndex, found.colIdx['itemsJson']).getValue();
-  var items;
-  try { items = JSON.parse(itemsRaw || '[]'); } catch(e) { items = []; }
-
-  var newItem = {
-    id: 'item-custom-' + Utilities.getUuid().substr(0, 8),
-    text: String(itemData.text || '').trim(),
-    checked: false,
-    completedAt: null,
-    dueDate: itemData.dueDate || null
-  };
-
-  if (!newItem.text) return { success: false, error: 'Task text is required.' };
-
-  items.push(newItem);
-
-  batchSetValues_(sheet, found.rowIndex, found.colIdx, {
-    itemsJson: JSON.stringify(items),
-    updatedAt: new Date().toISOString()
-  });
-
-  return { success: true, items: items, newItem: newItem };
-}
-
-// Deprecated: use saveEvaluationItems instead
-function deleteEvaluationItem(evalId, itemId) {
-  initializeSheetsIfNeeded_();
-  var ss = getSS_();
-  var sheet = ss.getSheetByName(SHEET_EVALUATIONS);
-  if (!sheet) return { success: false, error: 'Evaluations sheet not found.' };
-
-  var found = findRowById_(sheet, evalId);
-  if (!found) return { success: false, error: 'Evaluation not found.' };
-
-  var itemsRaw = sheet.getRange(found.rowIndex, found.colIdx['itemsJson']).getValue();
-  var items;
-  try { items = JSON.parse(itemsRaw || '[]'); } catch(e) { items = []; }
-
-  var originalLength = items.length;
-  items = items.filter(function(it) { return it.id !== itemId; });
-
-  if (items.length === originalLength) return { success: false, error: 'Item not found.' };
-
-  batchSetValues_(sheet, found.rowIndex, found.colIdx, {
-    itemsJson: JSON.stringify(items),
-    updatedAt: new Date().toISOString()
-  });
-
-  return { success: true, items: items };
-}
 
 // ───── Drive File Browser & Eval Files ─────
 
@@ -2311,7 +2072,7 @@ function getCurrentQuarter() {
 }
 
 /** Human-readable quarter label with season and approximate school year. */
-function getQuarterLabel(quarter) {
+function getQuarterLabel_(quarter) {
   var now = new Date();
   var year = now.getFullYear();
   var month = now.getMonth();
@@ -2433,8 +2194,8 @@ function saveProgressEntry(data) {
   }
 }
 
-/** Get all progress entries for a student in a specific quarter. */
-function getProgressEntries(studentId, quarter) {
+/** Internal: fetch progress entries for a student, optionally filtered by quarter. */
+function getProgressEntries_(studentId, quarter) {
   initializeSheetsIfNeeded_();
   var ss = getSS_();
   var sheet = ss.getSheetByName(SHEET_PROGRESS);
@@ -2448,33 +2209,21 @@ function getProgressEntries(studentId, quarter) {
   for (var i = 1; i < allData.length; i++) {
     var row = {};
     headers.forEach(function(h, idx) { row[h] = allData[i][idx]; });
-    if (row.studentId === studentId && row.quarter === quarter) {
+    if (row.studentId === studentId && (!quarter || row.quarter === quarter)) {
       results.push(row);
     }
   }
   return results;
 }
 
-/** Get all progress entries across all quarters for a student. */
+/** Public: get progress entries for a student in a specific quarter. */
+function getProgressEntries(studentId, quarter) {
+  return getProgressEntries_(studentId, quarter);
+}
+
+/** Public: get all progress entries across all quarters for a student. */
 function getAllProgressForStudent(studentId) {
-  initializeSheetsIfNeeded_();
-  var ss = getSS_();
-  var sheet = ss.getSheetByName(SHEET_PROGRESS);
-  if (!sheet) return [];
-
-  var allData = sheet.getDataRange().getValues();
-  if (allData.length <= 1) return [];
-
-  var headers = allData[0];
-  var results = [];
-  for (var i = 1; i < allData.length; i++) {
-    var row = {};
-    headers.forEach(function(h, idx) { row[h] = allData[i][idx]; });
-    if (row.studentId === studentId) {
-      results.push(row);
-    }
-  }
-  return results;
+  return getProgressEntries_(studentId, null);
 }
 
 /** Delete a progress entry by ID (used by tests for cleanup). */
@@ -2639,8 +2388,6 @@ function assembleReportData_(student, quarter, allEntries) {
       var entry = entryMap[key];
       if (!entry || entry.progressRating === 'No Progress') {
         allAdequateOrMet = false;
-      }
-      if (!entry || entry.progressRating === 'No Progress') {
         anyNoProgress = true;
       }
     });
@@ -2657,7 +2404,7 @@ function assembleReportData_(student, quarter, allEntries) {
       studentName: (student.firstName || '') + ' ' + (student.lastName || ''),
       gradeLevel: student.grade || '',
       caseManager: student.caseManagerEmail || '',
-      reportingPeriod: getQuarterLabel(quarter),
+      reportingPeriod: getQuarterLabel_(quarter),
       totalGoals: totalGoals,
       goalsWithAdequateOrMet: goalsWithAdequateOrMet,
       goalsWithNoProgress: goalsWithNoProgress
@@ -2668,12 +2415,6 @@ function assembleReportData_(student, quarter, allEntries) {
   };
 }
 
-/** Student-friendly labels for progress ratings. */
-var PROGRESS_FRIENDLY_LABELS = {
-  'No Progress': "Let's keep working on this",
-  'Adequate Progress': "You're making progress!",
-  'Objective Met': 'You got it! \u2B50'
-};
 
 /** Escape HTML special characters for safe embedding in report. */
 function escHtml_(str) {
@@ -3132,28 +2873,6 @@ function callGemini_(prompt, opts) {
  * @param {Object} [opts.responseSchema] - JSON schema for structured output
  * @returns {Object} Parsed JSON response
  */
-function callGeminiJson_(prompt, opts) {
-  opts = opts || {};
-  opts.temperature = opts.temperature != null ? opts.temperature : 0.3;
-
-  var requestOpts = {
-    model: opts.model,
-    systemInstruction: opts.systemInstruction,
-    temperature: opts.temperature,
-    maxOutputTokens: opts.maxOutputTokens
-  };
-
-  var text = callGemini_(prompt, requestOpts);
-
-  // Strip markdown code fences if present
-  text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
-
-  try {
-    return JSON.parse(text);
-  } catch (e) {
-    throw new Error('Gemini returned invalid JSON: ' + text.substring(0, 200));
-  }
-}
 
 /**
  * Public endpoint: check whether Gemini is configured and reachable.

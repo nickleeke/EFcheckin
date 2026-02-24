@@ -72,11 +72,18 @@ var _lastDashboardFetch = 0;
 var _lastEvalSummaryFetch = 0;
 var _lastDueProcessFetch = 0;
 var DATA_FRESH_MS = 30000; // 30s — frontend staleness window for navigation
+var EVAL_FRESH_MS = 60000; // 60s — eval summary changes less often
+
+/** Mark all frontend caches stale so next navigation re-fetches. */
+function invalidateFrontendCaches_() {
+  _lastDashboardFetch = 0;
+  _lastEvalSummaryFetch = 0;
+  _lastDueProcessFetch = 0;
+}
 
 var onboardingState = {
   step: 1,
-  email: '',
-  spreadsheetUrl: null
+  email: ''
 };
 
 var GPA_MAP = {
@@ -301,12 +308,12 @@ function buildEvalNavRow_(currentStudentId) {
   var nextEval = currentIdx < activeEvals.length - 1 ? activeEvals[currentIdx + 1] : null;
 
   var html = '<div class="eval-nav-row">';
-  html += '<button class="eval-nav-btn"' + (prevEval ? ' onclick="navigateToEvalStudent_(\'' + esc(prevEval.studentId) + '\')"' : ' disabled') + '>' +
+  html += '<button class="eval-nav-btn"' + (prevEval ? ' onclick="navigateToEvalTask(\'' + esc(prevEval.studentId) + '\')"' : ' disabled') + '>' +
     '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>' +
     (prevEval ? esc(prevEval.studentName) : 'Prev') +
   '</button>';
   html += '<span class="eval-nav-counter">' + (currentIdx + 1) + ' of ' + activeEvals.length + '</span>';
-  html += '<button class="eval-nav-btn"' + (nextEval ? ' onclick="navigateToEvalStudent_(\'' + esc(nextEval.studentId) + '\')"' : ' disabled') + '>' +
+  html += '<button class="eval-nav-btn"' + (nextEval ? ' onclick="navigateToEvalTask(\'' + esc(nextEval.studentId) + '\')"' : ' disabled') + '>' +
     (nextEval ? esc(nextEval.studentName) : 'Next') +
     '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>' +
   '</button>';
@@ -314,9 +321,7 @@ function buildEvalNavRow_(currentStudentId) {
   return html;
 }
 
-function navigateToEvalStudent_(studentId) {
-  navigateToEvalTask(studentId);
-}
+
 
 // ─── Eval Item Helpers ───
 function isEvalItemOverdue_(item) {
@@ -471,6 +476,21 @@ function buildSparklineSvg(efHistory) {
     '<path d="' + pathD + '" fill="none" stroke="var(--md-outline)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>' +
     '<circle cx="' + lp.x.toFixed(1) + '" cy="' + lp.y.toFixed(1) + '" r="3" fill="' + dotColor + '"/>' +
   '</svg>';
+}
+
+function getGpaChipClass(gpa) {
+  if (gpa >= 3.5) return 'chip-gold';
+  if (gpa > 3.0) return 'chip-green';
+  if (gpa >= 2.5) return 'chip-yellow';
+  return 'chip-red';
+}
+
+function buildMissingChip(student) {
+  if (student.totalMissing > 0) {
+    var missingClass = student.totalMissing >= 4 ? 'chip-red' : 'chip-yellow';
+    return '<span class="chip chip-clickable ' + missingClass + '" onclick="event.stopPropagation(); showMissingAssignments(\'' + student.id + '\')" title="View missing assignments">' + student.totalMissing + '</span>';
+  }
+  return '<span class="chip chip-clickable chip-green" onclick="event.stopPropagation(); showMissingAssignments(\'' + student.id + '\')" title="View missing assignments">0</span>';
 }
 
 function applyFilter_(data) {
@@ -1482,20 +1502,14 @@ function renderDashboard(data, opts) {
 
     // GPA
     if (s.gpa != null) {
-      var gpaClass = s.gpa >= 3.5 ? 'chip-gold' : s.gpa > 3.0 ? 'chip-green' : s.gpa >= 2.5 ? 'chip-yellow' : 'chip-red';
       var trophy = s.gpa >= 3.7 ? ' &#x1F3C6;' : '';
-      html += '<td><span class="chip ' + gpaClass + '">' + s.gpa.toFixed(2) + trophy + '</span></td>';
+      html += '<td><span class="chip ' + getGpaChipClass(s.gpa) + '">' + s.gpa.toFixed(2) + trophy + '</span></td>';
     } else {
       html += '<td><span class="chip chip-gray">--</span></td>';
     }
 
     // Missing assignments (clickable badge)
-    if (s.totalMissing > 0) {
-      var missingClass = s.totalMissing >= 4 ? 'chip-red' : 'chip-yellow';
-      html += '<td><span class="chip chip-clickable ' + missingClass + '" onclick="event.stopPropagation(); showMissingAssignments(\'' + s.id + '\')" title="View missing assignments">' + s.totalMissing + '</span></td>';
-    } else {
-      html += '<td><span class="chip chip-clickable chip-green" onclick="event.stopPropagation(); showMissingAssignments(\'' + s.id + '\')" title="View missing assignments">0</span></td>';
-    }
+    html += '<td>' + buildMissingChip(s) + '</td>';
 
     // Last check-in staleness
     if (s.latestWeek) {
@@ -1667,7 +1681,7 @@ function renderMissingAggregate(data) {
 function loadEvalSummary(force) {
   // Skip re-fetch if eval data is fresh (changes infrequently)
   if (!force && _lastEvalSummaryFetch > 0 &&
-      (Date.now() - _lastEvalSummaryFetch) < 60000 &&
+      (Date.now() - _lastEvalSummaryFetch) < EVAL_FRESH_MS &&
       appState.evalSummary) {
     renderEvalSummary(appState.evalSummary);
     return;
@@ -3402,13 +3416,15 @@ function openSidePanel(index) {
   document.getElementById('side-panel-overlay').classList.add('open');
 }
 
-function toggleSpRow(idx) {
-  var mainRow = document.getElementById('sp-row-' + idx);
-  var detailRow = document.getElementById('sp-row-detail-' + idx);
+function toggleExpandableRow_(prefix, idx) {
+  var mainRow = document.getElementById(prefix + '-row-' + idx);
+  var detailRow = document.getElementById(prefix + '-row-detail-' + idx);
   if (!mainRow || !detailRow) return;
   mainRow.classList.toggle('expanded');
   detailRow.classList.toggle('expanded');
 }
+
+function toggleSpRow(idx) { toggleExpandableRow_('sp', idx); }
 
 function closeSidePanel() {
   document.getElementById('side-panel').classList.remove('open');
@@ -3770,7 +3786,7 @@ function buildCiClassDetailHtml_(clsIdx, assignments) {
   // Add Missing Assignment inline form
   html += '<div class="mv-add-section">' +
     '<button type="button" class="btn-ghost btn-sm mv-add-btn" id="ci-add-btn-' + clsIdx + '" ' +
-      'onclick="event.stopPropagation(); showAddMissingForm(null, ' + clsIdx + ', \'ci\')">+ Add Missing Assignment</button>' +
+      'onclick="event.stopPropagation(); showAddMissingForm(\'' + esc(appState.currentStudentId) + '\', ' + clsIdx + ', \'ci\')">+ Add Missing Assignment</button>' +
     '<div class="mv-add-form" id="ci-add-form-' + clsIdx + '" style="display:none;">' +
       '<div class="mv-add-form-row">' +
         '<input type="text" class="mv-add-name" id="ci-add-name-' + clsIdx + '" placeholder="Assignment name" ' +
@@ -4465,6 +4481,7 @@ function renderMissingView(student) {
 
     academicData.forEach(function(c, idx) {
       var missingNum = Number(c.missing) || 0;
+      if (missingNum === 0) return;
       var assignments = c.missingAssignments || [];
       var badgeClass = missingNum === 0 ? 'badge-green' : missingNum <= 3 ? 'badge-yellow' : 'badge-red';
       var classLabel = c.className || 'Unknown';
@@ -5398,13 +5415,7 @@ function renderGoalEditMode_(goal) {
   return html;
 }
 
-function toggleProfileRow(idx) {
-  var mainRow = document.getElementById('profile-row-' + idx);
-  var detailRow = document.getElementById('profile-row-detail-' + idx);
-  if (!mainRow || !detailRow) return;
-  mainRow.classList.toggle('expanded');
-  detailRow.classList.toggle('expanded');
-}
+function toggleProfileRow(idx) { toggleExpandableRow_('profile', idx); }
 
 // ─── Quarterly Progress Section ───
 
@@ -8427,7 +8438,6 @@ function triggerProvisioning() {
   google.script.run
     .withSuccessHandler(function(result) {
       if (result.success) {
-        onboardingState.spreadsheetUrl = result.spreadsheetUrl;
         var statusEl = document.getElementById('provision-status');
         statusEl.innerHTML =
           '<div class="provision-success">' +
@@ -8614,19 +8624,13 @@ function renderMyCaseload() {
     html += '<td>' + esc(s.grade || '-') + '</td>';
 
     if (s.gpa != null) {
-      var gpaClass = s.gpa >= 3.5 ? 'chip-gold' : s.gpa > 3.0 ? 'chip-green' : s.gpa >= 2.5 ? 'chip-yellow' : 'chip-red';
       var trophy = s.gpa >= 3.7 ? ' &#x1F3C6;' : '';
-      html += '<td><span class="chip ' + gpaClass + '">' + s.gpa.toFixed(2) + trophy + '</span></td>';
+      html += '<td><span class="chip ' + getGpaChipClass(s.gpa) + '">' + s.gpa.toFixed(2) + trophy + '</span></td>';
     } else {
       html += '<td><span class="chip chip-gray">--</span></td>';
     }
 
-    if (s.totalMissing > 0) {
-      var missingClass = s.totalMissing >= 4 ? 'chip-red' : 'chip-yellow';
-      html += '<td><span class="chip chip-clickable ' + missingClass + '" onclick="event.stopPropagation(); showMissingAssignments(\'' + s.id + '\')" title="View missing assignments">' + s.totalMissing + '</span></td>';
-    } else {
-      html += '<td><span class="chip chip-clickable chip-green" onclick="event.stopPropagation(); showMissingAssignments(\'' + s.id + '\')" title="View missing assignments">0</span></td>';
-    }
+    html += '<td>' + buildMissingChip(s) + '</td>';
 
     html += '<td>' + esc(formatDateDisplay(s.latestWeek)) + '</td>';
 
@@ -9049,9 +9053,7 @@ function doCreateEvalChecklist(studentId, type) {
           files: result.files || []
         };
         appState.currentEvaluation = evaluation;
-        _lastDashboardFetch = 0;
-        _lastEvalSummaryFetch = 0;
-        _lastDueProcessFetch = 0;
+        invalidateFrontendCaches_();
         showEvalChecklistView(studentId, evaluation);
       } else {
         showToast(result.error || 'Error creating checklist');
@@ -9455,9 +9457,7 @@ function doDeleteEvaluation(evalId) {
       if (result.success) {
         showToast('Checklist deleted');
         appState.currentEvaluation = null;
-        _lastDashboardFetch = 0;
-        _lastEvalSummaryFetch = 0;
-        _lastDueProcessFetch = 0;
+        invalidateFrontendCaches_();
         showStudentProfile(appState.evalChecklistStudentId);
       } else {
         showToast('Error deleting checklist');
@@ -9479,9 +9479,7 @@ function updateEvalType(evalId, newType) {
   if (!appState.currentEvaluation) return;
   appState.currentEvaluation.type = newType;
   updateEvalBreadcrumb_(getEvalTypeLabel(newType));
-  _lastDashboardFetch = 0;
-  _lastEvalSummaryFetch = 0;
-  _lastDueProcessFetch = 0;
+  invalidateFrontendCaches_();
   google.script.run
     .withSuccessHandler(function(result) {
       if (!result.success) showToast(result.error || 'Error updating type');
@@ -9731,9 +9729,7 @@ function performEvalAutosave() {
       _evalAutosaveInFlight = false;
       if (result && result.success) {
         appState.currentEvaluation.items = result.items;
-        _lastDashboardFetch = 0;
-        _lastEvalSummaryFetch = 0;
-        _lastDueProcessFetch = 0;
+        invalidateFrontendCaches_();
         if (_evalAutosaveDirty) {
           scheduleEvalAutosave();
         } else {
@@ -9867,7 +9863,7 @@ function renderEvalFilesCard(evaluation) {
   var files = evaluation.files || [];
   var html = '<div class="eval-files-header">' +
     '<span class="eval-files-title">Files</span>' +
-    '<button class="btn btn-ghost btn-sm" onclick="openDrivePicker(\'' + esc(evaluation.id) + '\')" title="Add file from Drive">' +
+    '<button class="btn btn-ghost btn-sm" onclick="showDriveFileBrowser_(\'' + esc(evaluation.id) + '\')" title="Add file from Drive">' +
       '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="margin-right:4px"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 14h-3v3h-2v-3H8v-2h3v-3h2v3h3v2zm-3-7V3.5L18.5 9H13z"/></svg>' +
       'Add' +
     '</button>' +
@@ -10016,9 +10012,6 @@ function confirmAddEvalFileByUrl_(evalId) {
   addEvalFileHandler(evalId, fileData);
 }
 
-function openDrivePicker(evalId) {
-  showDriveFileBrowser_(evalId);
-}
 
 function showDriveFileBrowser_(evalId) {
   // Remove existing modal if present
@@ -10239,7 +10232,7 @@ function createRipple(target, clientX, clientY) {
   ripple.addEventListener('animationend', function() { ripple.remove(); });
 }
 document.addEventListener('click', function(e) {
-  var btn = e.target.closest('.btn, .btn-icon, .btn-ghost, .action-btn, .rating-btn, .nav-drawer-item, .header-search-result-item');
+  var btn = e.target.closest('.btn, .btn-icon, .btn-ghost, .btn-outlined, .action-btn, .rating-btn, .goal-met-btn, .nav-drawer-item, .eval-filter-chip, .eval-nav-btn, .dp-cal-day, .header-search-result-item, .dp-progress-checkbox-row, .dp-progress-flat-card');
   if (btn) createRipple(btn, e.clientX, e.clientY);
 });
 </script>

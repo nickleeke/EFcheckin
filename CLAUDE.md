@@ -154,7 +154,6 @@ Definitions: `EVAL_TYPES` array + `EVAL_TYPE_ALIASES` map (frontend), `VALID_EVA
 | `setEvalMenuVisibility_(hasEval)` | Toggle create/view menu items for eval checklists |
 | `updateEvalBreadcrumb_(typeLabel)` | Update eval checklist breadcrumb text |
 | `buildEvalTypeDropdown_(evalId, currentType)` | Build `<select>` HTML for eval type picker |
-| `renderMissingTable(assignments, studentId, classIdx, context)` | Shared missing assignments table renderer |
 
 ## UI Design System — Material Design 3
 
@@ -238,7 +237,7 @@ The MD3 token system is derived from the Richfield Red seed color `#942022`, wit
 - **Cards:** Outlined with expandable sections; metric cards with `toggleMetricDropdown`; needs-attention cards (left red accent stripe, not full border)
 - **Sparklines:** Inline SVG mini-charts (`.ef-sparkline`) in table cells
 - **Staleness Chips:** Color-coded relative date (`.staleness-green/yellow/red`)
-- **Progress Bar:** Thin linear indicator (`.checkin-progress-fill`) with ARIA progressbar
+- **Progress Bar:** Thin linear indicator with ARIA progressbar
 
 **Feedback:**
 - **Dialog:** Confirmation with overlay, scale+fade, `closeConfirmDialog()` with timeout fallback
@@ -263,7 +262,7 @@ All color-coded indicators use the same tier system across the app (GPA chips, s
 | Surface | Classes |
 |---|---|
 | Dashboard table chips | `.chip-gold`, `.chip-green`, `.chip-yellow`, `.chip-red`, `.chip-gray` |
-| Side panel GPA | `.sp-gpa.high`, `.sp-gpa.mid`, `.sp-gpa.caution`, `.sp-gpa.low`, `.sp-gpa.none` |
+| Side panel GPA | `.sp-stat-card.gpa-honor-roll`, `.sp-stat-card.gpa-good-standing`, `.sp-stat-card.gpa-caution`, `.sp-stat-card.gpa-at-risk` |
 | Profile stat cards | `.gpa-honor-roll`, `.gpa-good-standing`, `.gpa-caution`, `.gpa-at-risk` |
 | Staleness chips | `.staleness-green`, `.staleness-yellow`, `.staleness-red` |
 

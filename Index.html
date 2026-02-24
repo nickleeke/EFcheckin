@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <base target="_top">
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
@@ -264,14 +264,14 @@
   <!-- Side Panel (Quick View) -->
   <div id="side-panel" class="side-panel">
     <div class="side-panel-header">
-      <h3 id="side-panel-title"></h3>
+      <h3 id="side-panel-title" aria-live="polite"></h3>
       <button onclick="closeSidePanel()" class="btn-close">&times;</button>
     </div>
     <div id="side-panel-content" class="side-panel-content"></div>
   </div>
 
   <!-- Toast notification -->
-  <div id="toast" class="toast"></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <?!= include('JavaScript'); ?>
 </body>

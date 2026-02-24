@@ -27,10 +27,6 @@ function assertNull_(value, message) {
   if (value != null) throw new Error('FAIL: ' + message + ' — expected null, got ' + JSON.stringify(value));
 }
 
-function assertThrows_(fn, message) {
-  try { fn(); throw new Error('FAIL: ' + message + ' — expected error but none thrown'); }
-  catch(e) { if (e.message.indexOf('FAIL:') === 0) throw e; }
-}
 
 function assertContains_(str, substring, message) {
   if (String(str).indexOf(substring) === -1) {
@@ -41,16 +37,6 @@ function assertContains_(str, substring, message) {
 function assertNotContains_(str, substring, message) {
   if (String(str).indexOf(substring) !== -1) {
     throw new Error('FAIL: ' + message + ' — "' + substring + '" should not appear in output');
-  }
-}
-
-/** Create a temporary test spreadsheet, run fn(ss), then delete it. */
-function withTestSpreadsheet_(fn) {
-  var ss = SpreadsheetApp.create('__TEST_ProgressReport_' + Date.now());
-  try {
-    fn(ss);
-  } finally {
-    DriveApp.getFileById(ss.getId()).setTrashed(true);
   }
 }
 
@@ -134,7 +120,7 @@ function runAllProgressReportTests() {
     'test_printableReport_gradesSection',
     'test_printableReport_footerSection',
     'test_printableReport_printStyles',
-    'test_printableReport_studentFriendlyLanguage',
+    'test_printableReport_anecdotalNotesInReport',
     // Edge Cases
     'test_edge_newStudentNoHistory',
     'test_edge_midYearGoalChange',
@@ -169,7 +155,7 @@ function runAllProgressReportTests() {
     test_printableReport_gradesSection: test_printableReport_gradesSection,
     test_printableReport_footerSection: test_printableReport_footerSection,
     test_printableReport_printStyles: test_printableReport_printStyles,
-    test_printableReport_studentFriendlyLanguage: test_printableReport_studentFriendlyLanguage,
+    test_printableReport_anecdotalNotesInReport: test_printableReport_anecdotalNotesInReport,
     test_edge_newStudentNoHistory: test_edge_newStudentNoHistory,
     test_edge_midYearGoalChange: test_edge_midYearGoalChange,
     test_edge_noGradesAvailable: test_edge_noGradesAvailable,
@@ -629,7 +615,8 @@ function test_printableReport_generatesHTML() {
   assertContains_(html, '<html', 'Should contain html tag');
   assertContains_(html, '</html>', 'Should have closing html tag');
   assertContains_(html, '<style', 'Should contain inline styles');
-  assertNotContains_(html, '<link', 'Should not reference external stylesheets');
+  // Report uses Google Fonts <link> tags — verify they are present
+  assertContains_(html, '<link', 'Should contain Google Fonts link tags');
 }
 
 function test_printableReport_headerSection() {
@@ -637,7 +624,7 @@ function test_printableReport_headerSection() {
   var student = buildMockStudent_();
   var html = generateProgressReportHtml_(student, 'Q2', [], '');
 
-  assertContains_(html, 'IEP Progress Report', 'Should contain report title');
+  assertContains_(html, 'Progress report', 'Should contain report title');
   assertContains_(html, 'Alex Johnson', 'Should contain student name');
   assertContains_(html, 'Q2', 'Should contain reporting period');
   assertContains_(html, 'teacher@rpsmn.org', 'Should contain case manager info');
@@ -710,8 +697,8 @@ function test_printableReport_printStyles() {
   assertContains_(html, '11p', 'Should specify minimum body font size');
 }
 
-function test_printableReport_studentFriendlyLanguage() {
-  // Progress ratings show student-friendly labels
+function test_printableReport_anecdotalNotesInReport() {
+  // When anecdotal notes exist, they appear in the report instead of raw ratings
   var student = buildMockStudent_();
   var entries = [
     { goalId: 'goal-1', objectiveId: 'obj-1a', quarter: 'Q2', progressRating: 'No Progress',
@@ -723,9 +710,9 @@ function test_printableReport_studentFriendlyLanguage() {
   ];
   var html = generateProgressReportHtml_(student, 'Q2', entries, '');
 
-  assertContains_(html, "Let's keep working on this", '"No Progress" should show friendly label');
-  assertContains_(html, "You're making progress", '"Adequate Progress" should show friendly label');
-  assertContains_(html, 'You got it', '"Objective Met" should show friendly label');
+  assertContains_(html, 'Still working on this skill', 'Should show anecdotal notes for No Progress');
+  assertContains_(html, 'Shows steady growth', 'Should show anecdotal notes for Adequate Progress');
+  assertContains_(html, 'fully demonstrated', 'Should show anecdotal notes for Objective Met');
 }
 
 
@@ -898,11 +885,11 @@ function test_getCurrentQuarter_returnsValidQuarter() {
 
 function test_getQuarterLabel_formatsCorrectly() {
   // Quarter labels should be human-readable with season and year range
-  var label = getQuarterLabel('Q1');
+  var label = getQuarterLabel_('Q1');
   assertNotNull_(label, 'Quarter label should not be null');
   assertContains_(label, 'Q1', 'Label should contain quarter identifier');
 
-  var label2 = getQuarterLabel('Q2');
+  var label2 = getQuarterLabel_('Q2');
   assertContains_(label2, 'Q2', 'Q2 label should contain Q2');
 }
 
@@ -1351,7 +1338,8 @@ function runAllEvalTests() {
     'test_eval_createBlocksDuplicate',
     'test_eval_deleteRemovesRow',
     'test_eval_getEvaluationUsesColIdx',
-    'test_eval_summaryNoDuplicateActiveEvals'
+    'test_eval_summaryNoDuplicateActiveEvals',
+    'test_saveEvaluationItems_preservesFiles'
   ];
 
   var testFns = {
@@ -1360,7 +1348,8 @@ function runAllEvalTests() {
     test_eval_createBlocksDuplicate: test_eval_createBlocksDuplicate,
     test_eval_deleteRemovesRow: test_eval_deleteRemovesRow,
     test_eval_getEvaluationUsesColIdx: test_eval_getEvaluationUsesColIdx,
-    test_eval_summaryNoDuplicateActiveEvals: test_eval_summaryNoDuplicateActiveEvals
+    test_eval_summaryNoDuplicateActiveEvals: test_eval_summaryNoDuplicateActiveEvals,
+    test_saveEvaluationItems_preservesFiles: test_saveEvaluationItems_preservesFiles
   };
 
   var passed = 0, failed = 0, errors = [];

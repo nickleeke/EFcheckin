@@ -34,7 +34,6 @@
   /* Surface (neutral gray) */
   --md-surface: #FAFAFA;
   --md-on-surface: #1C1B1F;
-  --md-surface-dim: #DEDEDE;
   --md-surface-variant: #E0E0E0;
   --md-on-surface-variant: #49454F;
   --md-surface-container-lowest: #FFFFFF;
@@ -54,10 +53,8 @@
 
   /* M3 State Layers */
   --md-state-primary-hover: rgba(196, 30, 58, 0.08);
-  --md-state-primary-focus: rgba(196, 30, 58, 0.10);
   --md-state-primary-pressed: rgba(196, 30, 58, 0.10);
   --md-state-on-surface-hover: rgba(28, 27, 31, 0.08);
-  --md-state-on-surface-focus: rgba(28, 27, 31, 0.10);
   --md-state-on-surface-pressed: rgba(28, 27, 31, 0.12);
   --md-state-error-hover: rgba(186, 26, 26, 0.08);
   --md-state-error-pressed: rgba(186, 26, 26, 0.12);
@@ -87,13 +84,10 @@
 
   /* M3 Motion — Easing */
   --md-easing-standard: cubic-bezier(0.2, 0, 0, 1);
-  --md-easing-standard-decelerate: cubic-bezier(0, 0, 0, 1);
-  --md-easing-standard-accelerate: cubic-bezier(0.3, 0, 1, 1);
   --md-easing-emphasized-decelerate: cubic-bezier(0.05, 0.7, 0.1, 1);
   --md-easing-emphasized-accelerate: cubic-bezier(0.3, 0, 0.8, 0.15);
 
   /* M3 Motion — Duration */
-  --md-duration-short1: 50ms;
   --md-duration-short2: 100ms;
   --md-duration-short3: 150ms;
   --md-duration-short4: 200ms;
@@ -121,18 +115,6 @@
 @keyframes linearProgress {
   0%   { transform: translateX(-100%); }
   100% { transform: translateX(300%); }
-}
-
-/* ─── M3 Divider Utility ─── */
-.md-divider {
-  height: 1px;
-  background: var(--md-outline-variant);
-  border: none;
-  margin: var(--md-spacing-element) 0;
-}
-.md-divider-inset {
-  margin-left: 16px;
-  margin-right: 16px;
 }
 
 /* ─── Reset & Base Typography ─── */
@@ -388,7 +370,6 @@ body {
   border: none;
   border-radius: var(--md-shape-full);
   cursor: pointer;
-  font-family: 'Roboto', sans-serif;
   /* MD3 Label Large */
   font-size: 14px;
   font-weight: 500;
@@ -628,7 +609,6 @@ body {
   padding: 6px 12px;
   background: var(--md-inverse-surface, #313033);
   color: var(--md-inverse-on-surface, #F4EFF4);
-  font-family: 'Roboto', sans-serif;
   font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.4px;
@@ -679,7 +659,6 @@ body {
   background: none;
   border: none;
   cursor: pointer;
-  font-family: 'Roboto', sans-serif;
   font-size: 14px;
   font-weight: 500;
   letter-spacing: 0.1px;
@@ -743,7 +722,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   padding: 0 40px 0 40px;
   border: 1px solid var(--md-outline-variant);
   border-radius: var(--md-shape-full);
-  font-family: 'Roboto', sans-serif;
   font-size: 14px;
   line-height: 20px;
   letter-spacing: 0.25px;
@@ -795,17 +773,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .view-header {
   display: flex; align-items: center; gap: 16px; margin-bottom: var(--md-spacing-section);
 }
-.view-header h2 {
-  /* M3 Headline Small */
-  font-size: 24px;
-  font-weight: 400;
-  line-height: 32px;
-  letter-spacing: 0px;
-  color: var(--md-on-surface);
-}
-
-/* ─── Global Search Icon (fixed top-right) ─── */
-
 /* ─── Add Student Icon Button (in student list search bar) ─── */
 .add-student-icon-btn {
   flex-shrink: 0;
@@ -851,7 +818,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   padding: 0 40px 0 40px;
   border: none;
   border-radius: var(--md-shape-full);
-  font-family: 'Roboto', sans-serif;
   font-size: 14px;
   line-height: 20px;
   letter-spacing: 0.25px;
@@ -880,7 +846,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   display: flex;
   align-items: center;
   pointer-events: none;
-  font-family: 'Roboto', sans-serif;
   font-size: 14px;
   line-height: 20px;
   letter-spacing: 0.25px;
@@ -933,7 +898,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   border: none;
   background: none;
   cursor: pointer;
-  font-family: 'Roboto', sans-serif;
   font-size: 14px;
   color: var(--md-on-surface);
   text-align: left;
@@ -989,7 +953,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
-  -moz-appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2349454F' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 10px center;
@@ -1081,6 +1044,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 }
 
 /* ─── Dropdown Menu (M3 Menu) ─── */
+/* Note: .dropdown-menu layout is defined here; animation is in a separate block below (intentionally separate) */
 .menu-anchor { position: relative; }
 .dropdown-menu {
   position: absolute;
@@ -1100,7 +1064,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   background: none;
   border: none;
   text-align: left;
-  font-family: 'Roboto', sans-serif;
   /* M3 Body Large */
   font-size: 14px;
   line-height: 20px;
@@ -1151,7 +1114,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   border: none;
   border-radius: var(--md-shape-full);
   cursor: pointer;
-  font-family: 'Roboto', sans-serif;
   /* M3 Label Large */
   font-size: 14px;
   font-weight: 500;
@@ -1581,7 +1543,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   /* Remove browser defaults */
   appearance: none;
   -webkit-appearance: none;
-  -moz-appearance: none;
 }
 .form-group select {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2349454F' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
@@ -1875,7 +1836,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
-  -moz-appearance: none;
   text-align: center;
   text-align-last: center;
   transition: background var(--md-duration-short3) var(--md-easing-standard);
@@ -2732,7 +2692,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   color: var(--color-tier-yellow-text);
 }
 .progress-chip-none {
-  background: #FFDAD6;
+  background: var(--md-error-container);
   color: var(--md-on-error-container);
 }
 .progress-chip-empty {
@@ -2775,7 +2735,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   border-color: var(--color-tier-yellow-text);
 }
 .progress-rating-red {
-  background: #FFDAD6;
+  background: var(--md-error-container);
   color: var(--md-on-error-container);
   border-color: var(--md-error);
 }
@@ -3067,6 +3027,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   background: rgba(0,0,0,0.32);
   z-index: 300;
   display: flex; align-items: center; justify-content: center;
+  animation: dialogOverlayIn var(--md-duration-short3) var(--md-easing-emphasized-decelerate) both;
 }
 .confirm-dialog {
   background: var(--md-surface-container-high);
@@ -3137,9 +3098,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 @keyframes dialogScaleOut {
   from { opacity: 1; transform: scale(1); }
   to   { opacity: 0; transform: scale(0.8); }
-}
-.confirm-overlay {
-  animation: dialogOverlayIn var(--md-duration-short3) var(--md-easing-emphasized-decelerate) both;
 }
 .confirm-overlay .confirm-dialog {
   animation: dialogScaleIn var(--md-duration-short3) var(--md-easing-emphasized-decelerate) both;
@@ -3262,6 +3220,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 }
 
 /* ─── Dropdown Menu Animation ─── */
+/* Note: .dropdown-menu animation overrides are here; layout is defined above (intentionally separate) */
 .dropdown-menu {
   transform-origin: top right;
   opacity: 0;
@@ -3736,10 +3695,9 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   .nav-drawer-toggle { display: none !important; }
   .nav-drawer-scrim { display: none !important; }
   .nav-collapse-btn { display: inline-flex; }
-  .persistent-action-bar { display: none !important; }
 }
 
-/* Mobile: disable hover for submenu, rely on JS click toggle */
+/* Mobile: disable hover for submenu, rely on JS click toggle; modal drawer with scrim */
 @media (max-width: 840px) {
   .nav-drawer-group:hover .nav-drawer-submenu {
     max-height: 0;
@@ -3756,10 +3714,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   .nav-drawer-parent {
     cursor: pointer;
   }
-}
-
-/* Mobile: modal drawer with scrim */
-@media (max-width: 840px) {
   .nav-drawer {
     position: fixed;
     top: 0;
@@ -4135,7 +4089,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   font-family: 'Roboto', sans-serif;
   appearance: none;
   -webkit-appearance: none;
-  -moz-appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2349454F' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 10px center;
@@ -4717,8 +4670,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   font-family: inherit;
   color: inherit;
   outline: none;
-  appearance: none;
-  -webkit-appearance: none;
 }
 
 .eval-timeline-day:hover {
@@ -4914,12 +4865,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .dp-section {
   margin-bottom: 24px;
 }
-.dp-section-header-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-}
 /* Title Medium (16px/500) — intentionally smaller than view-level Headline Small
    since these are sub-section headers within the Due Process view */
 .dp-section-header {
@@ -4927,9 +4872,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   font-weight: 500;
   color: var(--md-on-surface);
   margin-bottom: 12px;
-}
-.dp-section-header-row > .dp-section-header {
-  margin-bottom: 0;
 }
 .dp-empty-state {
   color: var(--md-on-surface-variant);
@@ -5022,8 +4964,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   font-family: inherit;
   color: inherit;
   outline: none;
-  appearance: none;
-  -webkit-appearance: none;
 }
 .dp-cal-day:hover {
   background: var(--md-surface-container);
@@ -5856,15 +5796,13 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .eval-item:hover {
   background: rgba(0, 0, 0, 0.02);
 }
+/* E2: Fade completed eval tasks for visual hierarchy */
 .eval-item-checked {
   background: rgba(27, 94, 32, 0.04);
+  opacity: 0.6;
 }
 .eval-item-checked:hover {
   background: rgba(27, 94, 32, 0.07);
-}
-/* E2: Fade completed eval tasks for visual hierarchy */
-.eval-item-checked {
-  opacity: 0.6;
 }
 .eval-item-checked .eval-item-due,
 .eval-item-checked .eval-item-completed,
@@ -6591,7 +6529,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .eval-filter-chip {
   font-size: 13px;
   font-weight: 500;
-  font-family: 'Roboto', sans-serif;
   padding: 6px 14px;
   border-radius: var(--md-shape-full);
   border: 1px solid var(--md-outline-variant);
@@ -6601,8 +6538,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   transition: background var(--md-duration-short3) var(--md-easing-standard),
               border-color var(--md-duration-short3) var(--md-easing-standard),
               color var(--md-duration-short3) var(--md-easing-standard);
-  appearance: none;
-  -webkit-appearance: none;
 }
 .eval-filter-chip:hover {
   background: var(--md-surface-container);
@@ -6638,7 +6573,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .toast-action-btn {
   font-size: 14px;
   font-weight: 500;
-  font-family: 'Roboto', sans-serif;
   color: var(--md-inverse-primary);
   background: none;
   border: none;
@@ -6646,8 +6580,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   padding: 4px 8px;
   border-radius: var(--md-shape-xs);
   white-space: nowrap;
-  appearance: none;
-  -webkit-appearance: none;
 }
 .toast-action-btn:hover {
   background: rgba(255, 255, 255, 0.12);
@@ -6682,7 +6614,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .eval-nav-btn {
   font-size: 13px;
   font-weight: 500;
-  font-family: 'Roboto', sans-serif;
   color: var(--md-on-surface);
   background: none;
   border: none;
@@ -6693,8 +6624,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   align-items: center;
   gap: 4px;
   transition: background var(--md-duration-short3) var(--md-easing-standard);
-  appearance: none;
-  -webkit-appearance: none;
 }
 .eval-nav-btn:hover {
   background: var(--md-surface-container-high);
@@ -6769,7 +6698,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   gap: 12px;
   overflow-x: auto;
   padding: 4px 0 8px;
-  -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
 }
 /* D2: Subtler needs-attention card — left accent stripe instead of full red border */
@@ -6972,7 +6900,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   background: var(--md-surface-container-high);
   border: 1px solid var(--md-outline-variant);
   border-radius: 3px;
-  font-family: 'Roboto', sans-serif;
   font-size: 12px;
   font-weight: 500;
   min-width: 24px;
@@ -7017,7 +6944,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 
 /* ─── Dashboard UX Responsive (≤600px) ─── */
 @media (max-width: 600px) {
-  .persistent-action-bar { top: 56px; }
   .ef-sparkline { display: none; }
   .needs-attention-cards { gap: 8px; }
   .needs-attention-card { width: 160px; padding: 10px; }
