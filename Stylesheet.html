@@ -3245,7 +3245,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 }
 
 /* ─── Button Ripple Effect ─── */
-.btn, .btn-icon, .btn-ghost, .btn-outlined, .action-btn, .rating-btn, .nav-drawer-item, .goal-met-btn, .eval-filter-chip, .eval-nav-btn, .dp-cal-day, .header-search-result-item, .dp-progress-checkbox-row, .dp-progress-flat-card, .email-picker-row {
+.btn, .btn-icon, .btn-ghost, .btn-outlined, .action-btn, .rating-btn, .nav-drawer-item, .goal-met-btn, .eval-filter-chip, .eval-nav-btn, .dp-cal-day, .header-search-result-item, .dp-progress-checkbox-row, .dp-progress-flat-card, .email-picker-row, .eval-file-ai-btn {
   position: relative;
   overflow: hidden;
 }
@@ -6111,6 +6111,54 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 }
 .eval-file-item:hover .eval-file-remove {
   opacity: 1;
+}
+
+/* ─── AI Summary Sparkle Button ─── */
+.eval-file-ai-btn {
+  opacity: 0;
+  transition: opacity var(--md-duration-short3) var(--md-easing-standard);
+  color: var(--md-on-surface-variant);
+  flex-shrink: 0;
+}
+.eval-file-item:hover .eval-file-ai-btn {
+  opacity: 1;
+}
+.eval-file-ai-btn:hover,
+.eval-file-ai-btn:focus-visible {
+  color: var(--md-primary);
+}
+.eval-file-ai-btn:hover svg,
+.eval-file-ai-btn:focus-visible svg {
+  animation: rainbowShimmer var(--md-duration-long2) linear infinite;
+}
+@keyframes rainbowShimmer {
+  0%   { filter: hue-rotate(0deg) brightness(1.1); }
+  100% { filter: hue-rotate(360deg) brightness(1.1); }
+}
+
+/* Racing rainbow border on generating placeholder */
+.eval-file-item--generating {
+  position: relative;
+  border-color: transparent;
+  border-radius: var(--md-shape-sm);
+}
+.eval-file-item--generating::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: calc(var(--md-shape-sm) + 2px);
+  background: conic-gradient(
+    #C41E3A, #CF5D35, #E8B34B, #79AF61, #4EA3A8, #21376C, #C41E3A
+  );
+  z-index: -1;
+  animation: spin 2s linear infinite;
+}
+.eval-file-generating-label {
+  font-size: 12px;
+  color: var(--md-on-surface-variant);
+  white-space: nowrap;
+  margin-left: auto;
+  margin-right: 4px;
 }
 
 .eval-files-url-section {

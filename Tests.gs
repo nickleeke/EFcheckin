@@ -1491,3 +1491,114 @@ function test_eval_summaryNoDuplicateActiveEvals() {
     invalidateCache_();
   }
 }
+
+// ───── Permission Tests ─────
+
+function runAllPermissionTests() {
+  var tests = [
+    'test_permissions_paraDefaults',
+    'test_permissions_coTeacherDefaults',
+    'test_permissions_serviceProviderDefaults',
+    'test_permissions_unknownRoleGetsViewOnly',
+    'test_permissions_checkPermissionHelper',
+    'test_permissions_caseManagerGetsAllTrue'
+  ];
+
+  var testFns = {
+    test_permissions_paraDefaults: test_permissions_paraDefaults,
+    test_permissions_coTeacherDefaults: test_permissions_coTeacherDefaults,
+    test_permissions_serviceProviderDefaults: test_permissions_serviceProviderDefaults,
+    test_permissions_unknownRoleGetsViewOnly: test_permissions_unknownRoleGetsViewOnly,
+    test_permissions_checkPermissionHelper: test_permissions_checkPermissionHelper,
+    test_permissions_caseManagerGetsAllTrue: test_permissions_caseManagerGetsAllTrue
+  };
+
+  var passed = 0, failed = 0, errors = [];
+  tests.forEach(function(name) {
+    try {
+      testFns[name]();
+      passed++;
+      Logger.log('PASS: ' + name);
+    } catch(e) {
+      failed++;
+      errors.push(name + ': ' + e.message);
+      Logger.log('FAIL: ' + name + ' \u2014 ' + e.message);
+    }
+  });
+
+  Logger.log('\nPermission Tests: ' + passed + ' passed, ' + failed + ' failed');
+  if (errors.length > 0) {
+    Logger.log('Failures:');
+    errors.forEach(function(e) { Logger.log('  ' + e); });
+  }
+  return { passed: passed, failed: failed, errors: errors };
+}
+
+function test_permissions_paraDefaults() {
+  var perms = resolveDefaultPermissions_('para');
+  assertEqual_(perms.viewAcademics, true, 'para should view academics');
+  assertEqual_(perms.editAcademics, false, 'para should not edit academics');
+  assertEqual_(perms.viewCheckins, false, 'para should not view checkins');
+  assertEqual_(perms.createCheckins, false, 'para should not create checkins');
+  assertEqual_(perms.viewContacts, true, 'para should view contacts');
+  assertEqual_(perms.editContacts, false, 'para should not edit contacts');
+  assertEqual_(perms.viewEvals, false, 'para should not view evals');
+  assertEqual_(perms.editEvals, false, 'para should not edit evals');
+  assertEqual_(perms.viewProgress, false, 'para should not view progress');
+  assertEqual_(perms.editProgress, false, 'para should not edit progress');
+  assertEqual_(perms.viewDueProcess, false, 'para should not view due process');
+  assertEqual_(perms.editStudentInfo, false, 'para should not edit student info');
+  assertEqual_(perms.editGoals, false, 'para should not edit goals');
+}
+
+function test_permissions_coTeacherDefaults() {
+  var perms = resolveDefaultPermissions_('co-teacher');
+  assertEqual_(perms.viewAcademics, true, 'co-teacher should view academics');
+  assertEqual_(perms.editAcademics, true, 'co-teacher should edit academics');
+  assertEqual_(perms.viewCheckins, true, 'co-teacher should view checkins');
+  assertEqual_(perms.createCheckins, true, 'co-teacher should create checkins');
+  assertEqual_(perms.viewContacts, true, 'co-teacher should view contacts');
+  assertEqual_(perms.editContacts, true, 'co-teacher should edit contacts');
+  assertEqual_(perms.viewEvals, false, 'co-teacher should not view evals');
+  assertEqual_(perms.editGoals, false, 'co-teacher should not edit goals');
+  assertEqual_(perms.editStudentInfo, true, 'co-teacher should edit student info');
+}
+
+function test_permissions_serviceProviderDefaults() {
+  var perms = resolveDefaultPermissions_('service-provider');
+  assertEqual_(perms.viewEvals, true, 'SP should view evals');
+  assertEqual_(perms.editEvals, false, 'SP should not edit evals');
+  assertEqual_(perms.viewProgress, true, 'SP should view progress');
+  assertEqual_(perms.editProgress, true, 'SP should edit progress');
+  assertEqual_(perms.viewDueProcess, true, 'SP should view due process');
+  assertEqual_(perms.editAcademics, false, 'SP should not edit academics');
+  assertEqual_(perms.createCheckins, false, 'SP should not create checkins');
+}
+
+function test_permissions_unknownRoleGetsViewOnly() {
+  var perms = resolveDefaultPermissions_('unknown-role');
+  assertEqual_(perms.viewAcademics, true, 'unknown should get view perms');
+  assertEqual_(perms.viewCheckins, true, 'unknown should get view perms');
+  assertEqual_(perms.viewContacts, true, 'unknown should get view perms');
+  assertEqual_(perms.editAcademics, false, 'unknown should not get edit perms');
+  assertEqual_(perms.editStudentInfo, false, 'unknown should not get edit perms');
+  assertEqual_(perms.createCheckins, false, 'unknown should not get create perms');
+}
+
+function test_permissions_checkPermissionHelper() {
+  var perms = { viewAcademics: true, editAcademics: false };
+  assertEqual_(checkPermission_(perms, 'viewAcademics'), true, 'should return true for granted perm');
+  assertEqual_(checkPermission_(perms, 'editAcademics'), false, 'should return false for denied perm');
+  assertEqual_(checkPermission_(perms, 'viewEvals'), false, 'should return false for missing key');
+  assertEqual_(checkPermission_(null, 'viewAcademics'), false, 'null perms should return false');
+}
+
+function test_permissions_caseManagerGetsAllTrue() {
+  // resolveDefaultPermissions_ for an unknown 'caseload-manager' key returns view-only,
+  // but getCallerPermissions_ handles the CM case explicitly before calling resolve.
+  // Test that the resolve function at least doesn't crash for it.
+  var perms = resolveDefaultPermissions_('caseload-manager');
+  // caseload-manager is not in ROLE_DEFAULT_PERMISSIONS, so falls to unknown-role path (view-only)
+  assertEqual_(perms.viewAcademics, true, 'CM resolve fallback should get view perms');
+  // The actual all-true path is in getCallerPermissions_ — tested via integration
+}

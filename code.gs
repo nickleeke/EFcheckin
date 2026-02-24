@@ -26,6 +26,47 @@ const GPA_MAP = {
 
 var SUPERUSER_EMAIL = 'nicholas.leeke@rpsmn.org';
 
+// ───── Permission Keys & Role Defaults ─────
+var PERMISSION_KEYS = [
+  'viewAcademics', 'editAcademics',
+  'viewCheckins', 'createCheckins',
+  'viewContacts', 'editContacts',
+  'viewEvals', 'editEvals',
+  'viewProgress', 'editProgress',
+  'viewDueProcess',
+  'editStudentInfo', 'editGoals'
+];
+
+var ROLE_DEFAULT_PERMISSIONS = {
+  'co-teacher': {
+    viewAcademics: true, editAcademics: true,
+    viewCheckins: true, createCheckins: true,
+    viewContacts: true, editContacts: true,
+    viewEvals: false, editEvals: false,
+    viewProgress: false, editProgress: false,
+    viewDueProcess: false,
+    editStudentInfo: true, editGoals: false
+  },
+  'service-provider': {
+    viewAcademics: true, editAcademics: false,
+    viewCheckins: true, createCheckins: false,
+    viewContacts: true, editContacts: false,
+    viewEvals: true, editEvals: false,
+    viewProgress: true, editProgress: true,
+    viewDueProcess: true,
+    editStudentInfo: false, editGoals: false
+  },
+  'para': {
+    viewAcademics: true, editAcademics: false,
+    viewCheckins: false, createCheckins: false,
+    viewContacts: true, editContacts: false,
+    viewEvals: false, editEvals: false,
+    viewProgress: false, editProgress: false,
+    viewDueProcess: false,
+    editStudentInfo: false, editGoals: false
+  }
+};
+
 // ───── User Identity ─────
 
 /** Get the authenticated user's email. Requires "Execute as: User accessing the web app". */
@@ -68,11 +109,28 @@ function getUserStatus() {
     }
   } catch(e) {}
 
+  // Resolve caller's role and permissions
+  var callerRole = null;
+  var callerPermissions = null;
+  if (ssId) {
+    try {
+      var ss = SpreadsheetApp.openById(ssId);
+      var ctSheet = ss.getSheetByName(SHEET_COTEACHERS);
+      callerRole = getCallerRole_(ctSheet, email);
+      if (callerRole !== 'caseload-manager') {
+        callerPermissions = getCallerPermissions_(ctSheet, email);
+      }
+      // null permissions = caseload manager = full access (frontend convention)
+    } catch(e) { /* sheet access failed, treat as full access */ }
+  }
+
   return {
     isNewUser: !ssId,
     email: email,
     pendingInvite: invite,
-    isSuperuser: email === SUPERUSER_EMAIL
+    isSuperuser: email === SUPERUSER_EMAIL,
+    role: callerRole,
+    permissions: callerPermissions
   };
 }
 
@@ -185,7 +243,7 @@ var CHECKIN_HEADERS = [
   'microGoal','microGoalCategory',
   'teacherNotes','academicDataJson','createdAt','goalMet'
 ];
-var COTEACHER_HEADERS = ['email', 'role', 'addedAt'];
+var COTEACHER_HEADERS = ['email', 'role', 'addedAt', 'permissionsJson'];
 var EVALUATION_HEADERS = ['id', 'studentId', 'type', 'itemsJson', 'createdAt', 'updatedAt', 'filesJson', 'meetingDate'];
 var VALID_EVAL_TYPES = ['annual-iep', '3-year-reeval', 'initial-eval', 'eval', 'reeval'];
 var EVAL_INITIAL_TYPES_ = ['initial-eval', 'eval'];
@@ -373,6 +431,9 @@ function getStudents() {
 function saveStudent(profile) {
   initializeSheetsIfNeeded_();
   const ss = getSS_();
+  var ctSheet = ss.getSheetByName(SHEET_COTEACHERS);
+  var perms = getCallerPermissions_(ctSheet, getCurrentUserEmail_());
+  requirePermission_(perms, 'editStudentInfo', 'edit student info');
   const sheet = ss.getSheetByName(SHEET_STUDENTS);
   const now = new Date().toISOString();
   const classesJson = JSON.stringify(profile.classes || []);
@@ -421,6 +482,9 @@ function saveStudent(profile) {
 function saveStudentGoals(studentId, goalsJson) {
   initializeSheetsIfNeeded_();
   const ss = getSS_();
+  var ctSheet = ss.getSheetByName(SHEET_COTEACHERS);
+  var perms = getCallerPermissions_(ctSheet, getCurrentUserEmail_());
+  requirePermission_(perms, 'editGoals', 'edit goals');
   const sheet = ss.getSheetByName(SHEET_STUDENTS);
   const now = new Date().toISOString();
 
@@ -439,6 +503,9 @@ function saveStudentGoals(studentId, goalsJson) {
 function saveStudentContacts(studentId, contactsJson) {
   initializeSheetsIfNeeded_();
   const ss = getSS_();
+  var ctSheet = ss.getSheetByName(SHEET_COTEACHERS);
+  var perms = getCallerPermissions_(ctSheet, getCurrentUserEmail_());
+  requirePermission_(perms, 'editContacts', 'edit contacts');
   const sheet = ss.getSheetByName(SHEET_STUDENTS);
   const now = new Date().toISOString();
 
@@ -464,6 +531,9 @@ function appendStudentNote(studentId, noteText) {
   }
   initializeSheetsIfNeeded_();
   const ss = getSS_();
+  var ctSheet = ss.getSheetByName(SHEET_COTEACHERS);
+  var perms = getCallerPermissions_(ctSheet, getCurrentUserEmail_());
+  requirePermission_(perms, 'editStudentInfo', 'edit student notes');
   const sheet = ss.getSheetByName(SHEET_STUDENTS);
   var found = findRowById_(sheet, studentId);
   if (!found) return { success: false, error: 'Student not found' };
@@ -540,6 +610,10 @@ function computeEfAvg_(checkIn) {
 
 function saveCheckIn(data) {
   initializeSheetsIfNeeded_();
+  var ss0 = getSS_();
+  var ctSheet = ss0.getSheetByName(SHEET_COTEACHERS);
+  var perms = getCallerPermissions_(ctSheet, getCurrentUserEmail_());
+  requirePermission_(perms, 'createCheckins', 'create check-ins');
   var lock = LockService.getUserLock();
   lock.waitLock(10000);
   try {
@@ -592,6 +666,8 @@ function saveCheckIn(data) {
 function getCheckIns(studentId) {
   initializeSheetsIfNeeded_();
   const ss = getSS_();
+  var ctSheet = ss.getSheetByName(SHEET_COTEACHERS);
+  if (!checkPermission_(getCallerPermissions_(ctSheet, getCurrentUserEmail_()), 'viewCheckins')) return [];
   const sheet = ss.getSheetByName(SHEET_CHECKINS);
   if (!sheet || sheet.getLastRow() <= 1) return [];
 
@@ -618,6 +694,9 @@ function getCheckIns(studentId) {
 function deleteCheckIn(checkInId) {
   initializeSheetsIfNeeded_();
   const ss = getSS_();
+  var ctSheet = ss.getSheetByName(SHEET_COTEACHERS);
+  var perms = getCallerPermissions_(ctSheet, getCurrentUserEmail_());
+  requirePermission_(perms, 'createCheckins', 'delete check-ins');
   const sheet = ss.getSheetByName(SHEET_CHECKINS);
   if (!sheet) return { success: false };
   const data = sheet.getDataRange().getValues();
@@ -632,6 +711,9 @@ function deleteCheckIn(checkInId) {
 function updateCheckInAcademicData(checkInId, academicData) {
   initializeSheetsIfNeeded_();
   const ss = getSS_();
+  var ctSheet = ss.getSheetByName(SHEET_COTEACHERS);
+  var perms = getCallerPermissions_(ctSheet, getCurrentUserEmail_());
+  requirePermission_(perms, 'editAcademics', 'edit academic data');
   const sheet = ss.getSheetByName(SHEET_CHECKINS);
   if (!sheet) return { success: false };
 
@@ -872,6 +954,12 @@ function invalidateProgressCaches_() {
 // ───── Eval Task Summary (cross-student aggregation) ─────
 
 function getEvalTaskSummary() {
+  initializeSheetsIfNeeded_();
+  var _ss = getSS_();
+  var _ctSheet = _ss.getSheetByName(SHEET_COTEACHERS);
+  if (!checkPermission_(getCallerPermissions_(_ctSheet, getCurrentUserEmail_()), 'viewEvals')) {
+    return { activeEvals: [], overdueCount: 0, dueThisWeekCount: 0, timeline: [] };
+  }
   var cached = getCache_('eval_summary');
   if (cached) return cached;
   var result = getEvalTimelineExtended_(7);
@@ -891,6 +979,9 @@ function saveIEPMeeting(data) {
 
   initializeSheetsIfNeeded_();
   var ss = getSS_();
+  var ctSheet = ss.getSheetByName(SHEET_COTEACHERS);
+  var perms = getCallerPermissions_(ctSheet, getCurrentUserEmail_());
+  requirePermission_(perms, 'editEvals', 'manage IEP meetings');
   var sheet = ss.getSheetByName(SHEET_IEP_MEETINGS);
   if (!sheet) return { success: false, error: 'IEPMeetings sheet not found' };
 
@@ -937,6 +1028,8 @@ function saveIEPMeeting(data) {
 function getIEPMeetings(studentId) {
   initializeSheetsIfNeeded_();
   var ss = getSS_();
+  var ctSheet = ss.getSheetByName(SHEET_COTEACHERS);
+  if (!checkPermission_(getCallerPermissions_(ctSheet, getCurrentUserEmail_()), 'viewEvals')) return [];
   var sheet = ss.getSheetByName(SHEET_IEP_MEETINGS);
   if (!sheet || sheet.getLastRow() <= 1) return [];
 
@@ -957,6 +1050,9 @@ function deleteIEPMeeting(meetingId) {
   if (!meetingId) return { success: false, error: 'meetingId is required' };
   initializeSheetsIfNeeded_();
   var ss = getSS_();
+  var ctSheet = ss.getSheetByName(SHEET_COTEACHERS);
+  var perms = getCallerPermissions_(ctSheet, getCurrentUserEmail_());
+  requirePermission_(perms, 'editEvals', 'delete IEP meetings');
   var sheet = ss.getSheetByName(SHEET_IEP_MEETINGS);
   if (!sheet) return { success: false, error: 'Sheet not found' };
 
@@ -974,11 +1070,15 @@ function getDueProcessData(quarter) {
   if (!quarter || VALID_QUARTERS.indexOf(quarter) === -1) {
     quarter = getCurrentQuarter();
   }
+  initializeSheetsIfNeeded_();
+  var _ss = getSS_();
+  var _ctSheet = _ss.getSheetByName(SHEET_COTEACHERS);
+  if (!checkPermission_(getCallerPermissions_(_ctSheet, getCurrentUserEmail_()), 'viewDueProcess')) {
+    return { error: 'Permission denied' };
+  }
   var cacheKey = 'due_process_' + quarter;
   var cached = getCache_(cacheKey);
   if (cached) return cached;
-
-  initializeSheetsIfNeeded_();
   var email = (getCurrentUserEmail_() || '').toLowerCase();
   var students = getStudents();
 
@@ -1055,6 +1155,11 @@ function getDPCompletionForQuarter(quarter) {
     quarter = getCurrentQuarter();
   }
   initializeSheetsIfNeeded_();
+  var _ss = getSS_();
+  var _ctSheet = _ss.getSheetByName(SHEET_COTEACHERS);
+  if (!checkPermission_(getCallerPermissions_(_ctSheet, getCurrentUserEmail_()), 'viewDueProcess')) {
+    return { error: 'Permission denied' };
+  }
   var email = (getCurrentUserEmail_() || '').toLowerCase();
   var students = getStudents();
   var completionMap = buildCompletionMap_(email, students, quarter);
@@ -1573,6 +1678,15 @@ function getTeamInfo() {
     headers.forEach(function(h, idx) { member[h] = data[i][idx]; });
     if (member.addedAt instanceof Date) member.addedAt = member.addedAt.toISOString();
     member.role = normalizeRole_(member.role);
+    // Parse permissions for display in team management UI
+    if (member.permissionsJson) {
+      try { member.permissions = JSON.parse(member.permissionsJson); } catch(e) { member.permissions = null; }
+    }
+    delete member.permissionsJson; // Don't send raw JSON string
+    // If no stored permissions, resolve from role defaults
+    if (!member.permissions && member.role !== 'caseload-manager') {
+      member.permissions = resolveDefaultPermissions_(member.role);
+    }
     members.push(member);
     if (String(member.email).toLowerCase() === email) {
       currentUserRole = member.role;
@@ -1585,14 +1699,19 @@ function getTeamInfo() {
     currentUserRole = 'caseload-manager';
   }
 
-  return { members: members, currentUserRole: currentUserRole };
+  return {
+    members: members,
+    currentUserRole: currentUserRole,
+    roleDefaults: ROLE_DEFAULT_PERMISSIONS,
+    permissionKeys: PERMISSION_KEYS
+  };
 }
 
 /** Valid roles that a caseload manager can assign to team members. */
-var ASSIGNABLE_ROLES = ['service-provider', 'para', 'co-teacher'];
+var ASSIGNABLE_ROLES = ['service-provider', 'para', 'co-teacher', 'sped-lead'];
 
 /** Invite a team member by email with a specified role. Only caseload managers can add members. */
-function addTeamMember(email, role) {
+function addTeamMember(email, role, customPermissions) {
   email = String(email || '').trim().toLowerCase();
   if (!email || email.indexOf('@') === -1) {
     return { success: false, error: 'Please enter a valid email address.' };
@@ -1600,7 +1719,7 @@ function addTeamMember(email, role) {
 
   role = String(role || '').trim().toLowerCase();
   if (ASSIGNABLE_ROLES.indexOf(role) === -1) {
-    return { success: false, error: 'Invalid role. Must be one of: Service Provider, Para, or Co-Teacher.' };
+    return { success: false, error: 'Invalid role. Must be one of: Service Provider, Para, Co-Teacher, or SPED Lead.' };
   }
 
   var currentEmail = getCurrentUserEmail_();
@@ -1632,8 +1751,18 @@ function addTeamMember(email, role) {
     }
   }
 
-  // Add to CoTeachers sheet with the specified role
-  ctSheet.appendRow([email, role, new Date().toISOString()]);
+  // Resolve permissions: start with role defaults, apply any custom overrides
+  var perms = resolveDefaultPermissions_(role);
+  if (customPermissions && typeof customPermissions === 'object') {
+    PERMISSION_KEYS.forEach(function(k) {
+      if (customPermissions.hasOwnProperty(k)) {
+        perms[k] = !!customPermissions[k];
+      }
+    });
+  }
+
+  // Add to CoTeachers sheet with the specified role and permissions
+  ctSheet.appendRow([email, role, new Date().toISOString(), JSON.stringify(perms)]);
 
   // Share the spreadsheet with the new team member
   try {
@@ -1667,6 +1796,72 @@ function getCallerRole_(ctSheet, email) {
   return 'caseload-manager'; // fallback for spreadsheet creator
 }
 
+/** Compute default permissions from role name. */
+function resolveDefaultPermissions_(role) {
+  var defaults = ROLE_DEFAULT_PERMISSIONS[role];
+  if (!defaults) {
+    // Unknown role gets view-only permissions
+    var viewOnly = {};
+    PERMISSION_KEYS.forEach(function(k) { viewOnly[k] = k.indexOf('view') === 0; });
+    return viewOnly;
+  }
+  var result = {};
+  PERMISSION_KEYS.forEach(function(k) { result[k] = !!defaults[k]; });
+  return result;
+}
+
+/** Resolve the full permission set for a caller from the CoTeachers sheet. */
+function getCallerPermissions_(ctSheet, email) {
+  var role = getCallerRole_(ctSheet, email);
+
+  // Caseload managers always get all permissions
+  if (role === 'caseload-manager') {
+    var allTrue = {};
+    PERMISSION_KEYS.forEach(function(k) { allTrue[k] = true; });
+    return allTrue;
+  }
+
+  // Look up stored permissions from the sheet
+  if (ctSheet && ctSheet.getLastRow() > 1) {
+    var data = ctSheet.getDataRange().getValues();
+    var headers = data[0];
+    var colIdx = buildColIdx_(headers);
+    var permCol = colIdx['permissionsJson'];
+
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][0]).toLowerCase() === email) {
+        var permJson = permCol ? String(data[i][permCol - 1] || '') : '';
+        if (permJson) {
+          try {
+            var stored = JSON.parse(permJson);
+            var result = {};
+            PERMISSION_KEYS.forEach(function(k) {
+              result[k] = stored.hasOwnProperty(k) ? !!stored[k] : false;
+            });
+            return result;
+          } catch(e) { /* fall through to defaults */ }
+        }
+        break;
+      }
+    }
+  }
+
+  // Fallback: compute from role defaults
+  return resolveDefaultPermissions_(role);
+}
+
+/** Check a single permission key. Returns true if granted. */
+function checkPermission_(permissions, key) {
+  return permissions && permissions[key] === true;
+}
+
+/** Return error result if permission is denied. For use in public endpoints. */
+function requirePermission_(permissions, key, actionLabel) {
+  if (!checkPermission_(permissions, key)) {
+    throw new Error('Permission denied: you do not have access to ' + (actionLabel || key) + '.');
+  }
+}
+
 /** Remove a team member. Only caseload managers can do this. Revokes spreadsheet access. */
 function removeTeamMember(email) {
   email = String(email || '').trim().toLowerCase();
@@ -1698,6 +1893,50 @@ function removeTeamMember(email) {
   } catch(e) {}
 
   return { success: true };
+}
+
+/** Update permissions for an existing team member. Only caseload managers can do this. */
+function updateTeamMemberPermissions(memberEmail, permissionsObj) {
+  memberEmail = String(memberEmail || '').trim().toLowerCase();
+  if (!memberEmail) return { success: false, error: 'Email is required.' };
+
+  var currentEmail = getCurrentUserEmail_();
+  var ss = getSS_();
+  var ctSheet = ss.getSheetByName(SHEET_COTEACHERS);
+  if (!ctSheet) return { success: false, error: 'No team configured.' };
+
+  var callerRole = getCallerRole_(ctSheet, currentEmail);
+  if (callerRole !== 'caseload-manager') {
+    return { success: false, error: 'Only Caseload Managers can edit permissions.' };
+  }
+
+  var data = ctSheet.getDataRange().getValues();
+  var colIdx = buildColIdx_(data[0]);
+  var permCol = colIdx['permissionsJson'];
+  if (!permCol) return { success: false, error: 'Sheet schema needs update. Please reload.' };
+
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][0]).toLowerCase() === memberEmail) {
+      var memberRole = normalizeRole_(data[i][colIdx['role'] - 1]);
+      if (memberRole === 'caseload-manager') {
+        return { success: false, error: 'Cannot modify caseload manager permissions.' };
+      }
+
+      // Validate and sanitize the permissions object
+      var sanitized = {};
+      PERMISSION_KEYS.forEach(function(k) {
+        sanitized[k] = permissionsObj && permissionsObj.hasOwnProperty(k) ? !!permissionsObj[k] : false;
+      });
+
+      batchSetValues_(ctSheet, i + 1, colIdx, {
+        permissionsJson: JSON.stringify(sanitized)
+      });
+
+      return { success: true };
+    }
+  }
+
+  return { success: false, error: 'Team member not found.' };
 }
 
 /** Co-teacher accepts a pending invite and links to the shared spreadsheet. */
@@ -1783,6 +2022,8 @@ function leaveCoTeacherTeam() {
 function getEvaluation(studentId) {
   initializeSheetsIfNeeded_();
   var ss = getSS_();
+  var ctSheet = ss.getSheetByName(SHEET_COTEACHERS);
+  if (!checkPermission_(getCallerPermissions_(ctSheet, getCurrentUserEmail_()), 'viewEvals')) return null;
   var sheet = ss.getSheetByName(SHEET_EVALUATIONS);
   if (!sheet || sheet.getLastRow() <= 1) return null;
 
@@ -1810,8 +2051,36 @@ function getEvaluation(studentId) {
   return null;
 }
 
+/** Look up an evaluation by its eval ID (not studentId). Returns parsed eval object or null. */
+function getEvaluationById_(evalId) {
+  initializeSheetsIfNeeded_();
+  var ss = getSS_();
+  var sheet = ss.getSheetByName(SHEET_EVALUATIONS);
+  if (!sheet || sheet.getLastRow() <= 1) return null;
+
+  var found = findRowById_(sheet, evalId);
+  if (!found) return null;
+
+  var data = sheet.getDataRange().getValues();
+  var headers = data[0];
+  var rowData = data[found.rowIndex - 1];
+  var row = {};
+  headers.forEach(function(h, idx) { row[h] = rowData[idx]; });
+
+  if (row.meetingDate instanceof Date) row.meetingDate = formatDateValue_(row.meetingDate);
+  if (row.createdAt instanceof Date) row.createdAt = row.createdAt.toISOString();
+  if (row.updatedAt instanceof Date) row.updatedAt = row.updatedAt.toISOString();
+  try { row.items = JSON.parse(row.itemsJson || '[]'); } catch(e) { row.items = []; }
+  try { row.files = JSON.parse(row.filesJson || '[]'); } catch(e) { row.files = []; }
+  return row;
+}
+
 function createEvaluation(studentId, type) {
   initializeSheetsIfNeeded_();
+  var _ss = getSS_();
+  var _ctSheet = _ss.getSheetByName(SHEET_COTEACHERS);
+  var _perms = getCallerPermissions_(_ctSheet, getCurrentUserEmail_());
+  requirePermission_(_perms, 'editEvals', 'create evaluations');
   if (VALID_EVAL_TYPES.indexOf(type) === -1) {
     return { success: false, error: 'Invalid evaluation type.' };
   }
@@ -1852,6 +2121,9 @@ function createEvaluation(studentId, type) {
 function updateEvalMeetingDate(evalId, meetingDate) {
   initializeSheetsIfNeeded_();
   var ss = getSS_();
+  var ctSheet = ss.getSheetByName(SHEET_COTEACHERS);
+  var perms = getCallerPermissions_(ctSheet, getCurrentUserEmail_());
+  requirePermission_(perms, 'editEvals', 'update eval meeting dates');
   var sheet = ss.getSheetByName(SHEET_EVALUATIONS);
   if (!sheet) return { success: false, error: 'Evaluations sheet not found.' };
 
@@ -1872,6 +2144,9 @@ function updateEvaluationType(evalId, newType) {
   }
   initializeSheetsIfNeeded_();
   var ss = getSS_();
+  var ctSheet = ss.getSheetByName(SHEET_COTEACHERS);
+  var perms = getCallerPermissions_(ctSheet, getCurrentUserEmail_());
+  requirePermission_(perms, 'editEvals', 'change eval types');
   var sheet = ss.getSheetByName(SHEET_EVALUATIONS);
   if (!sheet) return { success: false, error: 'Evaluations sheet not found.' };
 
@@ -1891,6 +2166,9 @@ function updateEvaluationType(evalId, newType) {
 function saveEvaluationItems(evalId, items) {
   initializeSheetsIfNeeded_();
   var ss = getSS_();
+  var ctSheet = ss.getSheetByName(SHEET_COTEACHERS);
+  var perms = getCallerPermissions_(ctSheet, getCurrentUserEmail_());
+  requirePermission_(perms, 'editEvals', 'edit eval checklist items');
   var sheet = ss.getSheetByName(SHEET_EVALUATIONS);
   if (!sheet) return { success: false, error: 'Evaluations sheet not found.' };
 
@@ -1927,6 +2205,9 @@ function saveEvaluationItems(evalId, items) {
 function deleteEvaluation(evalId) {
   initializeSheetsIfNeeded_();
   var ss = getSS_();
+  var ctSheet = ss.getSheetByName(SHEET_COTEACHERS);
+  var perms = getCallerPermissions_(ctSheet, getCurrentUserEmail_());
+  requirePermission_(perms, 'editEvals', 'delete evaluations');
   var sheet = ss.getSheetByName(SHEET_EVALUATIONS);
   if (!sheet) return { success: false };
 
@@ -1944,6 +2225,9 @@ function deleteEvaluation(evalId) {
 
 /** Trigger Drive scope — never called, but ensures the scope is added. */
 function triggerDriveScope_() { DriveApp.getRootFolder(); }
+
+/** Trigger DocumentApp scope — never called, ensures the scope is added. */
+function triggerDocScope_() { DocumentApp.create(''); }
 
 /**
  * Search the user's Google Drive for files matching a query string.
@@ -2001,6 +2285,9 @@ function searchDriveFiles(query) {
 function addEvalFile(evalId, fileData) {
   initializeSheetsIfNeeded_();
   var ss = getSS_();
+  var ctSheet = ss.getSheetByName(SHEET_COTEACHERS);
+  var perms = getCallerPermissions_(ctSheet, getCurrentUserEmail_());
+  requirePermission_(perms, 'editEvals', 'add eval files');
   var sheet = ss.getSheetByName(SHEET_EVALUATIONS);
   if (!sheet) return { success: false, error: 'Evaluations sheet not found.' };
 
@@ -2034,6 +2321,9 @@ function addEvalFile(evalId, fileData) {
 function removeEvalFile(evalId, fileId) {
   initializeSheetsIfNeeded_();
   var ss = getSS_();
+  var ctSheet = ss.getSheetByName(SHEET_COTEACHERS);
+  var perms = getCallerPermissions_(ctSheet, getCurrentUserEmail_());
+  requirePermission_(perms, 'editEvals', 'remove eval files');
   var sheet = ss.getSheetByName(SHEET_EVALUATIONS);
   if (!sheet) return { success: false, error: 'Evaluations sheet not found.' };
 
@@ -2125,6 +2415,11 @@ function getQuarterLabel_(quarter) {
 
 /** Save or update a progress entry for a specific goal+objective+quarter. */
 function saveProgressEntry(data) {
+  initializeSheetsIfNeeded_();
+  var _ss = getSS_();
+  var _ctSheet = _ss.getSheetByName(SHEET_COTEACHERS);
+  var _perms = getCallerPermissions_(_ctSheet, getCurrentUserEmail_());
+  requirePermission_(_perms, 'editProgress', 'edit progress entries');
   // Validate required fields
   if (!data || !data.studentId) return { success: false, error: 'studentId is required.' };
   if (!data.goalId) return { success: false, error: 'goalId is required.' };
@@ -2258,11 +2553,19 @@ function getProgressEntries_(studentId, quarter) {
 
 /** Public: get progress entries for a student in a specific quarter. */
 function getProgressEntries(studentId, quarter) {
+  initializeSheetsIfNeeded_();
+  var _ss = getSS_();
+  var _ctSheet = _ss.getSheetByName(SHEET_COTEACHERS);
+  if (!checkPermission_(getCallerPermissions_(_ctSheet, getCurrentUserEmail_()), 'viewProgress')) return [];
   return getProgressEntries_(studentId, quarter);
 }
 
 /** Public: get all progress entries across all quarters for a student. */
 function getAllProgressForStudent(studentId) {
+  initializeSheetsIfNeeded_();
+  var _ss = getSS_();
+  var _ctSheet = _ss.getSheetByName(SHEET_COTEACHERS);
+  if (!checkPermission_(getCallerPermissions_(_ctSheet, getCurrentUserEmail_()), 'viewProgress')) return [];
   return getProgressEntries_(studentId, null);
 }
 
@@ -2715,6 +3018,10 @@ function generateProgressReport(studentId, quarter, overallSummary) {
   }
 
   initializeSheetsIfNeeded_();
+  var _ss = getSS_();
+  var _ctSheet = _ss.getSheetByName(SHEET_COTEACHERS);
+  var _perms = getCallerPermissions_(_ctSheet, getCurrentUserEmail_());
+  requirePermission_(_perms, 'viewProgress', 'generate progress reports');
   var students = getStudents();
   var student = null;
   for (var i = 0; i < students.length; i++) {
@@ -2751,6 +3058,10 @@ function generateBatchReports(quarter, overallSummaries) {
 
   try {
     initializeSheetsIfNeeded_();
+    var _ss = getSS_();
+    var _ctSheet = _ss.getSheetByName(SHEET_COTEACHERS);
+    var _perms = getCallerPermissions_(_ctSheet, getCurrentUserEmail_());
+    requirePermission_(_perms, 'viewProgress', 'generate batch reports');
     var dashData = getDashboardData();
     var summaries = overallSummaries || {};
     var results = [];
@@ -2786,6 +3097,11 @@ function toggleDPReportComplete(studentId, goalId, quarter, complete) {
   if (!studentId || !goalId || VALID_QUARTERS.indexOf(quarter) === -1) {
     return { success: false, error: 'Invalid parameters' };
   }
+  initializeSheetsIfNeeded_();
+  var _ss = getSS_();
+  var _ctSheet = _ss.getSheetByName(SHEET_COTEACHERS);
+  var _perms = getCallerPermissions_(_ctSheet, getCurrentUserEmail_());
+  requirePermission_(_perms, 'editProgress', 'mark progress complete');
   var lock = LockService.getUserLock();
   try {
     lock.waitLock(5000);
@@ -2914,6 +3230,11 @@ function callGemini_(prompt, opts) {
  * @returns {Object} Parsed JSON response
  */
 
+/** Lightweight check: does a Gemini API key exist? No network call. */
+function hasGeminiKey() {
+  return { available: !!getGeminiApiKey_() };
+}
+
 /**
  * Public endpoint: check whether Gemini is configured and reachable.
  * Called from frontend to show/hide AI features.
@@ -2947,6 +3268,10 @@ function generateAiProgressSummary(studentId, quarter) {
 
   // ── Fetch student + academic data (same pattern as generateProgressReport) ──
   initializeSheetsIfNeeded_();
+  var _ss = getSS_();
+  var _ctSheet = _ss.getSheetByName(SHEET_COTEACHERS);
+  var _perms = getCallerPermissions_(_ctSheet, getCurrentUserEmail_());
+  requirePermission_(_perms, 'editProgress', 'generate AI summaries');
   var students = getStudents();
   var student = null;
   for (var i = 0; i < students.length; i++) {
@@ -3049,6 +3374,140 @@ function generateAiProgressSummary(studentId, quarter) {
   } catch (e) {
     return { success: false, error: e.message || 'Failed to generate AI summary.' };
   }
+}
+
+/**
+ * Public endpoint: read a Google Sheets spreadsheet, send to Gemini for a
+ * special-ed summary, create a Google Doc, and attach it to the eval's files.
+ *
+ * @param {string} evalId - Evaluation ID to attach the doc to
+ * @param {string} driveFileId - Drive file ID of the source spreadsheet
+ * @returns {Object} { success, files, newFile, docUrl } or { success: false, error }
+ */
+function generateSheetSummary(evalId, driveFileId) {
+  if (!evalId) return { success: false, error: 'Missing evalId.' };
+  if (!driveFileId) return { success: false, error: 'Missing driveFileId.' };
+
+  var apiKey = getGeminiApiKey_();
+  if (!apiKey) return { success: false, error: 'Gemini API key not configured.' };
+
+  // Look up eval and student
+  var evalObj = getEvaluationById_(evalId);
+  if (!evalObj) return { success: false, error: 'Evaluation not found.' };
+
+  var students = getStudents();
+  var student = null;
+  for (var i = 0; i < students.length; i++) {
+    if (students[i].id === evalObj.studentId) { student = students[i]; break; }
+  }
+
+  // Open and read the spreadsheet
+  var ss;
+  try {
+    ss = SpreadsheetApp.openById(driveFileId);
+  } catch (e) {
+    return { success: false, error: 'Cannot open spreadsheet. Check sharing permissions.' };
+  }
+
+  var sheet = ss.getSheets()[0];
+  var data = sheet.getDataRange().getValues();
+  if (data.length < 2) return { success: false, error: 'Spreadsheet has no data rows.' };
+
+  // Convert to header:value pairs for the prompt
+  var headers = data[0];
+  var rows = data.slice(1);
+  var records = rows.map(function(row) {
+    var record = {};
+    headers.forEach(function(h, idx) {
+      if (h && row[idx] !== '') {
+        var val = row[idx];
+        if (val instanceof Date) val = formatDateValue_(val);
+        record[String(h).trim()] = String(val).trim();
+      }
+    });
+    return record;
+  });
+
+  var fileName = ss.getName();
+
+  // Build the prompt
+  var prompt = 'You are given survey/assessment data exported from a Google Sheets file called "' + fileName + '".\n\n';
+  prompt += 'The data contains ' + records.length + ' response(s).\n\n';
+  records.forEach(function(rec, idx) {
+    prompt += 'Response ' + (idx + 1) + ':\n';
+    Object.keys(rec).forEach(function(key) {
+      prompt += '  ' + key + ': ' + rec[key] + '\n';
+    });
+    prompt += '\n';
+  });
+
+  if (student) {
+    prompt += 'Student context: ' + (student.firstName || '') + ' ' + (student.lastName || '') + ', Grade ' + (student.grade || '') + '\n';
+  }
+
+  prompt += '\nWrite a professional narrative summary of these results suitable for pasting into a special education evaluation report (3-year reevaluation or IEP). ';
+  prompt += 'Organize by transition domains or assessment domains as appropriate to the data. ';
+  prompt += 'Include a section on strengths/protective factors and a section on areas of need. ';
+  prompt += 'End with recommendations for the IEP team. ';
+  prompt += 'Write in flowing prose paragraphs \u2014 no bullet points, no markdown headers, no numbered lists. ';
+  prompt += 'Use professional, objective language appropriate for a legal educational document. ';
+  prompt += 'Reference the student by full name (not pronouns alone) in the first mention of each paragraph.';
+
+  var systemInstruction = 'You are a Minnesota special education case manager writing assessment summaries for inclusion in IEP evaluation reports. You follow IDEA federal requirements and Minnesota Rules Chapter 3525. Your writing is data-driven, objective, and uses person-first language. You frame findings through a strengths-based lens while honestly identifying areas of need. You understand that for 7th-8th grade students, age-appropriate transition assessment data informs early transition planning that formally begins no later than age 14 or 9th grade in Minnesota.';
+
+  // Call Gemini
+  var summaryText;
+  try {
+    summaryText = callGemini_(prompt, {
+      systemInstruction: systemInstruction,
+      temperature: 0.5,
+      maxOutputTokens: 2048
+    });
+  } catch (e) {
+    return { success: false, error: 'AI generation failed: ' + (e.message || String(e)) };
+  }
+
+  // Create a Google Doc with the summary
+  var docTitle = fileName + ' Summary';
+  var doc = DocumentApp.create(docTitle);
+  var body = doc.getBody();
+  body.clear();
+
+  var title = body.appendParagraph(docTitle);
+  title.setHeading(DocumentApp.ParagraphHeading.HEADING1);
+
+  var meta = 'Generated: ' + new Date().toLocaleDateString() + ' | Source: ' + fileName;
+  if (student) meta += ' | Student: ' + student.firstName + ' ' + student.lastName;
+  var metaPara = body.appendParagraph(meta);
+  metaPara.setFontSize(9);
+  metaPara.setForegroundColor('#666666');
+  body.appendParagraph('');
+
+  var paragraphs = summaryText.split(/\n\n+/);
+  paragraphs.forEach(function(p) {
+    if (p.trim()) {
+      var para = body.appendParagraph(p.trim());
+      para.setFontSize(11);
+      para.setLineSpacing(1.15);
+    }
+  });
+
+  doc.saveAndClose();
+  var docUrl = doc.getUrl();
+  var docId = doc.getId();
+
+  // Attach the new doc to the evaluation's files
+  var result = addEvalFile(evalId, {
+    driveFileId: docId,
+    name: docTitle,
+    mimeType: 'application/vnd.google-apps.document',
+    url: docUrl
+  });
+
+  invalidateEvalCaches_();
+
+  if (!result.success) return { success: false, error: 'Summary created but failed to attach: ' + result.error };
+  return { success: true, files: result.files, newFile: result.newFile, docUrl: docUrl };
 }
 
 // ───── Helpers ─────
