@@ -1875,7 +1875,10 @@ function buildTimelineHtml_(summary) {
     if (isToday) dayClass += ' eval-timeline-today';
     if (isWeekend) dayClass += ' eval-timeline-weekend';
     if (isExpanded) dayClass += ' eval-timeline-day-expanded';
-    if (hasMeeting) dayClass += ' eval-timeline-meeting';
+    if (hasMeeting) {
+      var hasEvalMtg = dayMeetings.some(function(m) { return m.meetingCategory === 'eval'; });
+      dayClass += hasEvalMtg ? ' eval-timeline-meeting-eval' : ' eval-timeline-meeting';
+    }
 
     html += '<button class="' + dayClass + '" onclick="toggleTimelineDay(' + idx + ')">';
     html += '<span class="eval-timeline-day-abbr">' + (isToday ? 'Today' : esc(day.dayAbbr)) + '</span>';
@@ -1894,7 +1897,9 @@ function buildTimelineHtml_(summary) {
     }
 
     if (hasMeeting) {
-      html += '<span class="eval-timeline-meeting-badge" title="IEP Meeting">' + dayMeetings.length + '</span>';
+      var tlBadgeCls = 'eval-timeline-meeting-badge' + (hasEvalMtg ? ' eval-timeline-meeting-badge-eval' : '');
+      var tlBadgeTitle = hasEvalMtg ? 'Eval Meeting' : 'IEP Meeting';
+      html += '<span class="' + tlBadgeCls + '" title="' + tlBadgeTitle + '">' + dayMeetings.length + '</span>';
     }
 
     html += '</button>';
@@ -1922,11 +1927,9 @@ function buildTimelineHtml_(summary) {
         // Meetings first
         if (hasDayMeetings) {
           dayMeetingsExpanded.forEach(function(m) {
-            var isGcal = m.source === 'gcal';
-            var badgeClass = 'dp-expanded-meeting-badge' + (isGcal ? ' dp-expanded-meeting-badge-gcal' : '');
-            var badgeLabel = isGcal ? '&#x1F4C5;' : 'IEP';
+            var badge = getMeetingBadge_(m, 'dp-expanded-meeting-badge');
             html += '<div class="dp-expanded-meeting" role="button" tabindex="0" onclick="showStudentProfile(\'' + esc(m.studentId) + '\')" onkeydown="if(event.key===\'Enter\')showStudentProfile(\'' + esc(m.studentId) + '\')">' +
-              '<span class="' + badgeClass + '">' + badgeLabel + '</span>' +
+              '<span class="' + badge.badgeClass + '" title="' + badge.title + '">' + badge.badgeLabel + '</span>' +
               '<div class="dp-expanded-meeting-info">' +
                 '<span class="dp-expanded-meeting-type">' + esc(m.meetingType) + '</span>' +
                 '<span class="dp-expanded-meeting-student">' + esc(m.studentName) +
@@ -2231,6 +2234,16 @@ function buildDPSummarySection_(data) {
   return html;
 }
 
+function getMeetingBadge_(m, badgePrefix) {
+  if (m.source === 'gcal') {
+    return { badgeClass: badgePrefix + ' ' + badgePrefix + '-gcal', badgeLabel: '&#x1F4C5;', title: 'Google Calendar' };
+  }
+  if (m.meetingCategory === 'eval') {
+    return { badgeClass: badgePrefix + ' ' + badgePrefix + '-eval', badgeLabel: 'EVAL', title: 'Eval Meeting' };
+  }
+  return { badgeClass: badgePrefix, badgeLabel: 'IEP', title: 'IEP Meeting' };
+}
+
 function buildDPMeetingsDropdownList_(meetings) {
   if (!meetings.length) return '<div class="eval-metric-dropdown-empty">No meetings this week</div>';
   var html = '';
@@ -2241,10 +2254,13 @@ function buildDPMeetingsDropdownList_(meetings) {
       dateLabel = parseInt(parts[1], 10) + '/' + parseInt(parts[2], 10);
     }
     var sourceTag = m.source === 'gcal' ? ' <span class="dp-gcal-tag">Cal</span>' : '';
+    var catTag = m.meetingCategory === 'eval'
+      ? ' <span class="dp-meeting-tag dp-meeting-tag-eval" title="Eval Meeting">Eval</span>'
+      : ' <span class="dp-meeting-tag dp-meeting-tag-iep" title="IEP Meeting">IEP</span>';
     html += '<div class="eval-metric-dropdown-item" onclick="showStudentProfile(\'' + esc(m.studentId) + '\')" ' +
       'role="link" tabindex="0">' +
       '<div class="eval-metric-dropdown-item-main">' +
-        '<span class="eval-metric-dropdown-item-text">' + esc(m.meetingType) + sourceTag + '</span>' +
+        '<span class="eval-metric-dropdown-item-text">' + esc(m.meetingType) + catTag + sourceTag + '</span>' +
         '<span class="eval-metric-dropdown-item-date">' + dateLabel + '</span>' +
       '</div>' +
       '<span class="eval-metric-dropdown-item-student">' + esc(m.studentName) +
@@ -2397,13 +2413,15 @@ function buildDPCalendarDaysHtml_(days) {
     var hasTasks = day.tasks.length > 0;
     var isExpanded = (appState.dueProcessExpandedDay === day.date);
 
+    var hasEvalDay = hasMeeting && day.meetings.some(function(m) { return m.meetingCategory === 'eval'; });
     var dayClass = 'dp-cal-day';
     if (day.isToday) dayClass += ' dp-cal-today';
-    if (hasMeeting) dayClass += ' dp-cal-meeting';
+    if (hasMeeting) dayClass += hasEvalDay ? ' dp-cal-meeting-eval' : ' dp-cal-meeting';
     if (isExpanded) dayClass += ' dp-cal-expanded';
 
+    var meetingAriaLabel = hasMeeting ? (hasEvalDay ? ', Eval meeting' : ', IEP meeting') : '';
     html += '<button class="' + dayClass + '" onclick="toggleDPDay(\'' + day.date + '\')" ' +
-      'aria-label="' + esc(day.dayAbbr) + ' ' + day.dayNum + (hasMeeting ? ', IEP meeting' : '') +
+      'aria-label="' + esc(day.dayAbbr) + ' ' + day.dayNum + meetingAriaLabel +
       (hasTasks ? ', ' + day.tasks.length + ' task' + (day.tasks.length !== 1 ? 's' : '') : '') + '">';
     html += '<span class="dp-cal-day-abbr">' + (day.isToday ? 'Today' : esc(day.dayAbbr)) + '</span>';
     html += '<span class="dp-cal-day-num">' + day.dayNum + '</span>';
@@ -2421,7 +2439,9 @@ function buildDPCalendarDaysHtml_(days) {
     }
 
     if (hasMeeting) {
-      html += '<span class="dp-cal-meeting-badge" title="IEP Meeting">' + day.meetings.length + '</span>';
+      var calBadgeCls = 'dp-cal-meeting-badge' + (hasEvalDay ? ' dp-cal-meeting-badge-eval' : '');
+      var calBadgeTitle = hasEvalDay ? 'Eval Meeting' : 'IEP Meeting';
+      html += '<span class="' + calBadgeCls + '" title="' + calBadgeTitle + '">' + day.meetings.length + '</span>';
     }
 
     html += '</button>';
@@ -2446,13 +2466,11 @@ function buildDPExpandedDayHtml_(day) {
   // Meetings first
   if (hasMeetings) {
     day.meetings.forEach(function(m) {
-      var isGcal = m.source === 'gcal';
-      var badgeClass = 'dp-expanded-meeting-badge' + (isGcal ? ' dp-expanded-meeting-badge-gcal' : '');
-      var badgeLabel = isGcal ? '&#x1F4C5;' : 'IEP';
+      var badge = getMeetingBadge_(m, 'dp-expanded-meeting-badge');
       html += '<div class="dp-expanded-meeting" role="button" tabindex="0" ' +
         'onclick="showStudentProfile(\'' + esc(m.studentId) + '\')" ' +
         'onkeydown="if(event.key===\'Enter\')showStudentProfile(\'' + esc(m.studentId) + '\')">' +
-        '<span class="' + badgeClass + '">' + badgeLabel + '</span>' +
+        '<span class="' + badge.badgeClass + '" title="' + badge.title + '">' + badge.badgeLabel + '</span>' +
         '<div class="dp-expanded-meeting-info">' +
           '<span class="dp-expanded-meeting-type">' + esc(m.meetingType) + '</span>' +
           '<span class="dp-expanded-meeting-student">' + esc(m.studentName) +
@@ -2552,9 +2570,7 @@ function buildDPUpcomingMeetingsList_(meetings, days) {
     var dateLabel = dayNames[meetDate.getDay()] + ', ' + monthAbbrs[meetDate.getMonth()] + ' ' + meetDate.getDate();
     var isToday = m.date === todayStr;
 
-    var isGcal = m.source === 'gcal';
-    var badgeClass = 'dp-upcoming-badge' + (isGcal ? ' dp-upcoming-badge-gcal' : '');
-    var badgeLabel = isGcal ? '&#x1F4C5;' : 'IEP';
+    var badge = getMeetingBadge_(m, 'dp-upcoming-badge');
     html += '<div class="dp-upcoming-row" role="button" tabindex="0" ' +
       'onclick="showStudentProfile(\'' + esc(m.studentId) + '\')" ' +
       'onkeydown="if(event.key===\'Enter\')showStudentProfile(\'' + esc(m.studentId) + '\')">' +
@@ -2565,7 +2581,7 @@ function buildDPUpcomingMeetingsList_(meetings, days) {
         '<span class="dp-upcoming-student">' + esc(m.studentName) +
         (m.notes ? ' &#x00B7; ' + esc(m.notes) : '') + '</span>' +
       '</div>' +
-      '<span class="' + badgeClass + '">' + badgeLabel + '</span>' +
+      '<span class="' + badge.badgeClass + '" title="' + badge.title + '">' + badge.badgeLabel + '</span>' +
     '</div>';
   });
 

@@ -4705,6 +4705,22 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   margin-top: 2px;
 }
 
+/* Eval Meeting Day Highlight (timeline) */
+.eval-timeline-meeting-eval {
+  border: 2px solid var(--md-primary);
+  background: rgba(196, 30, 58, 0.08);
+}
+.eval-timeline-meeting-eval:hover {
+  background: rgba(196, 30, 58, 0.14);
+}
+.eval-timeline-meeting-eval.eval-timeline-today {
+  border-color: var(--md-primary);
+  background: rgba(196, 30, 58, 0.12);
+}
+.eval-timeline-meeting-badge-eval {
+  background: var(--md-primary);
+}
+
 .eval-timeline-day-abbr {
   font-size: 11px;
   font-weight: 500;
@@ -5031,6 +5047,22 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   margin-top: 1px;
 }
 
+/* Eval Meeting Day Highlight (calendar) */
+.dp-cal-meeting-eval {
+  border: 2px solid var(--md-primary);
+  background: rgba(196, 30, 58, 0.08);
+}
+.dp-cal-meeting-eval:hover {
+  background: rgba(196, 30, 58, 0.14);
+}
+.dp-cal-meeting-eval.dp-cal-today {
+  border-color: var(--md-primary);
+  background: rgba(196, 30, 58, 0.12);
+}
+.dp-cal-meeting-badge-eval {
+  background: var(--md-primary);
+}
+
 /* ── Expanded Day Detail ── */
 
 .dp-expanded-day {
@@ -5063,7 +5095,9 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 2px 8px;
+  min-width: 36px;
+  height: 20px;
+  padding: 0 8px;
   border-radius: var(--md-shape-full);
   background: var(--md-tertiary);
   color: #fff;
@@ -5073,12 +5107,18 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   text-transform: uppercase;
   flex-shrink: 0;
   margin-top: 2px;
+  box-sizing: border-box;
+  text-align: center;
+  line-height: 20px;
 }
 .dp-expanded-meeting-badge-gcal {
   background: #4285F4;
   font-size: 12px;
   letter-spacing: 0;
   text-transform: none;
+}
+.dp-expanded-meeting-badge-eval {
+  background: var(--md-primary);
 }
 .dp-expanded-meeting-info {
   display: flex;
@@ -5190,7 +5230,9 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 2px 8px;
+  min-width: 36px;
+  height: 20px;
+  padding: 0 8px;
   border-radius: var(--md-shape-full);
   background: var(--md-tertiary);
   color: #fff;
@@ -5199,12 +5241,18 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   letter-spacing: 0.5px;
   text-transform: uppercase;
   flex-shrink: 0;
+  box-sizing: border-box;
+  text-align: center;
+  line-height: 20px;
 }
 .dp-upcoming-badge-gcal {
   background: #4285F4;
   font-size: 12px;
   letter-spacing: 0;
   text-transform: none;
+}
+.dp-upcoming-badge-eval {
+  background: var(--md-primary);
 }
 .dp-gcal-tag {
   display: inline-block;
@@ -5217,6 +5265,30 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   letter-spacing: 0.3px;
   vertical-align: middle;
   margin-left: 4px;
+}
+.dp-meeting-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: var(--md-shape-xs);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  vertical-align: middle;
+  margin-left: 4px;
+  box-sizing: border-box;
+  text-align: center;
+  line-height: 16px;
+}
+.dp-meeting-tag-iep {
+  background: var(--md-tertiary);
+}
+.dp-meeting-tag-eval {
+  background: var(--md-primary);
 }
 .dp-calendar-header-actions {
   display: flex;
@@ -6930,6 +7002,32 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   .dp-progress-flat-card { flex-wrap: wrap; }
   .dp-upcoming-date { min-width: 70px; font-size: 11px; }
   .dp-upcoming-row { padding: 8px 12px; gap: 8px; }
+  /* Collapse meeting badges to colored dots on narrow viewports */
+  .dp-expanded-meeting-badge,
+  .dp-upcoming-badge {
+    width: 10px;
+    height: 10px;
+    min-width: 10px;
+    padding: 0;
+    font-size: 0;
+    letter-spacing: 0;
+    border-radius: 50%;
+    margin-top: 4px;
+  }
+  .dp-expanded-meeting-badge-gcal,
+  .dp-upcoming-badge-gcal {
+    font-size: 0;
+  }
+  .dp-meeting-tag {
+    width: 8px;
+    height: 8px;
+    min-width: 8px;
+    padding: 0;
+    font-size: 0;
+    letter-spacing: 0;
+    border-radius: 50%;
+    margin-left: 4px;
+  }
   /* Swap staleness text to compact MM/DD in narrow viewports */
   .staleness-relative { display: none; }
   .staleness-compact { display: inline; }
