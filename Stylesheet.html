@@ -406,7 +406,7 @@ body {
   width: 100%;
   height: 100%;
   border-radius: var(--md-shape-full);
-  background: var(--md-surface-container-highest);
+  background: var(--md-secondary-container);
   opacity: 0;
   transition: opacity var(--md-duration-short4) var(--md-easing-standard);
   z-index: 0;
@@ -414,12 +414,10 @@ body {
 .nav-drawer-item.active .nav-drawer-active-indicator {
   opacity: 1;
 }
-/* N2: Stronger active nav indicator with brand color left border */
+/* MD3: Active indicator uses secondary container fill */
 .nav-drawer-item.active {
-  color: var(--md-on-surface);
+  color: var(--md-on-secondary-container);
   font-weight: 500;
-  border-left: 3px solid var(--md-primary);
-  padding-left: 13px;
 }
 .nav-drawer-item:hover:not(.active) {
   background: var(--md-state-on-surface-hover);
@@ -476,9 +474,6 @@ body {
 .nav-drawer-child {
   height: 48px;
   padding-left: 52px;
-}
-.nav-drawer-child.active {
-  padding-left: 49px; /* 52px - 3px active border-left */
 }
 .nav-drawer-child .nav-drawer-active-indicator {
   left: 12px;
@@ -567,10 +562,6 @@ body {
   padding: 0;
   height: 48px;
   border-radius: var(--md-shape-lg);
-}
-.nav-drawer.collapsed .nav-drawer-item.active {
-  border-left: none;
-  padding-left: 0;
 }
 .nav-drawer.collapsed .nav-drawer-label {
   opacity: 0;
