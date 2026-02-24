@@ -4027,9 +4027,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   padding: 12px 0;
   border-bottom: 1px solid var(--md-outline-variant);
 }
-.ct-member-row:last-child {
-  border-bottom: none;
-}
+/* Note: no :last-child override — permission editor divs interleave member rows */
 .ct-member-info {
   display: flex;
   flex-direction: column;
@@ -4096,6 +4094,74 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   .ct-add-form .ct-role-select {
     width: 100%;
   }
+}
+
+/* ─── Permission Toggle Grid ─── */
+.ct-member-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.ct-permissions-editor {
+  border-top: 1px solid var(--md-outline-variant);
+  padding: 12px 0;
+  margin-bottom: 8px;
+}
+.perm-toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+.perm-group {
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-sm);
+  padding: 8px 12px;
+}
+.perm-group-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--md-on-surface-variant);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+.perm-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0;
+  cursor: pointer;
+  border-radius: var(--md-shape-xs);
+  transition: background var(--md-duration-short2) var(--md-easing-standard);
+}
+.perm-toggle-row:hover {
+  background: var(--md-surface-container-low);
+}
+.perm-toggle-row.perm-customized {
+  background: var(--md-primary-container);
+}
+.perm-toggle-row.perm-customized:hover {
+  background: var(--md-primary-container);
+  filter: brightness(0.95);
+}
+.perm-toggle-label {
+  font-size: 13px;
+  color: var(--md-on-surface);
+  flex: 1;
+}
+.perm-toggle-cb {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--md-primary);
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+.perm-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 12px;
 }
 
 /* Tab content panels */

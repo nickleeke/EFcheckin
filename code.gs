@@ -1708,7 +1708,7 @@ function getTeamInfo() {
 }
 
 /** Valid roles that a caseload manager can assign to team members. */
-var ASSIGNABLE_ROLES = ['service-provider', 'para', 'co-teacher', 'sped-lead'];
+var ASSIGNABLE_ROLES = ['service-provider', 'para', 'co-teacher'];
 
 /** Invite a team member by email with a specified role. Only caseload managers can add members. */
 function addTeamMember(email, role, customPermissions) {
@@ -1719,7 +1719,7 @@ function addTeamMember(email, role, customPermissions) {
 
   role = String(role || '').trim().toLowerCase();
   if (ASSIGNABLE_ROLES.indexOf(role) === -1) {
-    return { success: false, error: 'Invalid role. Must be one of: Service Provider, Para, Co-Teacher, or SPED Lead.' };
+    return { success: false, error: 'Invalid role. Must be one of: Service Provider, Para, or Co-Teacher.' };
   }
 
   var currentEmail = getCurrentUserEmail_();
