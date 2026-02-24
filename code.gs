@@ -349,6 +349,9 @@ function getStudents() {
   for (let i = 1; i < data.length; i++) {
     const row = {};
     headers.forEach(function(h, idx) { row[h] = data[i][idx]; });
+    if (row.birthday instanceof Date) row.birthday = formatDateValue_(row.birthday);
+    if (row.createdAt instanceof Date) row.createdAt = row.createdAt.toISOString();
+    if (row.updatedAt instanceof Date) row.updatedAt = row.updatedAt.toISOString();
     try { row.classes = JSON.parse(row.classesJson || '[]'); }
     catch(e) { row.classes = []; }
     try { row.goals = JSON.parse(row.goalsJson || '[]'); }
@@ -943,6 +946,8 @@ function getIEPMeetings(studentId) {
   for (var i = 1; i < allData.length; i++) {
     var row = {};
     headers.forEach(function(h, idx) { row[h] = allData[i][idx]; });
+    if (row.meetingDate instanceof Date) row.meetingDate = formatDateValue_(row.meetingDate);
+    if (row.createdAt instanceof Date) row.createdAt = row.createdAt.toISOString();
     if (!studentId || row.studentId === studentId) results.push(row);
   }
   return results;
@@ -1222,6 +1227,7 @@ function getAllMeetingsForCalendar_(students) {
           studentId: sid,
           studentName: studentMap[sid] || 'Unknown',
           meetingType: getEvalMeetingLabel_(evalType),
+          meetingCategory: getEvalMeetingCategory_(evalType),
           source: 'eval'
         });
       }
@@ -1242,6 +1248,7 @@ function getAllMeetingsForCalendar_(students) {
         studentId: row.studentId,
         studentName: studentMap[row.studentId] || 'Unknown',
         meetingType: row.meetingType || 'Other',
+        meetingCategory: 'iep',
         notes: row.notes || '',
         source: 'standalone'
       });
@@ -1279,16 +1286,21 @@ function getEvalMeetingLabel_(evalType) {
   return 'Eval Meeting';
 }
 
+function getEvalMeetingCategory_(evalType) {
+  if (evalType === 'annual-iep') return 'iep';
+  return 'eval'; // initial-eval, eval, 3-year-reeval, reeval
+}
+
 // ───── Google Calendar Integration ─────
 
 /**
- * Fetch IEP-related meetings from the user's default Google Calendar.
- * Searches for events matching "IEP Meeting" and parses the title convention:
- *   {Initials} {optional format} IEP Meeting
- *   e.g. "RT Virtual IEP Meeting", "JS In Person IEP Meeting"
+ * Fetch IEP and Eval meetings from the user's default Google Calendar.
+ * Searches for events matching "IEP Meeting" or "Eval Meeting" and parses:
+ *   {Initials} {optional format} {IEP|Eval} Meeting
+ *   e.g. "RT Virtual IEP Meeting", "JS In Person Eval Meeting"
  *
  * Returns array in the standard meeting shape:
- *   { date, studentId, studentName, meetingType, source: 'gcal', calendarEventTitle }
+ *   { date, studentId, studentName, meetingType, meetingCategory, source: 'gcal', calendarEventTitle }
  *
  * Uses a 5-minute cache in UserProperties to avoid repeated CalendarApp calls.
  */
@@ -1300,7 +1312,21 @@ function getCalendarMeetings_(students, startDate, endDate) {
   var results = [];
   try {
     var cal = CalendarApp.getDefaultCalendar();
-    var events = cal.getEvents(startDate, endDate, { search: 'IEP Meeting' });
+
+    // Search for both IEP and Eval meetings (CalendarApp has no OR query)
+    var iepEvents = cal.getEvents(startDate, endDate, { search: 'IEP Meeting' });
+    var evalEvents = cal.getEvents(startDate, endDate, { search: 'Eval Meeting' });
+
+    // Deduplicate by event ID
+    var seenIds = {};
+    var allEvents = [];
+    iepEvents.concat(evalEvents).forEach(function(evt) {
+      var eid = evt.getId();
+      if (!seenIds[eid]) {
+        seenIds[eid] = true;
+        allEvents.push(evt);
+      }
+    });
 
     // Build initials → student(s) lookup
     var initialsMap = {};
@@ -1313,7 +1339,7 @@ function getCalendarMeetings_(students, startDate, endDate) {
       initialsMap[key].push({ id: s.id, name: fn + ' ' + ln });
     });
 
-    events.forEach(function(evt) {
+    allEvents.forEach(function(evt) {
       var title = (evt.getTitle() || '').trim();
       if (!title) return;
 
@@ -1321,9 +1347,13 @@ function getCalendarMeetings_(students, startDate, endDate) {
       var parts = title.split(/\s+/);
       var initials = (parts[0] || '').toUpperCase();
 
-      // Derive meeting type from everything between initials and "IEP Meeting"
+      // Derive meeting type from everything after initials
       // e.g. "RT Virtual IEP Meeting" → "Virtual IEP Meeting"
       var meetingType = parts.slice(1).join(' ') || 'IEP Meeting';
+
+      // Determine category: does title contain "Eval Meeting" or "IEP Meeting"?
+      var titleUpper = title.toUpperCase();
+      var meetingCategory = titleUpper.indexOf('EVAL MEETING') !== -1 ? 'eval' : 'iep';
 
       var matched = initialsMap[initials];
       if (!matched || matched.length === 0) return; // no caseload student matched
@@ -1336,6 +1366,7 @@ function getCalendarMeetings_(students, startDate, endDate) {
           studentId: student.id,
           studentName: student.name,
           meetingType: meetingType,
+          meetingCategory: meetingCategory,
           source: 'gcal',
           calendarEventTitle: title
         });
@@ -1540,6 +1571,7 @@ function getTeamInfo() {
   for (var i = 1; i < data.length; i++) {
     var member = {};
     headers.forEach(function(h, idx) { member[h] = data[i][idx]; });
+    if (member.addedAt instanceof Date) member.addedAt = member.addedAt.toISOString();
     member.role = normalizeRole_(member.role);
     members.push(member);
     if (String(member.email).toLowerCase() === email) {
@@ -1763,6 +1795,11 @@ function getEvaluation(studentId) {
     if (data[i][studentIdCol] === studentId) {
       var row = {};
       headers.forEach(function(h, idx) { row[h] = data[i][idx]; });
+      // Convert Date objects to strings for google.script.run serialization
+      // (Sheets auto-formats date-like strings as native Date objects)
+      if (row.meetingDate instanceof Date) row.meetingDate = formatDateValue_(row.meetingDate);
+      if (row.createdAt instanceof Date) row.createdAt = row.createdAt.toISOString();
+      if (row.updatedAt instanceof Date) row.updatedAt = row.updatedAt.toISOString();
       try { row.items = JSON.parse(row.itemsJson || '[]'); }
       catch(e) { row.items = []; }
       try { row.files = JSON.parse(row.filesJson || '[]'); }
@@ -2209,6 +2246,9 @@ function getProgressEntries_(studentId, quarter) {
   for (var i = 1; i < allData.length; i++) {
     var row = {};
     headers.forEach(function(h, idx) { row[h] = allData[i][idx]; });
+    if (row.dateEntered instanceof Date) row.dateEntered = formatDateValue_(row.dateEntered);
+    if (row.createdAt instanceof Date) row.createdAt = row.createdAt.toISOString();
+    if (row.lastModified instanceof Date) row.lastModified = row.lastModified.toISOString();
     if (row.studentId === studentId && (!quarter || row.quarter === quarter)) {
       results.push(row);
     }
