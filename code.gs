@@ -2591,9 +2591,27 @@ function assembleReportData_(student, quarter, allEntries) {
       };
     });
 
+    // Compute goal-level rating from objectives
+    var goalLevelRating = null;
+    if (objectives.length > 0) {
+      var allMet = objectives.every(function(o) { return o.currentProgress.rating === 'Objective Met'; });
+      var anyNoProgress = objectives.some(function(o) { return o.currentProgress.rating === 'No Progress'; });
+      var anyReported = objectives.some(function(o) {
+        return o.currentProgress.rating !== 'Not yet reported';
+      });
+      if (allMet) {
+        goalLevelRating = 'Goal Met';
+      } else if (anyNoProgress) {
+        goalLevelRating = 'Insufficient Progress';
+      } else if (anyReported) {
+        goalLevelRating = 'Adequate Progress';
+      }
+    }
+
     areaMap[area].push({
       id: goal.id,
       text: goal.text,
+      goalLevelRating: goalLevelRating,
       objectives: objectives
     });
   });
@@ -2667,16 +2685,24 @@ function escHtml_(str) {
 }
 
 /** Generate a printable HTML progress report for one student.
- *  @param {Object} student — student record
- *  @param {string} quarter — e.g. 'Q2'
- *  @param {Array} allEntries — progress entries (all quarters for history)
- *  @param {string} overallSummary — optional teacher-written summary
+ *  Styled to match the official Richfield Public Schools progress report
+ *  format, using the Lato font (Google Fonts) and RPS brand colors.
+ *  @param {Object} student - student record
+ *  @param {string} quarter - e.g. 'Q2'
+ *  @param {Array} allEntries - progress entries (all quarters for history)
+ *  @param {string} overallSummary - optional teacher-written summary
  *  @returns {string} complete HTML document string */
 function generateProgressReportHtml_(student, quarter, allEntries, overallSummary) {
   var data = assembleReportData_(student, quarter, allEntries);
   var s = data.summary;
+  var today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
-  // Rating color helper
+  // Checkbox helper: ☑ if match, ☐ otherwise
+  function chk(goalRating, value) {
+    return goalRating === value ? '&#x2611;' : '&#x2610;';
+  }
+
+  // Rating color helper (for timeline chips)
   function ratingColor(rating) {
     if (rating === 'Objective Met') return '#1B5E20';
     if (rating === 'Adequate Progress') return '#7A5900';
@@ -2692,152 +2718,174 @@ function generateProgressReportHtml_(student, quarter, allEntries, overallSummar
 
   var html = '';
   html += '<!DOCTYPE html><html><head><meta charset="utf-8">';
-  html += '<title>IEP Progress Report \u2014 ' + escHtml_(s.studentName) + '</title>';
+  html += '<title>Progress Report \u2014 ' + escHtml_(s.studentName) + '</title>';
+  html += '<link rel="preconnect" href="https://fonts.googleapis.com">';
+  html += '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>';
+  html += '<link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap" rel="stylesheet">';
   html += '<style>';
 
-  // Base styles
-  html += 'body { font-family: "Roboto", Arial, sans-serif; font-size: 11pt; line-height: 1.5; color: #1C1B1F; max-width: 8.5in; margin: 0 auto; padding: 0.5in; }';
-  html += 'h1 { font-size: 18pt; font-weight: 500; margin: 0 0 4px 0; color: #C41E3A; }';
-  html += 'h2 { font-size: 14pt; font-weight: 500; margin: 24px 0 12px 0; padding-bottom: 6px; border-bottom: 2px solid #C41E3A; color: #1C1B1F; }';
-  html += 'h3 { font-size: 12pt; font-weight: 500; margin: 16px 0 8px 0; color: #1C1B1F; }';
+  // Base
+  html += 'body { font-family: "Lato", "Segoe UI", Arial, sans-serif; font-size: 11pt; line-height: 1.6; color: #1C1B1F; max-width: 8.5in; margin: 0 auto; padding: 0.5in; }';
   html += 'p { margin: 4px 0; }';
 
   // Header
-  html += '.report-header { border-bottom: 3px solid #C41E3A; padding-bottom: 12px; margin-bottom: 16px; }';
-  html += '.report-subtitle { font-size: 10pt; color: #49454F; }';
-  html += '.student-info { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 8px; font-size: 10pt; }';
-  html += '.student-info dt { font-weight: 500; color: #49454F; }';
-  html += '.student-info dd { margin: 0 0 4px 0; }';
+  html += '.report-header { display: flex; align-items: flex-start; justify-content: space-between; border-bottom: 3px solid #942022; padding-bottom: 14px; margin-bottom: 20px; }';
+  html += '.header-left { display: flex; align-items: flex-start; gap: 14px; }';
+  html += '.school-logo { width: 40px; height: 40px; background: #000; border-radius: 4px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }';
+  html += '.school-logo svg { display: block; }';
+  html += '.school-name { font-size: 15pt; font-weight: 700; margin: 0 0 2px 0; color: #1C1B1F; }';
+  html += '.school-address { font-size: 9pt; color: #49454F; margin: 0; line-height: 1.4; }';
+  html += '.report-title { font-size: 18pt; font-weight: 700; color: #942022; margin: 0; white-space: nowrap; align-self: center; }';
 
-  // Summary card
-  html += '.summary-card { background: #F7F2FA; border-radius: 12px; padding: 16px 20px; margin-bottom: 20px; }';
-  html += '.summary-stats { display: flex; gap: 24px; flex-wrap: wrap; margin-top: 8px; }';
-  html += '.stat-item { text-align: center; }';
-  html += '.stat-value { font-size: 20pt; font-weight: 500; }';
-  html += '.stat-label { font-size: 9pt; color: #49454F; }';
+  // Student info table
+  html += '.info-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 10.5pt; }';
+  html += '.info-table td { padding: 6px 12px; border: 1px solid #D8D8D8; }';
+  html += '.info-table .label { font-weight: 700; color: #49454F; width: 130px; }';
+
+  // Summary section
+  html += '.summary-section { background: #F8F8F8; border: 1px solid #E0E0E0; border-radius: 8px; padding: 16px 20px; margin-bottom: 24px; }';
+  html += '.summary-section p { font-size: 10.5pt; line-height: 1.7; margin: 0; }';
 
   // Goal sections
-  html += '.goal-area-section { margin-bottom: 20px; break-inside: avoid; }';
-  html += '.goal-block { margin-left: 12px; margin-bottom: 12px; }';
-  html += '.goal-text { font-style: italic; margin-bottom: 8px; }';
-  html += '.objective-row { margin-left: 16px; margin-bottom: 12px; padding: 8px 12px; border-left: 3px solid #D8C2C2; }';
-  html += '.rating-badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 10pt; font-weight: 500; }';
-  html += '.friendly-label { font-size: 9pt; font-style: italic; color: #49454F; margin-left: 8px; }';
-  html += '.anecdotal-notes { margin-top: 4px; font-size: 10pt; color: #49454F; }';
+  html += '.goal-section { margin-bottom: 20px; break-inside: avoid; }';
+  html += '.goal-heading { font-size: 12pt; font-weight: 700; margin: 20px 0 4px 0; color: #1C1B1F; }';
+  html += '.goal-area-label { font-size: 9pt; font-weight: 700; color: #942022; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }';
+  html += '.goal-text { margin: 4px 0 10px 0; font-size: 10.5pt; }';
+  html += '.goal-date { font-size: 10pt; margin-bottom: 6px; }';
+
+  // Progress extent checkboxes
+  html += '.extent-line { font-size: 10pt; margin-bottom: 12px; color: #49454F; }';
+  html += '.extent-line span { margin-right: 16px; }';
+  html += '.extent-checked { font-weight: 700; color: #1C1B1F; }';
+
+  // Objectives
+  html += '.objective-block { margin: 8px 0 8px 20px; padding: 8px 0; }';
+  html += '.objective-label { font-size: 10pt; font-weight: 700; color: #49454F; }';
+  html += '.objective-text { font-size: 10.5pt; margin: 2px 0 4px 0; }';
+  html += '.objective-progress { font-size: 10.5pt; font-weight: 700; font-style: italic; margin: 4px 0; }';
   html += '.progress-timeline { margin-top: 4px; font-size: 9pt; color: #666; }';
   html += '.timeline-chip { display: inline-block; padding: 1px 6px; border-radius: 8px; font-size: 8pt; margin-right: 4px; }';
 
   // Grades table
+  html += '.grades-section { margin-top: 24px; }';
+  html += '.grades-heading { font-size: 14pt; font-weight: 700; margin: 0 0 8px 0; padding-bottom: 6px; border-bottom: 2px solid #942022; }';
   html += '.grades-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 10pt; }';
-  html += '.grades-table th { background: #F5F5F5; text-align: left; padding: 8px 12px; border-bottom: 2px solid #D8C2C2; font-weight: 500; }';
-  html += '.grades-table td { padding: 8px 12px; border-bottom: 1px solid #E8E8E8; }';
-  html += '.gpa-display { margin-top: 8px; font-size: 11pt; }';
-  html += '.gpa-value { font-weight: 500; font-size: 14pt; }';
+  html += '.grades-table th { background: #F5F5F5; text-align: left; padding: 6px 12px; border: 1px solid #D8D8D8; font-weight: 700; }';
+  html += '.grades-table td { padding: 6px 12px; border: 1px solid #E8E8E8; }';
+  html += '.gpa-display { margin-top: 10px; font-size: 11pt; }';
+  html += '.gpa-value { font-weight: 700; font-size: 14pt; }';
 
   // Footer
-  html += '.report-footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #D8C2C2; font-size: 9pt; color: #49454F; }';
+  html += '.report-footer { margin-top: 32px; padding-top: 12px; border-top: 2px solid #942022; font-size: 9pt; color: #49454F; }';
+  html += '.report-footer p { margin: 4px 0; }';
 
-  // Print styles
+  // Print
   html += '@media print {';
-  html += '  body { padding: 0; margin: 0; }';
-  html += '  .goal-area-section { break-inside: avoid; }';
-  html += '  .objective-row { break-inside: avoid; }';
-  html += '  .summary-card { background: #F7F2FA !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }';
-  html += '  .rating-badge { -webkit-print-color-adjust: exact; print-color-adjust: exact; }';
+  html += '  body { padding: 0.25in; margin: 0; }';
+  html += '  .goal-section { break-inside: avoid; }';
+  html += '  .objective-block { break-inside: avoid; }';
+  html += '  .summary-section { background: #F8F8F8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }';
+  html += '  .extent-checked { font-weight: 700 !important; }';
   html += '  .timeline-chip { -webkit-print-color-adjust: exact; print-color-adjust: exact; }';
+  html += '  .grades-table th { background: #F5F5F5 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }';
   html += '}';
 
   html += '</style></head><body>';
 
   // ── Header ──
   html += '<div class="report-header">';
-  html += '<h1>IEP Progress Report</h1>';
-  html += '<p class="report-subtitle">Richfield Public Schools</p>';
-  html += '<div class="student-info">';
-  html += '<div><dt>Student</dt><dd><strong>' + escHtml_(s.studentName) + '</strong></dd></div>';
-  html += '<div><dt>Grade</dt><dd>' + escHtml_(s.gradeLevel) + '</dd></div>';
-  html += '<div><dt>Case Manager</dt><dd>' + escHtml_(s.caseManager) + '</dd></div>';
-  html += '<div><dt>Reporting Period</dt><dd>' + escHtml_(s.reportingPeriod) + '</dd></div>';
-  html += '<div><dt>Date Generated</dt><dd>' + new Date().toLocaleDateString() + '</dd></div>';
-  html += '</div></div>';
+  html += '<div class="header-left">';
+  html += '<div class="school-logo"><svg width="28" height="28" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg"><rect width="40" height="40" rx="4" fill="#000"/><text x="50%" y="54%" dominant-baseline="central" text-anchor="middle" font-family="Lato,sans-serif" font-weight="700" font-size="28" fill="#fff">R</text></svg></div>';
+  html += '<div>';
+  html += '<p class="school-name">Richfield Public Schools</p>';
+  html += '<p class="school-address">401 70th Street W (door 26)<br>Richfield MN 55423-3061<br>Tel: 612-798-6000</p>';
+  html += '</div>';
+  html += '</div>';
+  html += '<div class="report-title">Progress report</div>';
+  html += '</div>';
 
-  // ── Summary Card ──
-  html += '<div class="summary-card">';
-  html += '<h3 style="margin-top:0;">Progress Summary</h3>';
+  // ── Student Info Table ──
+  html += '<table class="info-table">';
+  html += '<tr><td class="label">Student:</td><td>' + escHtml_(s.studentName) + '</td>';
+  html += '<td class="label">Plan manager:</td><td>' + escHtml_(s.caseManager) + '</td></tr>';
+  html += '<tr><td class="label">School:</td><td>Richfield Middle School</td>';
+  html += '<td class="label">Grade:</td><td>' + escHtml_(s.gradeLevel) + '</td></tr>';
+  html += '<tr><td class="label">Reporting period:</td><td>' + escHtml_(s.reportingPeriod) + '</td>';
+  html += '<td class="label">Date:</td><td>' + today + '</td></tr>';
+  html += '</table>';
 
+  // ── Summary (if provided) ──
   if (overallSummary && String(overallSummary).trim()) {
+    html += '<div class="summary-section">';
     html += '<p>' + escHtml_(overallSummary) + '</p>';
+    html += '</div>';
   }
 
-  html += '<div class="summary-stats">';
-  html += '<div class="stat-item"><div class="stat-value">' + s.totalGoals + '</div><div class="stat-label">Total Goals</div></div>';
-  html += '<div class="stat-item"><div class="stat-value" style="color:#1B5E20;">' + s.goalsWithAdequateOrMet + '</div><div class="stat-label">On Track</div></div>';
-  html += '<div class="stat-item"><div class="stat-value" style="color:#BA1A1A;">' + s.goalsWithNoProgress + '</div><div class="stat-label">Need Attention</div></div>';
-
-  // GPA in summary
-  if (data.gpa) {
-    html += '<div class="stat-item"><div class="stat-value">' + data.gpa.rounded + '</div><div class="stat-label">Current GPA</div></div>';
-  } else {
-    html += '<div class="stat-item"><div class="stat-value">N/A</div><div class="stat-label">Current GPA</div></div>';
-  }
-  html += '</div></div>';
-
-  // ── Goals Section ──
-  html += '<h2>Goals &amp; Objectives</h2>';
-
+  // ── Goals ──
   if (data.goalGroups.length === 0) {
-    html += '<p style="color:#49454F;">No IEP goals have been entered for this student.</p>';
+    html += '<p style="color:#49454F;margin-top:16px;">No IEP goals have been entered for this student.</p>';
   }
 
+  var goalNum = 0;
   data.goalGroups.forEach(function(group) {
-    html += '<div class="goal-area-section">';
-    html += '<h3>' + escHtml_(group.goalArea) + '</h3>';
-
     group.goals.forEach(function(goal) {
-      html += '<div class="goal-block">';
+      goalNum++;
+      html += '<div class="goal-section">';
+      html += '<p class="goal-area-label">' + escHtml_(group.goalArea) + '</p>';
+      html += '<p class="goal-heading">Goal ' + goalNum + ':</p>';
       html += '<p class="goal-text">' + escHtml_(goal.text) + '</p>';
+      html += '<p class="goal-date">Date: ' + today + '</p>';
 
-      goal.objectives.forEach(function(obj) {
-        html += '<div class="objective-row">';
-        html += '<p><strong>' + escHtml_(obj.text) + '</strong></p>';
+      // Progress extent checkboxes
+      html += '<p class="extent-line">';
+      html += 'The extent to which that progress is sufficient to enable the pupil to achieve the goals by the end of the year:<br>';
+      var ratings = [
+        { value: 'Insufficient Progress', label: 'Insufficient progress' },
+        { value: 'Adequate Progress', label: 'Adequate progress' },
+        { value: 'Goal Met', label: 'Goal met' }
+      ];
+      ratings.forEach(function(r) {
+        var isChecked = goal.goalLevelRating === r.value;
+        html += '<span class="' + (isChecked ? 'extent-checked' : '') + '">' + chk(goal.goalLevelRating, r.value) + ' ' + r.label + '</span>';
+      });
+      html += '</p>';
 
-        // Current rating badge
+      // Objectives
+      goal.objectives.forEach(function(obj, idx) {
+        html += '<div class="objective-block">';
+        html += '<p class="objective-label">Objective ' + (idx + 1) + ':</p>';
+        html += '<p class="objective-text">' + escHtml_(obj.text) + '</p>';
+
         var r = obj.currentProgress.rating;
-        html += '<span class="rating-badge" style="background:' + ratingBg(r) + ';color:' + ratingColor(r) + ';">' + escHtml_(r) + '</span>';
-
-        // Student-friendly label
-        var friendly = PROGRESS_FRIENDLY_LABELS[r] || '';
-        if (friendly) {
-          html += '<span class="friendly-label">' + escHtml_(friendly) + '</span>';
-        }
-
-        // Anecdotal notes
-        if (obj.currentProgress.notes) {
-          html += '<p class="anecdotal-notes">' + escHtml_(obj.currentProgress.notes) + '</p>';
+        if (r !== 'Not yet reported' || obj.currentProgress.notes) {
+          html += '<p class="objective-progress">Progress: ';
+          if (obj.currentProgress.notes) {
+            html += escHtml_(obj.currentProgress.notes);
+          } else {
+            html += escHtml_(r);
+          }
+          html += '</p>';
         }
 
         // Progress timeline (prior quarters)
         if (obj.progressHistory.length > 0) {
-          html += '<div class="progress-timeline">Progress: ';
+          html += '<div class="progress-timeline">Prior: ';
           obj.progressHistory.forEach(function(h) {
             html += '<span class="timeline-chip" style="background:' + ratingBg(h.rating) + ';color:' + ratingColor(h.rating) + ';">' + h.quarter + ': ' + escHtml_(h.rating) + '</span> ';
           });
-          // Current quarter
-          html += '<span class="timeline-chip" style="background:' + ratingBg(r) + ';color:' + ratingColor(r) + ';font-weight:500;">' + quarter + ': ' + escHtml_(r) + '</span>';
           html += '</div>';
         }
 
-        html += '</div>'; // objective-row
+        html += '</div>';
       });
 
-      html += '</div>'; // goal-block
+      html += '</div>';
     });
-
-    html += '</div>'; // goal-area-section
   });
 
   // ── Grades Section ──
-  html += '<h2>Current Grades</h2>';
+  html += '<div class="grades-section">';
+  html += '<p class="grades-heading">Academic Snapshot</p>';
 
   if (data.grades.length === 0) {
     html += '<p style="color:#49454F;">Grades not yet available.</p>';
@@ -2845,20 +2893,16 @@ function generateProgressReportHtml_(student, quarter, allEntries, overallSummar
     html += '<table class="grades-table">';
     html += '<thead><tr><th>Class</th><th>Grade</th><th>Missing Assignments</th></tr></thead>';
     html += '<tbody>';
-
-    var hasPassFail = false;
     data.grades.forEach(function(g) {
       var isPassFail = !GPA_MAP.hasOwnProperty(g.grade) && g.grade;
-      if (isPassFail) hasPassFail = true;
       html += '<tr>';
       html += '<td>' + escHtml_(g.className) + '</td>';
-      html += '<td>' + escHtml_(g.grade) + (isPassFail ? ' <em style="font-size:9pt;color:#666;">(Pass/Fail)</em>' : '') + '</td>';
+      html += '<td>' + escHtml_(g.grade) + (isPassFail ? ' <em style="font-size:9pt;color:#666;">(P/F)</em>' : '') + '</td>';
       html += '<td>' + g.missing + '</td>';
       html += '</tr>';
     });
     html += '</tbody></table>';
 
-    // GPA
     html += '<div class="gpa-display">';
     if (data.gpa) {
       html += 'GPA: <span class="gpa-value">' + data.gpa.rounded + '</span>';
@@ -2870,11 +2914,12 @@ function generateProgressReportHtml_(student, quarter, allEntries, overallSummar
     }
     html += '</div>';
   }
+  html += '</div>';
 
   // ── Footer ──
   html += '<div class="report-footer">';
+  html += '<p>This progress report is provided in accordance with the Individuals with Disabilities Education Act (IDEA). Parents/guardians are encouraged to contact the plan manager listed above with any questions regarding their child\'s progress or IEP.</p>';
   html += '<p><strong>Questions?</strong> Contact ' + escHtml_(s.caseManager) + '</p>';
-  html += '<p>This progress report is part of the IEP process under IDEA. For questions about your child\'s IEP, please contact the case manager listed above.</p>';
   html += '</div>';
 
   html += '</body></html>';
@@ -3127,6 +3172,123 @@ function getAiStatus() {
     return { available: true, model: GEMINI_MODEL_ };
   } catch (e) {
     return { available: false, reason: e.message };
+  }
+}
+
+/**
+ * Public endpoint: generate an AI-powered progress summary for one student.
+ * Assembles all available data (goals, ratings, check-ins, academics) and
+ * sends a structured prompt to Gemini.
+ */
+function generateAiProgressSummary(studentId, quarter) {
+  if (!studentId) return { success: false, error: 'Missing studentId.' };
+  if (VALID_QUARTERS.indexOf(String(quarter)) === -1) {
+    return { success: false, error: 'Invalid quarter.' };
+  }
+
+  // ── Fetch student + academic data (same pattern as generateProgressReport) ──
+  initializeSheetsIfNeeded_();
+  var students = getStudents();
+  var student = null;
+  for (var i = 0; i < students.length; i++) {
+    if (students[i].id === studentId) { student = students[i]; break; }
+  }
+  if (!student) return { success: false, error: 'Student not found.' };
+
+  var dashData = getDashboardData();
+  var dashStudent = null;
+  for (var j = 0; j < dashData.length; j++) {
+    if (dashData[j].id === studentId) { dashStudent = dashData[j]; break; }
+  }
+  if (dashStudent) {
+    student.academicData = dashStudent.academicData || [];
+    student.gpa = dashStudent.gpa;
+  } else {
+    student.academicData = [];
+    student.gpa = null;
+  }
+
+  // ── Assemble progress data ──
+  var allEntries = getAllProgressForStudent(studentId);
+  var data = assembleReportData_(student, quarter, allEntries);
+
+  // ── Gather recent check-in context ──
+  var checkIns = getCheckIns(studentId);
+  var recentCheckIns = checkIns.slice(0, 4);
+
+  // ── Build the prompt ──
+  var lines = [];
+  lines.push('Write a quarterly progress summary for the following student.');
+  lines.push('');
+  lines.push('Student: ' + (student.firstName || '') + ' ' + (student.lastName || '') + ', Grade ' + (student.grade || ''));
+  lines.push('Reporting Period: ' + data.summary.reportingPeriod);
+  lines.push('GPA: ' + (data.gpa ? data.gpa.rounded : 'N/A'));
+  lines.push('');
+
+  // Goals & objectives
+  lines.push('IEP Goals & Progress:');
+  var goalNum = 0;
+  data.goalGroups.forEach(function(group) {
+    group.goals.forEach(function(goal) {
+      goalNum++;
+      lines.push('');
+      lines.push('Goal ' + goalNum + ' (' + group.goalArea + '): ' + goal.text);
+      goal.objectives.forEach(function(obj, idx) {
+        lines.push('  Objective ' + (idx + 1) + ': ' + obj.text);
+        lines.push('    Current Rating: ' + obj.currentProgress.rating);
+        if (obj.currentProgress.notes) {
+          lines.push('    Teacher Notes: ' + obj.currentProgress.notes);
+        }
+        if (obj.progressHistory.length > 0) {
+          var hist = obj.progressHistory.map(function(h) { return h.quarter + ': ' + h.rating; }).join(', ');
+          lines.push('    Prior Quarters: ' + hist);
+        }
+      });
+    });
+  });
+
+  // Grades
+  if (data.grades.length > 0) {
+    lines.push('');
+    lines.push('Current Grades:');
+    data.grades.forEach(function(g) {
+      lines.push('  ' + g.className + ': ' + g.grade + (g.missing > 0 ? ' (' + g.missing + ' missing)' : ''));
+    });
+  }
+
+  // Recent check-in trends
+  if (recentCheckIns.length > 0) {
+    lines.push('');
+    lines.push('Recent Check-In Trends (last ' + recentCheckIns.length + ' weeks):');
+    recentCheckIns.forEach(function(ci) {
+      var avg = 0;
+      var count = 0;
+      ['planningRating', 'followThroughRating', 'regulationRating', 'focusGoalRating', 'effortRating'].forEach(function(k) {
+        var v = Number(ci[k]);
+        if (v > 0) { avg += v; count++; }
+      });
+      avg = count > 0 ? (avg / count).toFixed(1) : 'N/A';
+      var parts = ['Week of ' + ci.weekOf + ': EF avg ' + avg + '/5'];
+      if (ci.barrier) parts.push('Barrier: ' + ci.barrier);
+      if (ci.whatWentWell) parts.push('Positive: ' + ci.whatWentWell);
+      if (ci.microGoal) parts.push('Micro-goal: ' + ci.microGoal);
+      lines.push('  ' + parts.join(' | '));
+    });
+  }
+
+  var prompt = lines.join('\n');
+
+  var systemInstruction = 'You are a special education case manager writing a brief, parent-friendly progress summary for an IEP progress report. Write 2-3 short paragraphs in plain language. Be encouraging but honest about areas needing growth. Reference specific data (ratings, accuracy percentages, grades) where available. Do not use markdown, bullet points, or headers \u2014 write flowing prose only.';
+
+  try {
+    var summary = callGemini_(prompt, {
+      systemInstruction: systemInstruction,
+      temperature: 0.7,
+      maxOutputTokens: 1024
+    });
+    return { success: true, summary: summary };
+  } catch (e) {
+    return { success: false, error: e.message || 'Failed to generate AI summary.' };
   }
 }
 

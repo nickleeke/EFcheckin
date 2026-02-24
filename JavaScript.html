@@ -5234,7 +5234,7 @@ function renderStudentProfileDashboard(student) {
     '<span class="profile-section-title">Quarterly Progress</span>' +
     '<div class="progress-header-right">' +
       '<span class="progress-autosave-status" id="progress-autosave-status"></span>' +
-      '<button class="btn-icon btn-icon-sm" id="progress-generate-report-btn" style="display:none" onclick="generateReport(\'' + esc(student.id) + '\')" title="Generate Report">' +
+      '<button class="btn-icon btn-icon-sm" id="progress-generate-report-btn" style="display:none" onclick="showReportModal(\'' + esc(student.id) + '\')" title="Generate Report">' +
         '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>' +
       '</button>' +
     '</div>' +
@@ -5951,7 +5951,122 @@ function checkProgressCompletion_(studentId) {
   }
 }
 
-function generateReport(studentId) {
+// ─── Report Modal (AI Summary + Generate) ───
+
+function showReportModal(studentId) {
+  var quarter = appState.currentProgressQuarter || 'Q1';
+  var student = getStudentById(studentId);
+  var studentName = student ? esc(student.firstName + ' ' + student.lastName) : 'Student';
+
+  var overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+  overlay.id = 'ai-summary-overlay';
+
+  overlay.innerHTML =
+    '<div class="ai-summary-dialog">' +
+      '<h3>Progress Report</h3>' +
+      '<p class="ai-summary-subtitle">' + studentName + ' &#x2022; ' + esc(quarter) + '</p>' +
+
+      '<div id="ai-summary-compact">' +
+        '<div class="ai-summary-actions-compact">' +
+          '<button class="btn btn-secondary ai-summary-generate-btn" onclick="generateAiSummary_(\'' + esc(studentId) + '\', \'' + esc(quarter) + '\')">' +
+            '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+              '<path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/>' +
+              '<path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/>' +
+            '</svg>' +
+            ' Generate AI Summary' +
+          '</button>' +
+          '<button class="btn btn-primary" onclick="generateReportDirect_(\'' + esc(studentId) + '\')">' +
+            'Generate Report' +
+          '</button>' +
+        '</div>' +
+      '</div>' +
+
+      '<div id="ai-summary-loading" style="display:none;">' +
+        '<div class="ai-summary-loading-content">' +
+          '<div class="ai-summary-spinner"></div>' +
+          '<span>Generating summary\u2026</span>' +
+        '</div>' +
+      '</div>' +
+
+      '<div id="ai-summary-error" style="display:none;">' +
+        '<p class="ai-summary-error-text" id="ai-summary-error-text"></p>' +
+        '<button class="btn btn-outlined" onclick="resetAiSummaryModal_()">Try Again</button>' +
+      '</div>' +
+
+      '<div id="ai-summary-expanded" class="ai-summary-expanded-section">' +
+        '<label class="ai-summary-textarea-label">AI-Generated Summary (editable)</label>' +
+        '<textarea class="ai-summary-textarea" id="ai-summary-text" rows="6" placeholder="AI summary will appear here\u2026"></textarea>' +
+        '<div class="ai-summary-actions-expanded">' +
+          '<button class="btn btn-outlined" onclick="closeAiSummaryModal_()">Cancel</button>' +
+          '<button class="btn btn-primary" onclick="addAiSummaryToReport_(\'' + esc(studentId) + '\')">Add to Progress Report</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+  document.body.appendChild(overlay);
+}
+
+function generateAiSummary_(studentId, quarter) {
+  var compactEl = document.getElementById('ai-summary-compact');
+  var loadingEl = document.getElementById('ai-summary-loading');
+  var errorEl = document.getElementById('ai-summary-error');
+  if (compactEl) compactEl.style.display = 'none';
+  if (loadingEl) loadingEl.style.display = 'flex';
+  if (errorEl) errorEl.style.display = 'none';
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (loadingEl) loadingEl.style.display = 'none';
+      if (!result.success) {
+        if (errorEl) {
+          errorEl.style.display = 'block';
+          var errText = document.getElementById('ai-summary-error-text');
+          if (errText) errText.textContent = result.error || 'Failed to generate summary.';
+        }
+        return;
+      }
+      var expandedEl = document.getElementById('ai-summary-expanded');
+      var textareaEl = document.getElementById('ai-summary-text');
+      var dialogEl = document.querySelector('.ai-summary-dialog');
+      if (expandedEl) expandedEl.classList.add('ai-summary-expanded-open');
+      if (textareaEl) textareaEl.value = result.summary || '';
+      if (dialogEl) dialogEl.classList.add('ai-summary-dialog-expanded');
+    })
+    .withFailureHandler(function(err) {
+      if (loadingEl) loadingEl.style.display = 'none';
+      var errorEl = document.getElementById('ai-summary-error');
+      if (errorEl) {
+        errorEl.style.display = 'block';
+        var errText = document.getElementById('ai-summary-error-text');
+        if (errText) errText.textContent = 'Error: ' + (err.message || err);
+      }
+    })
+    .generateAiProgressSummary(studentId, quarter);
+}
+
+function resetAiSummaryModal_() {
+  var compactEl = document.getElementById('ai-summary-compact');
+  var loadingEl = document.getElementById('ai-summary-loading');
+  var errorEl = document.getElementById('ai-summary-error');
+  if (compactEl) compactEl.style.display = '';
+  if (loadingEl) loadingEl.style.display = 'none';
+  if (errorEl) errorEl.style.display = 'none';
+}
+
+function addAiSummaryToReport_(studentId) {
+  var aiText = document.getElementById('ai-summary-text');
+  var summaryEl = document.getElementById('progress-overall-summary');
+  if (aiText && summaryEl) {
+    summaryEl.value = aiText.value;
+    scheduleProgressAutosave(studentId);
+  }
+  closeAiSummaryModal_();
+  showToast('AI summary added to progress report.');
+}
+
+function generateReportDirect_(studentId) {
+  closeAiSummaryModal_();
   var quarter = appState.currentProgressQuarter || 'Q1';
   var summaryEl = document.getElementById('progress-overall-summary');
   var overallSummary = summaryEl ? summaryEl.value : '';
@@ -5964,7 +6079,6 @@ function generateReport(studentId) {
         showToast('Error: ' + result.error);
         return;
       }
-      // Open report in new window
       var win = window.open('', '_blank');
       if (win) {
         win.document.write(result.html);
@@ -5977,6 +6091,17 @@ function generateReport(studentId) {
       showToast('Error generating report: ' + (err.message || err));
     })
     .generateProgressReport(studentId, quarter, overallSummary);
+}
+
+function closeAiSummaryModal_() {
+  var overlay = document.getElementById('ai-summary-overlay');
+  if (!overlay || overlay.classList.contains('dialog-closing')) return;
+  overlay.classList.add('dialog-closing');
+  var fallback = setTimeout(function() { overlay.remove(); }, 200);
+  overlay.addEventListener('animationend', function() {
+    clearTimeout(fallback);
+    overlay.remove();
+  });
 }
 
 function generateBatchReports() {
@@ -6001,6 +6126,9 @@ function generateBatchReports() {
       if (firstStyleMatch) reportStyles = firstStyleMatch[1];
 
       var combinedHtml = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Batch Progress Reports</title>';
+      combinedHtml += '<link rel="preconnect" href="https://fonts.googleapis.com">';
+      combinedHtml += '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>';
+      combinedHtml += '<link href="https://fonts.googleapis.com/css2?family=Lato:wght@400;700;900&display=swap" rel="stylesheet">';
       combinedHtml += '<style>' + reportStyles;
       combinedHtml += ' @media print { .page-break { page-break-before: always; } }';
       combinedHtml += '</style></head><body>';

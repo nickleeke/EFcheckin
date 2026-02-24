@@ -3151,6 +3151,116 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   animation: dialogScaleOut var(--md-duration-short3) var(--md-easing-emphasized-accelerate) both;
 }
 
+/* ─── AI Summary Modal ─── */
+.ai-summary-dialog {
+  background: var(--md-surface-container-high);
+  border-radius: var(--md-shape-xl);
+  padding: 24px;
+  min-width: 300px;
+  max-width: 420px;
+  width: 90%;
+  box-shadow: var(--md-elevation-3);
+  animation: dialogScaleIn var(--md-duration-short3) var(--md-easing-emphasized-decelerate) both;
+  transition: max-width var(--md-duration-medium4) var(--md-easing-standard);
+}
+.ai-summary-dialog-expanded {
+  max-width: 560px;
+}
+.ai-summary-dialog h3 {
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 28px;
+  margin: 0 0 4px 0;
+  color: var(--md-on-surface);
+}
+.ai-summary-subtitle {
+  font-size: 14px;
+  color: var(--md-on-surface-variant);
+  margin: 0 0 20px 0;
+}
+.ai-summary-actions-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ai-summary-generate-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.ai-summary-loading-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 0;
+  color: var(--md-on-surface-variant);
+  font-size: 14px;
+}
+.ai-summary-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--md-outline-variant);
+  border-top-color: var(--md-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+.ai-summary-error-text {
+  color: var(--md-error);
+  font-size: 14px;
+  margin: 0 0 12px 0;
+}
+.ai-summary-expanded-section {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-height var(--md-duration-medium4) var(--md-easing-standard),
+              opacity var(--md-duration-medium2) var(--md-easing-standard);
+}
+.ai-summary-expanded-open {
+  max-height: 400px;
+  opacity: 1;
+  overflow-y: auto;
+}
+.ai-summary-textarea-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--md-on-surface-variant);
+  margin-bottom: 6px;
+}
+.ai-summary-textarea {
+  width: 100%;
+  min-height: 120px;
+  padding: 10px 12px;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-sm);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 20px;
+  resize: vertical;
+  color: var(--md-on-surface);
+  background: var(--md-surface-container-lowest);
+  box-sizing: border-box;
+}
+.ai-summary-textarea:focus {
+  outline: none;
+  border-color: var(--md-primary);
+}
+.ai-summary-actions-expanded {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+#ai-summary-overlay.dialog-closing .ai-summary-dialog {
+  animation: dialogScaleOut var(--md-duration-short3) var(--md-easing-emphasized-accelerate) both;
+}
+#ai-summary-overlay.dialog-closing {
+  animation: dialogOverlayOut var(--md-duration-short3) var(--md-easing-emphasized-accelerate) both;
+}
+
 /* ─── Dropdown Menu Animation ─── */
 .dropdown-menu {
   transform-origin: top right;

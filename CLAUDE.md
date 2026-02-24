@@ -160,6 +160,17 @@ Definitions: `EVAL_TYPES` array + `EVAL_TYPE_ALIASES` map (frontend), `VALID_EVA
 
 **Reference:** [Material Design 3 Web Components](https://github.com/material-components/material-web/tree/main/docs)
 
+### Official Brand Identity (RPS Style Guide, Aug 2021)
+
+The app's MD3 design system is derived from the official Richfield Public Schools brand guidelines. Key brand elements:
+
+- **Tagline:** "Enriching and accelerating learning" / "Enriqueciendo y acelerando el aprendizaje"
+- **Mission:** "Richfield Public Schools inspires and empowers each individual to learn, grow and excel."
+- **Brand pattern:** Diamond and hexagon shapes are the signature Richfield visual identity (diamonds reference the historic high school entrance). Diamonds should always point up.
+- **Official brand red:** `#942022` (the print/brand color). The MD3 primary token `--md-primary: #C41E3A` is a lighter, more saturated version optimized for digital UI and WCAG contrast.
+- **Brand fonts:** Brandon Text (primary), TW Cen MT Std (Microsoft Office), **Lato** (Google web font). The app uses Roboto (MD3 standard) for UI, but generated content like progress reports could use Lato to align with brand.
+- **Logo clearance:** Minimum 0.25" (or equivalent padding) around all Richfield logos. No drop shadows, altered colors, disfigured proportions, or incorrect fonts on logos.
+
 ### Brand Palette (Richfield Public Schools)
 
 | Swatch | Name | HEX | RGB | Usage |
