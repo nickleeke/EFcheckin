@@ -82,7 +82,6 @@ var _lastDashboardFetch = 0;
 var _lastEvalSummaryFetch = 0;
 var _lastDueProcessFetch = 0;
 var _widgetConfigSaveTimer = null;
-var _widgetExpandSourceEl = null;
 var DATA_FRESH_MS = 30000; // 30s — frontend staleness window for navigation
 var EVAL_FRESH_MS = 60000; // 60s — eval summary changes less often
 
@@ -3662,7 +3661,7 @@ function openAddWidgetPicker() {
           '<p>A checklist with your daily priorities</p>' +
         '</div>' +
         '<div class="widget-picker-card" onclick="addNewWidget(\'sticky-notes\')" role="button" tabindex="0" onkeydown="if(event.key===\'Enter\')addNewWidget(\'sticky-notes\')">' +
-          '<svg width="40" height="40" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H4.99c-1.11 0-1.98.89-1.98 2L3 19c0 1.1.88 2 1.99 2H19c1.1 0 2-.9 2-2V5c0-1.11-.9-2-2-2zm0 12h-4c0 1.66-1.35 3-3 3s-3-1.34-3-3H4.99V5H19v10z"/></svg>' +
+          '<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 9a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 15 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2z"/><path d="M15 3v5a1 1 0 0 0 1 1h5"/></svg>' +
           '<h4>Sticky Notes</h4>' +
           '<p>Colorful reminder cards</p>' +
         '</div>' +
@@ -3700,152 +3699,51 @@ function addNewWidget(type) {
   openWidgetEditorForNew_(widget);
 }
 
-// ── Container Transform — Widget Editor ──
+// ── Widget Editor Dialog ──
 
 function openWidgetEditor(widgetId, event) {
   if (event) event.stopPropagation();
   var widget = findWidget_(widgetId);
   if (!widget) return;
-  var sourceEl = document.getElementById('dashboard-widget-' + widgetId);
-  var sourceCard = sourceEl ? sourceEl.querySelector('.top3-widget-card, .sticky-notes-row') : null;
-  openWidgetExpandCard_(widget, sourceCard, false);
+  openWidgetEditorDialog_(widget, false);
 }
 
 function openWidgetEditorForNew_(widget) {
-  openWidgetExpandCard_(widget, null, true);
+  openWidgetEditorDialog_(widget, true);
 }
 
-function openWidgetExpandCard_(widget, sourceCard, isNew) {
-  // Create overlay
+function openWidgetEditorDialog_(widget, isNew) {
   var overlay = document.createElement('div');
-  overlay.className = 'widget-expand-overlay';
-  overlay.id = 'widget-expand-overlay';
-  overlay.onclick = function(e) {
-    if (e.target === overlay) closeWidgetExpandCard_(isNew);
-  };
+  overlay.className = 'confirm-overlay';
+  overlay.id = 'widget-editor-overlay';
+  var dialog = document.createElement('div');
+  dialog.className = 'confirm-dialog widget-editor-dialog';
+  dialog.setAttribute('data-widget-id', widget.id);
+  dialog.setAttribute('data-is-new', isNew ? '1' : '0');
+  dialog.innerHTML = buildWidgetEditorHtml_(widget, isNew);
+  overlay.appendChild(dialog);
   document.body.appendChild(overlay);
-
-  // Create expand card
-  var card = document.createElement('div');
-  card.className = 'widget-expand-card';
-  card.id = 'widget-expand-card';
-  card.setAttribute('data-widget-id', widget.id);
-  card.setAttribute('data-is-new', isNew ? '1' : '0');
-
-  // Build editor content
-  card.innerHTML = buildWidgetEditorHtml_(widget, isNew);
-
-  // Position & animate
-  if (sourceCard) {
-    _widgetExpandSourceEl = sourceCard;
-    var rect = sourceCard.getBoundingClientRect();
-    card.style.top = rect.top + 'px';
-    card.style.left = rect.left + 'px';
-    card.style.width = rect.width + 'px';
-    card.style.height = rect.height + 'px';
-    card.style.borderRadius = '12px';
-    document.body.appendChild(card);
-    sourceCard.style.visibility = 'hidden';
-
-    // Trigger expand animation on next frame
-    requestAnimationFrame(function() {
-      overlay.classList.add('visible');
-      card.classList.add('expanding');
-      var targetW = Math.min(520, window.innerWidth - 32);
-      var targetH = Math.min(widget.type === 'sticky-notes' ? 580 : 440, window.innerHeight - 48);
-      card.style.top = ((window.innerHeight - targetH) / 2) + 'px';
-      card.style.left = ((window.innerWidth - targetW) / 2) + 'px';
-      card.style.width = targetW + 'px';
-      card.style.height = targetH + 'px';
-      card.style.borderRadius = '28px';
-      card.classList.add('expanded-centered');
-    });
-  } else {
-    // New widget: scale-in from center
-    var targetW = Math.min(520, window.innerWidth - 32);
-    var targetH = Math.min(widget.type === 'sticky-notes' ? 580 : 440, window.innerHeight - 48);
-    card.style.top = ((window.innerHeight - targetH) / 2) + 'px';
-    card.style.left = ((window.innerWidth - targetW) / 2) + 'px';
-    card.style.width = targetW + 'px';
-    card.style.height = targetH + 'px';
-    card.style.borderRadius = '28px';
-    card.classList.add('scale-in', 'expanded-centered');
-    document.body.appendChild(card);
-    requestAnimationFrame(function() { overlay.classList.add('visible'); });
-  }
-
-  // Escape key handler
-  card._escHandler = function(e) {
-    if (e.key === 'Escape') closeWidgetExpandCard_(isNew);
-  };
-  document.addEventListener('keydown', card._escHandler);
 }
 
-function closeWidgetExpandCard_(isNewUnused) {
-  var overlay = document.getElementById('widget-expand-overlay');
-  var card = document.getElementById('widget-expand-card');
-  if (!card || !overlay) return;
-
-  // Remove escape handler
-  if (card._escHandler) {
-    document.removeEventListener('keydown', card._escHandler);
-  }
-
-  if (_widgetExpandSourceEl) {
-    // Reverse container transform
-    var rect = _widgetExpandSourceEl.getBoundingClientRect();
-    card.classList.remove('expanding');
-    card.classList.add('collapsing');
-    card.style.top = rect.top + 'px';
-    card.style.left = rect.left + 'px';
-    card.style.width = rect.width + 'px';
-    card.style.height = rect.height + 'px';
-    card.style.borderRadius = '12px';
-    card.style.opacity = '0.5';
-    overlay.classList.remove('visible');
-    overlay.classList.add('fade-out');
-
-    setTimeout(function() {
-      if (_widgetExpandSourceEl) _widgetExpandSourceEl.style.visibility = '';
-      _widgetExpandSourceEl = null;
-      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-      if (card.parentNode) card.parentNode.removeChild(card);
-    }, 300);
-  } else {
-    // Scale-out
-    card.classList.remove('scale-in');
-    card.classList.add('scale-out');
-    overlay.classList.remove('visible');
-    overlay.classList.add('fade-out');
-    _widgetExpandSourceEl = null;
-    setTimeout(function() {
-      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-      if (card.parentNode) card.parentNode.removeChild(card);
-    }, 200);
-  }
+function closeWidgetEditorDialog_() {
+  closeConfirmDialog(document.getElementById('widget-editor-overlay'));
 }
 
 function buildWidgetEditorHtml_(widget, isNew) {
-  var html = '<button class="btn-icon widget-expand-close-btn" onclick="closeWidgetExpandCard_()" aria-label="Close">' +
-    '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>' +
-  '</button>';
-  html += '<div class="widget-editor-content">';
-
+  var html = '';
   if (widget.type === 'top3') {
     html += buildTop3EditorHtml_(widget);
   } else if (widget.type === 'sticky-notes') {
     html += buildStickyNotesEditorHtml_(widget);
   }
-
-  html += '</div>';
   html += '<div class="widget-editor-actions">';
   if (!isNew) {
-    html += '<button class="btn btn-ghost widget-delete-btn" onclick="deleteWidgetFromEditor(\'' + esc(widget.id) + '\')">Delete</button>';
+    html += '<button class="btn btn-ghost btn-danger" onclick="deleteWidgetFromEditor(\'' + esc(widget.id) + '\')">Delete</button>';
   } else {
     html += '<div></div>';
   }
   html += '<div class="widget-editor-actions-right">' +
-    '<button class="btn btn-outlined" onclick="closeWidgetExpandCard_()">Cancel</button>' +
+    '<button class="btn btn-outlined" onclick="closeWidgetEditorDialog_()">Cancel</button>' +
     '<button class="btn" onclick="saveWidgetFromEditor(\'' + esc(widget.id) + '\', ' + (isNew ? 'true' : 'false') + ')">Save</button>' +
   '</div></div>';
   return html;
@@ -3855,7 +3753,7 @@ function buildWidgetEditorHtml_(widget, isNew) {
 
 function buildTop3EditorHtml_(widget) {
   var color = widget.color || '#C41E3A';
-  var html = '<h3 style="color: ' + esc(color) + '">' + (widget.title ? esc(widget.title) : "Today's Top 3") + '</h3>';
+  var html = '<h3>' + (widget.title ? esc(widget.title) : "Today's Top 3") + '</h3>';
   html += '<div class="form-row">' +
     '<label class="form-label">Title</label>' +
     '<input type="text" id="widget-editor-title" class="form-input" value="' + esc(widget.title || "Today's Top 3") + '" maxlength="50">' +
@@ -3988,7 +3886,7 @@ function selectStickyNoteColor(swatchEl, hex) {
 // ── Save / Delete Widget from Editor ──
 
 function saveWidgetFromEditor(widgetId, isNew) {
-  var card = document.getElementById('widget-expand-card');
+  var card = document.querySelector('.widget-editor-dialog');
   if (!card) return;
   var widgetType = card.querySelector('.widget-top3-item-input') ? 'top3' : 'sticky-notes';
   var updatedWidget;
@@ -4045,7 +3943,7 @@ function saveWidgetFromEditor(widgetId, isNew) {
   }
 
   persistWidgetConfig_();
-  closeWidgetExpandCard_();
+  closeWidgetEditorDialog_();
   renderDashboardFromState();
   showToast(isNew ? 'Widget added' : 'Widget updated');
 }
@@ -4073,7 +3971,7 @@ function doDeleteWidget(widgetId) {
   if (el && el.parentNode) el.parentNode.removeChild(el);
 
   persistWidgetConfig_();
-  closeWidgetExpandCard_();
+  closeWidgetEditorDialog_();
   renderDashboardFromState();
   showToast('Widget deleted');
 }
@@ -4141,7 +4039,7 @@ function getRowIconSvg_(rowId) {
     if (w && w.type === 'top3') {
       return '<svg class="reorder-row-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.11 0 2-.9 2-2V5c0-1.1-.89-2-2-2zm-9 14l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>';
     }
-    return '<svg class="reorder-row-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H4.99c-1.11 0-1.98.89-1.98 2L3 19c0 1.1.88 2 1.99 2H19c1.1 0 2-.9 2-2V5c0-1.11-.9-2-2-2zm0 12h-4c0 1.66-1.35 3-3 3s-3-1.34-3-3H4.99V5H19v10z"/></svg>';
+    return '<svg class="reorder-row-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 9a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 15 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2z"/><path d="M15 3v5a1 1 0 0 0 1 1h5"/></svg>';
   }
   var p = paths[rowId] || 'M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14z';
   return '<svg class="reorder-row-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="' + p + '"/></svg>';
