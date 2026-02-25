@@ -1613,7 +1613,9 @@ function runAllSpedLeadTests() {
     'test_spedlead_getSpedLeadsReturnsEmptyWhenNone',
     'test_spedlead_getUserStatusReturnsRole',
     'test_spedlead_getEvalMetricsReturnsZeroForEmpty',
-    'test_spedlead_syncHandlesEmptyCaseloads'
+    'test_spedlead_syncHandlesEmptyCaseloads',
+    'test_spedlead_addSpedLeadAddsToArray',
+    'test_spedlead_addSpedLeadRejectsDuplicate'
   ];
 
   var testFns = {
@@ -1621,7 +1623,9 @@ function runAllSpedLeadTests() {
     test_spedlead_getSpedLeadsReturnsEmptyWhenNone: test_spedlead_getSpedLeadsReturnsEmptyWhenNone,
     test_spedlead_getUserStatusReturnsRole: test_spedlead_getUserStatusReturnsRole,
     test_spedlead_getEvalMetricsReturnsZeroForEmpty: test_spedlead_getEvalMetricsReturnsZeroForEmpty,
-    test_spedlead_syncHandlesEmptyCaseloads: test_spedlead_syncHandlesEmptyCaseloads
+    test_spedlead_syncHandlesEmptyCaseloads: test_spedlead_syncHandlesEmptyCaseloads,
+    test_spedlead_addSpedLeadAddsToArray: test_spedlead_addSpedLeadAddsToArray,
+    test_spedlead_addSpedLeadRejectsDuplicate: test_spedlead_addSpedLeadRejectsDuplicate
   };
 
   tests.forEach(function(name) {
@@ -1715,4 +1719,30 @@ function test_spedlead_syncHandlesEmptyCaseloads() {
   PropertiesService.getScriptProperties().deleteProperty('sped_lead_spreadsheet_' + testEmail);
   PropertiesService.getScriptProperties().deleteProperty('sped_lead_last_sync_' + testEmail);
   DriveApp.getFileById(testSS.getId()).setTrashed(true);
+}
+
+function test_spedlead_addSpedLeadAddsToArray() {
+  // Cleanup first
+  PropertiesService.getScriptProperties().deleteProperty('sped_leads');
+
+  var result = addSpedLead('newlead@test.org', true);
+  assertEqual_(result.success, true);
+
+  var spedLeads = getSpedLeads_();
+  assertEqual_(spedLeads.length, 1);
+  assertEqual_(spedLeads[0], 'newlead@test.org');
+
+  // Cleanup
+  PropertiesService.getScriptProperties().deleteProperty('sped_leads');
+}
+
+function test_spedlead_addSpedLeadRejectsDuplicate() {
+  PropertiesService.getScriptProperties().setProperty('sped_leads', JSON.stringify(['existing@test.org']));
+
+  var result = addSpedLead('existing@test.org', true);
+  assertEqual_(result.success, false);
+  assertContains_(result.error, 'already');
+
+  // Cleanup
+  PropertiesService.getScriptProperties().deleteProperty('sped_leads');
 }

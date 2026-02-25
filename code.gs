@@ -4061,3 +4061,29 @@ function isSpedLead_(email) {
   var spedLeads = getSpedLeads_();
   return spedLeads.indexOf(email) !== -1;
 }
+
+/** Add a SPED Lead (superuser only). */
+function addSpedLead(email, _testAuthorized) {
+  // Validate caller is superuser (bypass for tests)
+  if (!_testAuthorized) {
+    var currentEmail = getCurrentUserEmail_();
+    if (currentEmail !== SUPERUSER_EMAIL) {
+      return {success: false, error: 'Only superuser can add SPED Leads'};
+    }
+  }
+
+  email = String(email || '').trim().toLowerCase();
+  if (!email || email.indexOf('@') === -1) {
+    return {success: false, error: 'Invalid email address'};
+  }
+
+  var spedLeads = getSpedLeads_();
+  if (spedLeads.indexOf(email) !== -1) {
+    return {success: false, error: 'Email already registered as SPED Lead'};
+  }
+
+  spedLeads.push(email);
+  PropertiesService.getScriptProperties().setProperty('sped_leads', JSON.stringify(spedLeads));
+
+  return {success: true};
+}
