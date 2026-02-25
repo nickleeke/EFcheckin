@@ -4118,3 +4118,59 @@ function removeSpedLead(email, _testAuthorized) {
 
   return {success: true};
 }
+
+function updateSpedLeadConnections(spedLeadEmail, caseManagerEmails, _testAuthorized) {
+  // Validate caller is superuser (bypass for tests)
+  if (!_testAuthorized) {
+    var currentEmail = getCurrentUserEmail_();
+    if (currentEmail !== SUPERUSER_EMAIL) {
+      return {success: false, error: 'Only superuser can update connections'};
+    }
+  }
+
+  spedLeadEmail = String(spedLeadEmail || '').trim().toLowerCase();
+  if (!spedLeadEmail) {
+    return {success: false, error: 'Invalid SPED Lead email'};
+  }
+
+  var spedLeads = getSpedLeads_();
+  if (spedLeads.indexOf(spedLeadEmail) === -1) {
+    return {success: false, error: 'Email not registered as SPED Lead'};
+  }
+
+  if (!caseManagerEmails || !Array.isArray(caseManagerEmails)) {
+    return {success: false, error: 'caseManagerEmails must be an array'};
+  }
+
+  // Build caseload array with CM details
+  var caseloads = [];
+  var caseManagers = getCaseManagers(); // Existing function
+
+  caseManagerEmails.forEach(function(cmEmail) {
+    cmEmail = String(cmEmail || '').trim().toLowerCase();
+    var cm = caseManagers.find(function(c) { return c.email === cmEmail; });
+    if (cm && cm.spreadsheetId) {
+      caseloads.push({
+        email: cm.email,
+        name: cm.name || cm.email,
+        spreadsheetId: cm.spreadsheetId
+      });
+
+      // Grant SPED Lead editor access to CM's spreadsheet
+      try {
+        var cmSS = SpreadsheetApp.openById(cm.spreadsheetId);
+        cmSS.addEditor(spedLeadEmail);
+      } catch(e) {
+        Logger.log('Failed to share ' + cm.email + ' spreadsheet with SPED Lead: ' + e.message);
+      }
+    }
+  });
+
+  // Store connections
+  PropertiesService.getScriptProperties().setProperty(
+    'sped_lead_caseloads_' + spedLeadEmail,
+    JSON.stringify(caseloads)
+  );
+
+  return {success: true, connectedCount: caseloads.length};
+}
