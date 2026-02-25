@@ -3749,7 +3749,7 @@ function getSpedLeadSpreadsheetId_(spedLeadEmail) {
 
 /** Get eval metrics from a case manager's spreadsheet. */
 function getEvalMetrics_(ss) {
-  var evalsSheet = ss.getSheetByName('Evaluations');
+  var evalsSheet = ss.getSheetByName(SHEET_EVALUATIONS);
   if (!evalsSheet) {
     return {activeCount: 0, overdueCount: 0, dueThisWeekCount: 0};
   }
@@ -3761,6 +3761,10 @@ function getEvalMetrics_(ss) {
 
   var headers = data[0];
   var colIdx = buildColIdx_(headers);
+  if (!colIdx.meetingDate) {
+    return {activeCount: 0, overdueCount: 0, dueThisWeekCount: 0};
+  }
+
   var now = new Date();
   var oneWeekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
@@ -3790,8 +3794,8 @@ function getEvalMetrics_(ss) {
 
 /** Get due process metrics from a case manager's spreadsheet. */
 function getDueProcessMetrics_(ss) {
-  var iepSheet = ss.getSheetByName('IEPMeetings');
-  var progressSheet = ss.getSheetByName('ProgressReporting');
+  var iepSheet = ss.getSheetByName(SHEET_IEP_MEETINGS);
+  var progressSheet = ss.getSheetByName(SHEET_PROGRESS);
 
   var upcomingIEPs = 0;
   var progressCompletionRate = 0;
@@ -3802,13 +3806,15 @@ function getDueProcessMetrics_(ss) {
     if (iepData.length > 1) {
       var headers = iepData[0];
       var colIdx = buildColIdx_(headers);
-      var now = new Date();
-      var oneWeekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      if (colIdx.meetingDate) {
+        var now = new Date();
+        var oneWeekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-      for (var i = 1; i < iepData.length; i++) {
-        var meetingDate = iepData[i][colIdx.meetingDate - 1];
-        if (meetingDate && meetingDate >= now && meetingDate <= oneWeekFromNow) {
-          upcomingIEPs++;
+        for (var i = 1; i < iepData.length; i++) {
+          var meetingDate = iepData[i][colIdx.meetingDate - 1];
+          if (meetingDate && meetingDate >= now && meetingDate <= oneWeekFromNow) {
+            upcomingIEPs++;
+          }
         }
       }
     }
@@ -3818,17 +3824,20 @@ function getDueProcessMetrics_(ss) {
   if (progressSheet) {
     var progressData = progressSheet.getDataRange().getValues();
     if (progressData.length > 1) {
-      var totalEntries = progressData.length - 1;
-      var completedEntries = 0;
       var headers = progressData[0];
       var colIdx = buildColIdx_(headers);
 
-      for (var i = 1; i < progressData.length; i++) {
-        var progressRating = progressData[i][colIdx.progressRating - 1];
-        if (progressRating) completedEntries++;
-      }
+      if (colIdx.progressRating) {
+        var totalEntries = progressData.length - 1;
+        var completedEntries = 0;
 
-      progressCompletionRate = totalEntries > 0 ? Math.round((completedEntries / totalEntries) * 100) : 0;
+        for (var i = 1; i < progressData.length; i++) {
+          var progressRating = progressData[i][colIdx.progressRating - 1];
+          if (progressRating) completedEntries++;
+        }
+
+        progressCompletionRate = totalEntries > 0 ? Math.round((completedEntries / totalEntries) * 100) : 0;
+      }
     }
   }
 
@@ -3840,7 +3849,7 @@ function getDueProcessMetrics_(ss) {
 
 /** Get student summaries from a case manager's spreadsheet. */
 function getStudentSummaries_(ss) {
-  var studentsSheet = ss.getSheetByName('Students');
+  var studentsSheet = ss.getSheetByName(SHEET_STUDENTS);
   if (!studentsSheet) return [];
 
   var data = studentsSheet.getDataRange().getValues();
@@ -3865,7 +3874,7 @@ function getStudentSummaries_(ss) {
   }
 
   // Enrich with eval data
-  var evalsSheet = ss.getSheetByName('Evaluations');
+  var evalsSheet = ss.getSheetByName(SHEET_EVALUATIONS);
   if (evalsSheet) {
     var evalData = evalsSheet.getDataRange().getValues();
     if (evalData.length > 1) {
@@ -3874,7 +3883,13 @@ function getStudentSummaries_(ss) {
 
       for (var i = 1; i < evalData.length; i++) {
         var studentId = evalData[i][evalColIdx.studentId - 1];
-        var student = students.find(function(s) { return s.studentId === studentId; });
+        var student = null;
+        for (var j = 0; j < students.length; j++) {
+          if (students[j].studentId === studentId) {
+            student = students[j];
+            break;
+          }
+        }
         if (student) {
           student.evalType = evalData[i][evalColIdx.type - 1] || '';
         }
