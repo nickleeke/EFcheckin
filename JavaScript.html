@@ -1062,6 +1062,7 @@ function showView(viewId) {
   }
 
   window.scrollTo(0, 0);
+  updateWidgetFabVisibility_();
 }
 
 // ─── Dashboard ───
@@ -1193,6 +1194,7 @@ function switchDashboardTab(tabName) {
   var openGroup = document.querySelector('.nav-drawer-group.submenu-open');
   if (openGroup) openGroup.classList.remove('submenu-open');
   closeNavDrawerIfMobile_();
+  updateWidgetFabVisibility_();
   // Render tab content
   if (tabName === 'dashboard') {
     loadDashboard();
@@ -3541,12 +3543,15 @@ function renderCustomWidgets_() {
 
 /** Show/hide the FAB based on current view state */
 function updateWidgetFabVisibility_() {
+  var show = _currentViewId === 'dashboard-view';
+  if (show) {
+    var caseloadTab = document.getElementById('tab-panel-caseload');
+    show = caseloadTab && caseloadTab.classList.contains('active');
+  }
   var fab = document.getElementById('dashboard-add-widget-fab');
-  if (!fab) return;
-  var isDashboard = _currentViewId === 'dashboard-view';
-  var caseloadTab = document.getElementById('tab-panel-caseload');
-  var isActive = caseloadTab && caseloadTab.classList.contains('active');
-  fab.style.display = (isDashboard && isActive) ? 'flex' : 'none';
+  if (fab) fab.style.display = show ? 'flex' : 'none';
+  var customizeBtn = document.querySelector('.customize-dashboard-btn');
+  if (customizeBtn) customizeBtn.style.display = show ? 'flex' : 'none';
 }
 
 // ── Top 3 Widget (collapsed) ──
