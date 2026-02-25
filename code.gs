@@ -3900,6 +3900,113 @@ function getStudentSummaries_(ss) {
   return students;
 }
 
+/** Sync SPED Lead dashboard from all connected case manager spreadsheets. */
+function syncSpedLeadDashboard(spedLeadEmail) {
+  var caseloads = getSpedLeadCaseloads_(spedLeadEmail);
+  var spedLeadSSId = getSpedLeadSpreadsheetId_(spedLeadEmail);
+
+  if (!spedLeadSSId) {
+    return {success: false, error: 'SPED Lead spreadsheet not provisioned'};
+  }
+
+  var spedLeadSS = SpreadsheetApp.openById(spedLeadSSId);
+  var aggregateSheet = spedLeadSS.getSheetByName('AggregateMetrics');
+  var studentsSheet = spedLeadSS.getSheetByName('AllStudents');
+  var timelineSheet = spedLeadSS.getSheetByName('ComplianceTimeline');
+
+  if (!aggregateSheet || !studentsSheet || !timelineSheet) {
+    return {success: false, error: 'SPED Lead spreadsheet missing required sheets'};
+  }
+
+  // Clear existing data (keep headers)
+  if (aggregateSheet.getLastRow() > 1) {
+    aggregateSheet.deleteRows(2, aggregateSheet.getLastRow() - 1);
+  }
+  if (studentsSheet.getLastRow() > 1) {
+    studentsSheet.deleteRows(2, studentsSheet.getLastRow() - 1);
+  }
+  if (timelineSheet.getLastRow() > 1) {
+    timelineSheet.deleteRows(2, timelineSheet.getLastRow() - 1);
+  }
+
+  var syncedCount = 0;
+  var failedCount = 0;
+  var errors = [];
+
+  caseloads.forEach(function(cm) {
+    try {
+      var cmSS = SpreadsheetApp.openById(cm.spreadsheetId);
+
+      // Get metrics
+      var evalMetrics = getEvalMetrics_(cmSS);
+      var dpMetrics = getDueProcessMetrics_(cmSS);
+      var students = getStudentSummaries_(cmSS);
+
+      // Write to AggregateMetrics
+      aggregateSheet.appendRow([
+        cm.email,
+        cm.name,
+        students.length,
+        evalMetrics.activeCount,
+        evalMetrics.overdueCount,
+        dpMetrics.upcomingIEPs,
+        dpMetrics.progressCompletionRate,
+        'OK',
+        new Date()
+      ]);
+
+      // Write to AllStudents
+      students.forEach(function(s) {
+        studentsSheet.appendRow([
+          s.studentId,
+          s.firstName,
+          s.lastName,
+          cm.email,
+          cm.name,
+          s.grade,
+          s.evalType,
+          s.evalStatus,
+          s.nextIEPDate,
+          s.gpa
+        ]);
+      });
+
+      syncedCount++;
+      Utilities.sleep(500); // Rate limiting
+
+    } catch(e) {
+      failedCount++;
+      errors.push({cm: cm.email, error: e.message});
+
+      // Write failed status to AggregateMetrics
+      aggregateSheet.appendRow([
+        cm.email,
+        cm.name,
+        0,
+        0,
+        0,
+        0,
+        0,
+        'Failed',
+        new Date()
+      ]);
+    }
+  });
+
+  // Update last sync timestamp
+  PropertiesService.getScriptProperties().setProperty(
+    'sped_lead_last_sync_' + spedLeadEmail,
+    new Date().toISOString()
+  );
+
+  return {
+    success: true,
+    syncedCount: syncedCount,
+    failedCount: failedCount,
+    errors: errors
+  };
+}
+
 /** Check if email is a SPED Lead. */
 function isSpedLead_(email) {
   var spedLeads = getSpedLeads_();

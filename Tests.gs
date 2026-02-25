@@ -1612,14 +1612,16 @@ function runAllSpedLeadTests() {
     'test_spedlead_getSpedLeadsReturnsArray',
     'test_spedlead_getSpedLeadsReturnsEmptyWhenNone',
     'test_spedlead_getUserStatusReturnsRole',
-    'test_spedlead_getEvalMetricsReturnsZeroForEmpty'
+    'test_spedlead_getEvalMetricsReturnsZeroForEmpty',
+    'test_spedlead_syncHandlesEmptyCaseloads'
   ];
 
   var testFns = {
     test_spedlead_getSpedLeadsReturnsArray: test_spedlead_getSpedLeadsReturnsArray,
     test_spedlead_getSpedLeadsReturnsEmptyWhenNone: test_spedlead_getSpedLeadsReturnsEmptyWhenNone,
     test_spedlead_getUserStatusReturnsRole: test_spedlead_getUserStatusReturnsRole,
-    test_spedlead_getEvalMetricsReturnsZeroForEmpty: test_spedlead_getEvalMetricsReturnsZeroForEmpty
+    test_spedlead_getEvalMetricsReturnsZeroForEmpty: test_spedlead_getEvalMetricsReturnsZeroForEmpty,
+    test_spedlead_syncHandlesEmptyCaseloads: test_spedlead_syncHandlesEmptyCaseloads
   };
 
   tests.forEach(function(name) {
@@ -1681,5 +1683,36 @@ function test_spedlead_getEvalMetricsReturnsZeroForEmpty() {
   assertEqual_(result.dueThisWeekCount, 0, 'dueThisWeekCount should be 0 for empty sheet');
 
   // Cleanup
+  DriveApp.getFileById(testSS.getId()).setTrashed(true);
+}
+
+function test_spedlead_syncHandlesEmptyCaseloads() {
+  var testEmail = 'spedlead@test.org';
+
+  // Create test SPED Lead spreadsheet with required sheets
+  var testSS = SpreadsheetApp.create('Test SPED Lead Dashboard');
+  var aggregateSheet = testSS.insertSheet('AggregateMetrics');
+  var studentsSheet = testSS.insertSheet('AllStudents');
+  var timelineSheet = testSS.insertSheet('ComplianceTimeline');
+
+  // Set up headers
+  aggregateSheet.appendRow(['caseManagerEmail', 'caseManagerName', 'studentCount', 'activeEvals', 'overdueEvals', 'upcomingIEPs', 'progressCompletionRate', 'lastSyncStatus', 'lastSyncDate']);
+  studentsSheet.appendRow(['studentId', 'firstName', 'lastName', 'caseManagerEmail', 'caseManagerName', 'grade', 'evalType', 'evalStatus', 'nextIEPDate', 'gpa']);
+  timelineSheet.appendRow(['date', 'eventType', 'studentId', 'caseManagerEmail']);
+
+  PropertiesService.getScriptProperties().setProperty('sped_leads', JSON.stringify([testEmail]));
+  PropertiesService.getScriptProperties().setProperty('sped_lead_caseloads_' + testEmail, JSON.stringify([]));
+  PropertiesService.getScriptProperties().setProperty('sped_lead_spreadsheet_' + testEmail, testSS.getId());
+
+  var result = syncSpedLeadDashboard(testEmail);
+  assertEqual_(result.success, true);
+  assertEqual_(result.syncedCount, 0);
+  assertEqual_(result.failedCount, 0);
+
+  // Cleanup
+  PropertiesService.getScriptProperties().deleteProperty('sped_leads');
+  PropertiesService.getScriptProperties().deleteProperty('sped_lead_caseloads_' + testEmail);
+  PropertiesService.getScriptProperties().deleteProperty('sped_lead_spreadsheet_' + testEmail);
+  PropertiesService.getScriptProperties().deleteProperty('sped_lead_last_sync_' + testEmail);
   DriveApp.getFileById(testSS.getId()).setTrashed(true);
 }
