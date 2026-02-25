@@ -644,6 +644,22 @@ function enterApp() {
   showView('dashboard-view');
   showDashboardSkeleton();
 
+  // Load dashboard widget config in parallel (available to all roles)
+  google.script.run
+    .withSuccessHandler(function(config) {
+      appState.dashboardConfig = config;
+      appState._dashboardConfigLoaded = true;
+      // Re-render if dashboard data already loaded
+      if (appState.dashboardData && appState.dashboardData.length > 0) {
+        renderDashboardFromState();
+      }
+    })
+    .withFailureHandler(function() {
+      appState.dashboardConfig = getDefaultDashboardConfig_fe();
+      appState._dashboardConfigLoaded = true;
+    })
+    .getDashboardConfig();
+
   google.script.run
     .withSuccessHandler(function(result) {
       try {
@@ -1050,6 +1066,8 @@ function showView(viewId) {
 
 function renderDashboardFromState() {
   var filtered = applyFilter_(appState.dashboardData);
+  applyDashboardOrder_();
+  renderCustomWidgets_();
   renderNeedsAttention(filtered);
   renderMissingAggregate(filtered);
   renderRecentStudents();
@@ -1058,6 +1076,7 @@ function renderDashboardFromState() {
   } else {
     hideEvalSections_();
   }
+  updateWidgetFabVisibility_();
 }
 
 function showDashboard() {
@@ -1671,9 +1690,15 @@ function renderNeedsAttention(data) {
       html += '<span class="needs-attention-reason">' + r.icon + esc(r.text) + '</span>';
     });
     html += '</div>';
-    if (canCreateCheckins) {
+    var hasStaleCheckIn = canViewCheckins && s.daysSinceCheckIn != null && s.daysSinceCheckIn >= 7;
+    var hasMissing = s.totalMissing >= 4;
+    if (hasStaleCheckIn && canCreateCheckins) {
       html += '<button class="needs-attention-action" onclick="event.stopPropagation(); startCheckIn(\'' + s.id + '\')">Check In &#x2192;</button>';
-    } else {
+    }
+    if (hasMissing) {
+      html += '<button class="needs-attention-action" onclick="event.stopPropagation(); showMissingAssignments(\'' + s.id + '\')">View Missing &#x2192;</button>';
+    }
+    if (!hasStaleCheckIn && !hasMissing) {
       html += '<button class="needs-attention-action" onclick="event.stopPropagation(); openSidePanel(' + spIdx + ')">View &#x2192;</button>';
     }
     html += '</div>';
