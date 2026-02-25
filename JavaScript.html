@@ -608,6 +608,12 @@ function enterApp() {
   // Update nav drawer visibility for SPED Lead
   updateNavForSpedLead_();
 
+  // SPED Leads: show their dashboard instead of case manager dashboard
+  if (appState.userRole === 'sped-lead') {
+    showSpedLeadDashboard();
+    return;
+  }
+
   // Load global case managers list
   google.script.run
     .withSuccessHandler(function(cms) {
@@ -3166,6 +3172,63 @@ function renderDPProgressOnly_() {
   tmp.innerHTML = buildDPProgressSection_(appState.dueProcessData);
   var newSection = tmp.firstChild;
   section.parentNode.replaceChild(newSection, section);
+}
+
+// ─── SPED Lead Views ───
+
+function showSpedLeadDashboard() {
+  document.querySelectorAll('.nav-drawer-item').forEach(function(item) { item.classList.remove('active'); });
+  var dashItem = document.getElementById('drawer-spedlead-dashboard');
+  if (dashItem) dashItem.classList.add('active');
+  closeNavDrawerIfMobile_();
+
+  showView('spedlead-view');
+
+  // Show skeleton
+  document.getElementById('spedlead-content-container').innerHTML =
+    '<div class="skeleton-fade-in">' +
+      '<div class="skeleton skeleton-title"></div>' +
+      '<div class="skeleton skeleton-card"></div>' +
+      '<div class="skeleton skeleton-card"></div>' +
+    '</div>';
+
+  // Fetch dashboard data
+  google.script.run
+    .withSuccessHandler(function(data) {
+      try {
+        appState.spedLeadData = data;
+        renderSpedLeadDashboard(data);
+      } catch(e) {
+        showToast('Error: ' + e.message);
+      }
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error loading dashboard: ' + (err && err.message ? err.message : String(err)));
+    })
+    .getSpedLeadDashboardData();
+}
+
+function renderSpedLeadDashboard(data) {
+  var container = document.getElementById('spedlead-content-container');
+  var html = '<div class="spedlead-placeholder">SPED Lead Dashboard implementation pending...</div>';
+  container.innerHTML = html;
+}
+
+function showSpedLeadStudents() {
+  document.querySelectorAll('.nav-drawer-item').forEach(function(item) { item.classList.remove('active'); });
+  var studentsItem = document.getElementById('drawer-spedlead-students');
+  if (studentsItem) studentsItem.classList.add('active');
+  closeNavDrawerIfMobile_();
+
+  showView('spedlead-students-view');
+
+  var container = document.getElementById('spedlead-students-container');
+  container.innerHTML = '<div class="spedlead-placeholder">SPED Lead Students view implementation pending...</div>';
+}
+
+function closeSpedLeadTimelineModal() {
+  var modal = document.getElementById('spedlead-timeline-modal');
+  if (modal) modal.style.display = 'none';
 }
 
 // ─── Recent Students ───

@@ -4349,3 +4349,27 @@ function provisionSpedLeadSpreadsheet(spedLeadEmail, _testAuthorized) {
     triggerResult: triggerResult
   };
 }
+
+/** Get SPED Lead dashboard data (public endpoint). */
+function getSpedLeadDashboardData() {
+  var userEmail = getCurrentUserEmail_();
+  if (!isSpedLead_(userEmail)) {
+    return {error: 'Access denied'};
+  }
+
+  // Auto-sync if stale (>24 hours)
+  var lastSync = PropertiesService.getScriptProperties().getProperty('sped_lead_last_sync_' + userEmail);
+  if (lastSync) {
+    var lastSyncDate = new Date(lastSync);
+    var hoursSinceSync = (Date.now() - lastSyncDate.getTime()) / 1000 / 60 / 60;
+    if (hoursSinceSync > 24) {
+      syncSpedLeadDashboard(userEmail);
+    }
+  }
+
+  // Placeholder - return empty data for now
+  return {
+    caseManagers: [],
+    lastSyncDate: lastSync
+  };
+}
