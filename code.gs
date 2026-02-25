@@ -442,6 +442,13 @@ function getStudents() {
 
 function saveStudent(profile) {
   initializeSheetsIfNeeded_();
+
+  // SPED Lead guard
+  var status = getUserStatus();
+  if (status.role === 'sped-lead') {
+    throw new Error('SPED Leads have read-only access to student data');
+  }
+
   const ss = getSS_();
   var ctSheet = ss.getSheetByName(SHEET_COTEACHERS);
   var perms = getCallerPermissions_(ctSheet, getCurrentUserEmail_());
@@ -622,6 +629,13 @@ function computeEfAvg_(checkIn) {
 
 function saveCheckIn(data) {
   initializeSheetsIfNeeded_();
+
+  // SPED Lead guard
+  var status = getUserStatus();
+  if (status.role === 'sped-lead') {
+    throw new Error('SPED Leads cannot create check-ins');
+  }
+
   var ss0 = getSS_();
   var ctSheet = ss0.getSheetByName(SHEET_COTEACHERS);
   var perms = getCallerPermissions_(ctSheet, getCurrentUserEmail_());
@@ -2089,6 +2103,13 @@ function getEvaluationById_(evalId) {
 
 function createEvaluation(studentId, type) {
   initializeSheetsIfNeeded_();
+
+  // SPED Lead guard
+  var status = getUserStatus();
+  if (status.role === 'sped-lead') {
+    throw new Error('SPED Leads have read-only access to evaluations');
+  }
+
   var _ss = getSS_();
   var _ctSheet = _ss.getSheetByName(SHEET_COTEACHERS);
   var _perms = getCallerPermissions_(_ctSheet, getCurrentUserEmail_());
@@ -2177,6 +2198,13 @@ function updateEvaluationType(evalId, newType) {
 
 function saveEvaluationItems(evalId, items) {
   initializeSheetsIfNeeded_();
+
+  // SPED Lead guard
+  var status = getUserStatus();
+  if (status.role === 'sped-lead') {
+    throw new Error('SPED Leads have read-only access to evaluations');
+  }
+
   var ss = getSS_();
   var ctSheet = ss.getSheetByName(SHEET_COTEACHERS);
   var perms = getCallerPermissions_(ctSheet, getCurrentUserEmail_());
@@ -2216,6 +2244,13 @@ function saveEvaluationItems(evalId, items) {
 
 function deleteEvaluation(evalId) {
   initializeSheetsIfNeeded_();
+
+  // SPED Lead guard
+  var status = getUserStatus();
+  if (status.role === 'sped-lead') {
+    throw new Error('SPED Leads have read-only access to evaluations');
+  }
+
   var ss = getSS_();
   var ctSheet = ss.getSheetByName(SHEET_COTEACHERS);
   var perms = getCallerPermissions_(ctSheet, getCurrentUserEmail_());
