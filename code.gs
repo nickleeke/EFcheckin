@@ -1004,10 +1004,33 @@ function saveIEPMeeting(data) {
   }
 
   initializeSheetsIfNeeded_();
-  var ss = getSS_();
-  var ctSheet = ss.getSheetByName(SHEET_COTEACHERS);
-  var perms = getCallerPermissions_(ctSheet, getCurrentUserEmail_());
-  requirePermission_(perms, 'editEvals', 'manage IEP meetings');
+  var status = getUserStatus();
+  var ss;
+
+  if (status.role === 'sped-lead') {
+    // SPED Lead writes to target CM's spreadsheet
+    var targetSpreadsheetId = data.caseManagerSpreadsheetId;
+    if (!targetSpreadsheetId) {
+      return {success: false, error: 'caseManagerSpreadsheetId required for SPED Lead writes'};
+    }
+
+    // Verify SPED Lead has access to this caseload
+    var caseloads = getSpedLeadCaseloads_(getCurrentUserEmail_());
+    var hasAccess = caseloads.some(function(cm) {
+      return cm.spreadsheetId === targetSpreadsheetId;
+    });
+    if (!hasAccess) {
+      return {success: false, error: 'Access denied to this caseload'};
+    }
+
+    ss = SpreadsheetApp.openById(targetSpreadsheetId);
+  } else {
+    ss = getSS_();
+    var ctSheet = ss.getSheetByName(SHEET_COTEACHERS);
+    var perms = getCallerPermissions_(ctSheet, getCurrentUserEmail_());
+    requirePermission_(perms, 'editEvals', 'manage IEP meetings');
+  }
+
   var sheet = ss.getSheetByName(SHEET_IEP_MEETINGS);
   if (!sheet) return { success: false, error: 'IEPMeetings sheet not found' };
 
@@ -2462,11 +2485,6 @@ function getQuarterLabel_(quarter) {
 
 /** Save or update a progress entry for a specific goal+objective+quarter. */
 function saveProgressEntry(data) {
-  initializeSheetsIfNeeded_();
-  var _ss = getSS_();
-  var _ctSheet = _ss.getSheetByName(SHEET_COTEACHERS);
-  var _perms = getCallerPermissions_(_ctSheet, getCurrentUserEmail_());
-  requirePermission_(_perms, 'editProgress', 'edit progress entries');
   // Validate required fields
   if (!data || !data.studentId) return { success: false, error: 'studentId is required.' };
   if (!data.goalId) return { success: false, error: 'goalId is required.' };
@@ -2491,6 +2509,32 @@ function saveProgressEntry(data) {
   }
 
   initializeSheetsIfNeeded_();
+  var status = getUserStatus();
+  var ss;
+
+  if (status.role === 'sped-lead') {
+    // SPED Lead writes to target CM's spreadsheet
+    var targetSpreadsheetId = data.caseManagerSpreadsheetId;
+    if (!targetSpreadsheetId) {
+      return {success: false, error: 'caseManagerSpreadsheetId required for SPED Lead writes'};
+    }
+
+    // Verify SPED Lead has access to this caseload
+    var caseloads = getSpedLeadCaseloads_(getCurrentUserEmail_());
+    var hasAccess = caseloads.some(function(cm) {
+      return cm.spreadsheetId === targetSpreadsheetId;
+    });
+    if (!hasAccess) {
+      return {success: false, error: 'Access denied to this caseload'};
+    }
+
+    ss = SpreadsheetApp.openById(targetSpreadsheetId);
+  } else {
+    ss = getSS_();
+    var ctSheet = ss.getSheetByName(SHEET_COTEACHERS);
+    var perms = getCallerPermissions_(ctSheet, getCurrentUserEmail_());
+    requirePermission_(perms, 'editProgress', 'edit progress entries');
+  }
 
   // Validate student exists
   var students = getStudents();
@@ -2500,7 +2544,6 @@ function saveProgressEntry(data) {
   }
   if (!studentExists) return { success: false, error: 'Student not found.' };
 
-  var ss = getSS_();
   var sheet = ss.getSheetByName(SHEET_PROGRESS);
   if (!sheet) {
     sheet = ss.insertSheet(SHEET_PROGRESS);
