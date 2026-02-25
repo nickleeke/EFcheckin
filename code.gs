@@ -4174,3 +4174,100 @@ function updateSpedLeadConnections(spedLeadEmail, caseManagerEmails, _testAuthor
 
   return {success: true, connectedCount: caseloads.length};
 }
+
+function provisionSpedLeadSpreadsheet(spedLeadEmail, _testAuthorized) {
+  // Validate caller is superuser (bypass for tests)
+  if (!_testAuthorized) {
+    var currentEmail = getCurrentUserEmail_();
+    if (currentEmail !== SUPERUSER_EMAIL) {
+      return {success: false, error: 'Only superuser can provision spreadsheets'};
+    }
+  }
+
+  spedLeadEmail = String(spedLeadEmail || '').trim().toLowerCase();
+  if (!spedLeadEmail) {
+    return {success: false, error: 'Invalid SPED Lead email'};
+  }
+
+  var spedLeads = getSpedLeads_();
+  if (spedLeads.indexOf(spedLeadEmail) === -1) {
+    return {success: false, error: 'Email not registered as SPED Lead'};
+  }
+
+  // Check if already provisioned
+  var existingId = getSpedLeadSpreadsheetId_(spedLeadEmail);
+  if (existingId) {
+    return {success: false, error: 'Spreadsheet already provisioned'};
+  }
+
+  // Create spreadsheet
+  var name = 'SPED Lead Dashboard - ' + spedLeadEmail.split('@')[0];
+  var ss = SpreadsheetApp.create(name);
+  var ssId = ss.getId();
+
+  // Delete default sheet
+  var defaultSheet = ss.getSheets()[0];
+  if (defaultSheet.getName() === 'Sheet1') {
+    ss.deleteSheet(defaultSheet);
+  }
+
+  // Create AggregateMetrics sheet
+  var aggregateSheet = ss.insertSheet('AggregateMetrics');
+  aggregateSheet.appendRow([
+    'caseManagerEmail',
+    'caseManagerName',
+    'studentCount',
+    'activeEvals',
+    'overdueEvals',
+    'upcomingIEPs',
+    'progressCompletionRate',
+    'lastSyncStatus',
+    'lastSyncDate'
+  ]);
+
+  // Create AllStudents sheet
+  var studentsSheet = ss.insertSheet('AllStudents');
+  studentsSheet.appendRow([
+    'studentId',
+    'firstName',
+    'lastName',
+    'caseManagerEmail',
+    'caseManagerName',
+    'grade',
+    'evalType',
+    'evalStatus',
+    'nextIEPDate',
+    'gpa'
+  ]);
+
+  // Create ComplianceTimeline sheet
+  var timelineSheet = ss.insertSheet('ComplianceTimeline');
+  timelineSheet.appendRow([
+    'date',
+    'studentId',
+    'studentName',
+    'caseManagerEmail',
+    'type',
+    'meetingType',
+    'evalType'
+  ]);
+
+  // Store spreadsheet ID
+  PropertiesService.getScriptProperties().setProperty(
+    'sped_lead_spreadsheet_' + spedLeadEmail,
+    ssId
+  );
+
+  // Run initial sync
+  var syncResult = syncSpedLeadDashboard(spedLeadEmail);
+
+  // Install daily trigger
+  var triggerResult = installSpedLeadSyncTrigger(spedLeadEmail);
+
+  return {
+    success: true,
+    spreadsheetId: ssId,
+    syncResult: syncResult,
+    triggerResult: triggerResult
+  };
+}
