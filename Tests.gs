@@ -1615,7 +1615,8 @@ function runAllSpedLeadTests() {
     'test_spedlead_getEvalMetricsReturnsZeroForEmpty',
     'test_spedlead_syncHandlesEmptyCaseloads',
     'test_spedlead_addSpedLeadAddsToArray',
-    'test_spedlead_addSpedLeadRejectsDuplicate'
+    'test_spedlead_addSpedLeadRejectsDuplicate',
+    'test_spedlead_removeSpedLeadCleansUp'
   ];
 
   var testFns = {
@@ -1625,7 +1626,8 @@ function runAllSpedLeadTests() {
     test_spedlead_getEvalMetricsReturnsZeroForEmpty: test_spedlead_getEvalMetricsReturnsZeroForEmpty,
     test_spedlead_syncHandlesEmptyCaseloads: test_spedlead_syncHandlesEmptyCaseloads,
     test_spedlead_addSpedLeadAddsToArray: test_spedlead_addSpedLeadAddsToArray,
-    test_spedlead_addSpedLeadRejectsDuplicate: test_spedlead_addSpedLeadRejectsDuplicate
+    test_spedlead_addSpedLeadRejectsDuplicate: test_spedlead_addSpedLeadRejectsDuplicate,
+    test_spedlead_removeSpedLeadCleansUp: test_spedlead_removeSpedLeadCleansUp
   };
 
   tests.forEach(function(name) {
@@ -1742,6 +1744,25 @@ function test_spedlead_addSpedLeadRejectsDuplicate() {
   var result = addSpedLead('existing@test.org', true);
   assertEqual_(result.success, false);
   assertContains_(result.error, 'already');
+
+  // Cleanup
+  PropertiesService.getScriptProperties().deleteProperty('sped_leads');
+}
+
+function test_spedlead_removeSpedLeadCleansUp() {
+  var testEmail = 'remove@test.org';
+  PropertiesService.getScriptProperties().setProperty('sped_leads', JSON.stringify([testEmail]));
+  PropertiesService.getScriptProperties().setProperty('sped_lead_caseloads_' + testEmail, '[]');
+  PropertiesService.getScriptProperties().setProperty('sped_lead_spreadsheet_' + testEmail, 'abc123');
+
+  var result = removeSpedLead(testEmail, true);
+  assertEqual_(result.success, true);
+
+  var spedLeads = getSpedLeads_();
+  assertEqual_(spedLeads.length, 0);
+  assertEqual_(PropertiesService.getScriptProperties().getProperty('sped_lead_caseloads_' + testEmail), null);
+  assertEqual_(PropertiesService.getScriptProperties().getProperty('sped_lead_spreadsheet_' + testEmail), null);
+  assertEqual_(PropertiesService.getScriptProperties().getProperty('sped_lead_last_sync_' + testEmail), null);
 
   // Cleanup
   PropertiesService.getScriptProperties().deleteProperty('sped_leads');

@@ -4087,3 +4087,34 @@ function addSpedLead(email, _testAuthorized) {
 
   return {success: true};
 }
+
+function removeSpedLead(email, _testAuthorized) {
+  // Validate caller is superuser (bypass for tests)
+  if (!_testAuthorized) {
+    var currentEmail = getCurrentUserEmail_();
+    if (currentEmail !== SUPERUSER_EMAIL) {
+      return {success: false, error: 'Only superuser can remove SPED Leads'};
+    }
+  }
+
+  email = String(email || '').trim().toLowerCase();
+
+  var spedLeads = getSpedLeads_();
+  var index = spedLeads.indexOf(email);
+  if (index === -1) {
+    return {success: false, error: 'Email not found in SPED Leads'};
+  }
+
+  spedLeads.splice(index, 1);
+  PropertiesService.getScriptProperties().setProperty('sped_leads', JSON.stringify(spedLeads));
+
+  // Cleanup related properties
+  PropertiesService.getScriptProperties().deleteProperty('sped_lead_caseloads_' + email);
+  PropertiesService.getScriptProperties().deleteProperty('sped_lead_spreadsheet_' + email);
+  PropertiesService.getScriptProperties().deleteProperty('sped_lead_last_sync_' + email);
+
+  // Remove trigger
+  removeSpedLeadSyncTrigger(email);
+
+  return {success: true};
+}
