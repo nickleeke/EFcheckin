@@ -81,6 +81,18 @@ function getCurrentUserEmail_() {
 /** Check whether the current user has completed onboarding. */
 function getUserStatus() {
   var email = getCurrentUserEmail_();
+
+  // Check if SPED Lead
+  if (isSpedLead_(email)) {
+    return {
+      hasData: true,
+      role: 'sped-lead',
+      permissions: null,  // null = unrestricted due process access
+      connectedCaseloads: getSpedLeadCaseloads_(email),
+      isSuperuser: false
+    };
+  }
+
   var props = PropertiesService.getUserProperties();
   var ssId = props.getProperty('spreadsheet_id');
 

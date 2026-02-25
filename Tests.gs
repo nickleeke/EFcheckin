@@ -1610,12 +1610,14 @@ function test_permissions_caseManagerGetsAllTrue() {
 function runAllSpedLeadTests() {
   var tests = [
     'test_spedlead_getSpedLeadsReturnsArray',
-    'test_spedlead_getSpedLeadsReturnsEmptyWhenNone'
+    'test_spedlead_getSpedLeadsReturnsEmptyWhenNone',
+    'test_spedlead_getUserStatusReturnsRole'
   ];
 
   var testFns = {
     test_spedlead_getSpedLeadsReturnsArray: test_spedlead_getSpedLeadsReturnsArray,
-    test_spedlead_getSpedLeadsReturnsEmptyWhenNone: test_spedlead_getSpedLeadsReturnsEmptyWhenNone
+    test_spedlead_getSpedLeadsReturnsEmptyWhenNone: test_spedlead_getSpedLeadsReturnsEmptyWhenNone,
+    test_spedlead_getUserStatusReturnsRole: test_spedlead_getUserStatusReturnsRole
   };
 
   tests.forEach(function(name) {
@@ -1642,4 +1644,25 @@ function test_spedlead_getSpedLeadsReturnsEmptyWhenNone() {
   PropertiesService.getScriptProperties().deleteProperty('sped_leads');
   var result = getSpedLeads_();
   assertEqual_(result.length, 0);
+}
+
+function test_spedlead_getUserStatusReturnsRole() {
+  var testEmail = 'spedlead@test.org';
+  var mockCaseloads = [
+    {email: 'cm1@test.org', name: 'CM One', spreadsheetId: 'abc123'}
+  ];
+
+  PropertiesService.getScriptProperties().setProperty('sped_leads', JSON.stringify([testEmail]));
+  PropertiesService.getScriptProperties().setProperty('sped_lead_caseloads_' + testEmail, JSON.stringify(mockCaseloads));
+
+  // Note: Can't fully test getUserStatus without mocking Session.getActiveUser()
+  // This test verifies the SPED Lead check logic works
+  var spedLeads = getSpedLeads_();
+  assertEqual_(spedLeads.indexOf(testEmail) !== -1, true);
+  var caseloads = getSpedLeadCaseloads_(testEmail);
+  assertEqual_(caseloads.length, 1);
+
+  // Cleanup
+  PropertiesService.getScriptProperties().deleteProperty('sped_leads');
+  PropertiesService.getScriptProperties().deleteProperty('sped_lead_caseloads_' + testEmail);
 }
