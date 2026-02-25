@@ -4007,6 +4007,55 @@ function syncSpedLeadDashboard(spedLeadEmail) {
   };
 }
 
+/** Install daily 2am sync trigger for a SPED Lead. */
+function installSpedLeadSyncTrigger(spedLeadEmail) {
+  // Delete existing trigger if any
+  removeSpedLeadSyncTrigger(spedLeadEmail);
+
+  // Create daily trigger at 2am
+  var trigger = ScriptApp.newTrigger('onSpedLeadDailySyncTrigger')
+    .timeBased()
+    .atHour(2)
+    .everyDays(1)
+    .create();
+
+  // Store trigger ID
+  PropertiesService.getScriptProperties().setProperty(
+    'sped_lead_trigger_' + spedLeadEmail,
+    trigger.getUniqueId()
+  );
+
+  return {success: true, triggerId: trigger.getUniqueId()};
+}
+
+/** Remove SPED Lead sync trigger. */
+function removeSpedLeadSyncTrigger(spedLeadEmail) {
+  var triggerId = PropertiesService.getScriptProperties().getProperty('sped_lead_trigger_' + spedLeadEmail);
+  if (!triggerId) return;
+
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getUniqueId() === triggerId) {
+      ScriptApp.deleteTrigger(triggers[i]);
+      break;
+    }
+  }
+
+  PropertiesService.getScriptProperties().deleteProperty('sped_lead_trigger_' + spedLeadEmail);
+}
+
+/** Daily sync trigger handler - syncs all SPED Leads. */
+function onSpedLeadDailySyncTrigger(e) {
+  var spedLeads = getSpedLeads_();
+  spedLeads.forEach(function(email) {
+    try {
+      syncSpedLeadDashboard(email);
+    } catch(err) {
+      Logger.log('Failed to sync SPED Lead ' + email + ': ' + err.message);
+    }
+  });
+}
+
 /** Check if email is a SPED Lead. */
 function isSpedLead_(email) {
   var spedLeads = getSpedLeads_();
