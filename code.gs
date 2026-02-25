@@ -1705,61 +1705,6 @@ function saveFeedbackLinks(links) {
   return { success: true };
 }
 
-// ───── Dashboard Config (per-user) ─────
-
-/**
- * Retrieve the user's dashboard config (row order + custom widgets).
- * Returns default config if none saved.
- */
-function getDashboardConfig() {
-  var props = PropertiesService.getUserProperties();
-  var json = props.getProperty('dashboard_config');
-  if (!json) {
-    return getDefaultDashboardConfig_();
-  }
-  try {
-    var config = JSON.parse(json);
-    // Ensure required keys exist
-    if (!Array.isArray(config.rowOrder)) config.rowOrder = getDefaultDashboardConfig_().rowOrder;
-    if (!Array.isArray(config.widgets)) config.widgets = [];
-    return config;
-  } catch (e) {
-    return getDefaultDashboardConfig_();
-  }
-}
-
-/**
- * Save the user's dashboard config (row order + custom widgets).
- * Stored in UserProperties as JSON — no cache invalidation needed
- * since this doesn't affect student/eval data.
- */
-function saveDashboardConfig(config) {
-  if (!config || typeof config !== 'object') {
-    throw new Error('Invalid config');
-  }
-  if (!Array.isArray(config.rowOrder)) {
-    throw new Error('rowOrder must be an array');
-  }
-  if (!Array.isArray(config.widgets)) {
-    throw new Error('widgets must be an array');
-  }
-  // Cap widgets at 10 to prevent abuse of UserProperties storage
-  if (config.widgets.length > 10) {
-    throw new Error('Maximum 10 widgets allowed');
-  }
-  var props = PropertiesService.getUserProperties();
-  props.setProperty('dashboard_config', JSON.stringify(config));
-  return { success: true };
-}
-
-/** Default config: built-in rows in standard order, no widgets. */
-function getDefaultDashboardConfig_() {
-  return {
-    rowOrder: ['needs-attention', 'at-a-glance', 'evals', 'missing', 'recent'],
-    widgets: []
-  };
-}
-
 // ───── Co-Teacher Management ─────
 
 /** Return team members and the current user's role for the active spreadsheet. */
