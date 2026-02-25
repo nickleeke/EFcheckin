@@ -133,6 +133,9 @@
     <div id="dashboard-view" class="view">
       <div class="view-header">
         <div id="dashboard-greeting" class="dashboard-greeting"></div>
+        <button class="btn-icon customize-dashboard-btn" onclick="openCustomizeDashboard()" aria-label="Customize dashboard" title="Customize dashboard">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg>
+        </button>
       </div>
       <!-- Dashboard Overview (quick info only) -->
       <div id="tab-panel-caseload" class="tab-panel active">
@@ -155,6 +158,9 @@
           <h2 class="dashboard-subheader">Recent Students</h2>
           <div id="recent-students-content"></div>
         </div>
+        <button id="dashboard-add-widget-fab" class="dashboard-add-widget-fab" onclick="openAddWidgetPicker()" aria-label="Add widget" title="Add widget" style="display:none">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+        </button>
       </div>
       <!-- Student List (table + search) -->
       <div id="tab-panel-students" class="tab-panel">

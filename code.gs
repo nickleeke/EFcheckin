@@ -1705,6 +1705,31 @@ function saveFeedbackLinks(links) {
   return { success: true };
 }
 
+// ───── Dashboard Widget Config ─────
+
+function getDashboardConfig() {
+  var props = PropertiesService.getUserProperties();
+  var raw = props.getProperty('dashboard_config');
+  if (raw) {
+    try { return JSON.parse(raw); } catch(e) { /* fall through */ }
+  }
+  return getDefaultDashboardConfig_();
+}
+
+function saveDashboardConfig(config) {
+  if (!config || typeof config !== 'object') throw new Error('Invalid config');
+  var props = PropertiesService.getUserProperties();
+  props.setProperty('dashboard_config', JSON.stringify(config));
+  return { success: true };
+}
+
+function getDefaultDashboardConfig_() {
+  return {
+    rowOrder: ['needs-attention', 'at-a-glance', 'evals', 'missing', 'recent'],
+    widgets: []
+  };
+}
+
 // ───── Co-Teacher Management ─────
 
 /** Return team members and the current user's role for the active spreadsheet. */

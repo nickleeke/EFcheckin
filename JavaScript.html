@@ -81,6 +81,8 @@ var _generatingFileSummary = {};
 var _lastDashboardFetch = 0;
 var _lastEvalSummaryFetch = 0;
 var _lastDueProcessFetch = 0;
+var _widgetConfigSaveTimer = null;
+var _widgetExpandSourceEl = null;
 var DATA_FRESH_MS = 30000; // 30s — frontend staleness window for navigation
 var EVAL_FRESH_MS = 60000; // 60s — eval summary changes less often
 
@@ -644,6 +646,22 @@ function enterApp() {
   showView('dashboard-view');
   showDashboardSkeleton();
 
+  // Load dashboard widget config in parallel (available to all roles)
+  google.script.run
+    .withSuccessHandler(function(config) {
+      appState.dashboardConfig = config;
+      appState._dashboardConfigLoaded = true;
+      // Re-render if dashboard data already loaded
+      if (appState.dashboardData && appState.dashboardData.length > 0) {
+        renderDashboardFromState();
+      }
+    })
+    .withFailureHandler(function() {
+      appState.dashboardConfig = getDefaultDashboardConfig_fe();
+      appState._dashboardConfigLoaded = true;
+    })
+    .getDashboardConfig();
+
   google.script.run
     .withSuccessHandler(function(result) {
       try {
@@ -1050,6 +1068,8 @@ function showView(viewId) {
 
 function renderDashboardFromState() {
   var filtered = applyFilter_(appState.dashboardData);
+  applyDashboardOrder_();
+  renderCustomWidgets_();
   renderNeedsAttention(filtered);
   renderMissingAggregate(filtered);
   renderRecentStudents();
@@ -1058,6 +1078,7 @@ function renderDashboardFromState() {
   } else {
     hideEvalSections_();
   }
+  updateWidgetFabVisibility_();
 }
 
 function showDashboard() {
@@ -3423,6 +3444,788 @@ function buildEvalChecklistSkeleton_() {
 
   html += '</div></div>';
   return html;
+}
+
+// ─── Dashboard Widgets & Customization ───
+
+var WIDGET_BRAND_COLORS = [
+  { hex: '#C41E3A', name: 'Richfield Red' },
+  { hex: '#21376c', name: 'Navy' },
+  { hex: '#4ea3a8', name: 'Teal' },
+  { hex: '#79af61', name: 'Green' },
+  { hex: '#e8b34b', name: 'Gold' },
+  { hex: '#cf5d35', name: 'Orange' }
+];
+var WIDGET_PASTEL_COLORS = [
+  { hex: '#E8DFF5', name: 'Lavender' },
+  { hex: '#D0F2F2', name: 'Mint' },
+  { hex: '#E1F0DA', name: 'Sage' },
+  { hex: '#FFF4D9', name: 'Cream' },
+  { hex: '#FFE9D0', name: 'Peach' }
+];
+var BUILT_IN_ROWS_ = ['needs-attention', 'at-a-glance', 'evals', 'missing', 'recent'];
+var BUILT_IN_ROW_LABELS_ = {
+  'needs-attention': 'Needs Attention',
+  'at-a-glance': 'At a Glance',
+  'evals': 'Evals',
+  'missing': 'Missing Assignments',
+  'recent': 'Recent Students'
+};
+var BUILT_IN_ROW_IDS_ = {
+  'needs-attention': 'dashboard-needs-attention',
+  'at-a-glance': 'dashboard-at-a-glance',
+  'evals': 'dashboard-evals-section',
+  'missing': 'dashboard-missing-section',
+  'recent': 'dashboard-recent-section'
+};
+
+function getDefaultDashboardConfig_fe() {
+  return { rowOrder: BUILT_IN_ROWS_.slice(), widgets: [] };
+}
+
+/** Reorder dashboard section DOM elements + inject widget containers */
+function applyDashboardOrder_() {
+  if (!appState._dashboardConfigLoaded || !appState.dashboardConfig) return;
+  var panel = document.getElementById('tab-panel-caseload');
+  if (!panel) return;
+  var config = appState.dashboardConfig;
+
+  // Remove old widget sections that are no longer in config
+  panel.querySelectorAll('.dashboard-widget').forEach(function(el) {
+    var wid = el.getAttribute('data-widget-id');
+    if (wid && config.rowOrder.indexOf('widget-' + wid) === -1) {
+      el.parentNode.removeChild(el);
+    }
+  });
+
+  // Reorder: appendChild moves existing elements
+  config.rowOrder.forEach(function(rowId) {
+    if (rowId.indexOf('widget-') === 0) {
+      var widgetId = rowId.substring(7);
+      var existing = document.getElementById('dashboard-widget-' + widgetId);
+      if (!existing) {
+        existing = document.createElement('div');
+        existing.className = 'dashboard-section dashboard-widget';
+        existing.id = 'dashboard-widget-' + widgetId;
+        existing.setAttribute('data-widget-id', widgetId);
+      }
+      panel.appendChild(existing);
+    } else {
+      var domId = BUILT_IN_ROW_IDS_[rowId];
+      if (domId) {
+        var el = document.getElementById(domId);
+        if (el) panel.appendChild(el);
+      }
+    }
+  });
+
+  // Ensure FAB stays at the end
+  var fab = document.getElementById('dashboard-add-widget-fab');
+  if (fab) panel.appendChild(fab);
+}
+
+/** Render all custom widget content */
+function renderCustomWidgets_() {
+  if (!appState._dashboardConfigLoaded || !appState.dashboardConfig) return;
+  appState.dashboardConfig.widgets.forEach(function(w) {
+    var container = document.getElementById('dashboard-widget-' + w.id);
+    if (!container) return;
+    container.style.display = '';
+    if (w.type === 'top3') {
+      container.innerHTML = renderTop3Collapsed_(w);
+    } else if (w.type === 'sticky-notes') {
+      container.innerHTML = renderStickyNotesCollapsed_(w);
+    }
+  });
+}
+
+/** Show/hide the FAB based on current view state */
+function updateWidgetFabVisibility_() {
+  var fab = document.getElementById('dashboard-add-widget-fab');
+  if (!fab) return;
+  var isDashboard = _currentViewId === 'dashboard-view';
+  var caseloadTab = document.getElementById('tab-panel-caseload');
+  var isActive = caseloadTab && caseloadTab.classList.contains('active');
+  fab.style.display = (isDashboard && isActive) ? 'flex' : 'none';
+}
+
+// ── Top 3 Widget (collapsed) ──
+
+function renderTop3Collapsed_(widget) {
+  var color = esc(widget.color || '#C41E3A');
+  var html = '<div class="top3-widget-card" style="border-color: ' + color + '"' +
+    ' onclick="openWidgetEditor(\'' + esc(widget.id) + '\', event)"' +
+    ' role="button" tabindex="0"' +
+    ' onkeydown="if(event.key===\'Enter\')openWidgetEditor(\'' + esc(widget.id) + '\', event)">';
+  html += '<div class="widget-header">' +
+    '<h2 class="dashboard-subheader" style="color: ' + color + '; margin: 0">' + esc(widget.title || "Today's Top 3") + '</h2>' +
+    '</div>';
+  var items = widget.items || [];
+  items.forEach(function(item, idx) {
+    if (!item.text) return;
+    var checked = item.checked ? ' checked' : '';
+    html += '<div class="top3-item">' +
+      '<label class="top3-checkbox" onclick="event.stopPropagation()">' +
+        '<input type="checkbox"' + checked + ' onchange="toggleTop3Item(\'' + esc(widget.id) + '\', ' + idx + ', this)">' +
+        '<span class="top3-checkmark" style="border-color: ' + color + '; background: ' + (item.checked ? color : 'transparent') + '">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>' +
+        '</span>' +
+        '<span class="top3-text' + (item.checked ? ' completed' : '') + '">' + esc(item.text) + '</span>' +
+      '</label>' +
+    '</div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+function toggleTop3Item(widgetId, itemIndex, checkbox) {
+  var widget = findWidget_(widgetId);
+  if (!widget || !widget.items[itemIndex]) return;
+  widget.items[itemIndex].checked = checkbox.checked;
+
+  // Optimistic UI: update visuals immediately
+  var label = checkbox.closest('.top3-checkbox');
+  if (label) {
+    var checkmark = label.querySelector('.top3-checkmark');
+    var text = label.querySelector('.top3-text');
+    if (checkmark) {
+      checkmark.style.background = checkbox.checked ? (widget.color || '#C41E3A') : 'transparent';
+    }
+    if (text) {
+      if (checkbox.checked) text.classList.add('completed');
+      else text.classList.remove('completed');
+    }
+  }
+  debounceSaveWidgetConfig_();
+}
+
+// ── Sticky Notes Widget (collapsed) ──
+
+function renderStickyNotesCollapsed_(widget) {
+  var notes = widget.notes || [];
+  if (notes.length === 0) return '<div class="sticky-notes-row" style="min-height:60px;display:flex;align-items:center;justify-content:center;color:var(--md-on-surface-variant);cursor:pointer" onclick="openWidgetEditor(\'' + esc(widget.id) + '\', event)" role="button" tabindex="0" onkeydown="if(event.key===\'Enter\')openWidgetEditor(\'' + esc(widget.id) + '\', event)">Click to add notes</div>';
+  var html = '<div class="widget-header"><h2 class="dashboard-subheader" style="margin:0">Sticky Notes</h2></div>';
+  html += '<div class="sticky-notes-row" onclick="openWidgetEditor(\'' + esc(widget.id) + '\', event)" role="button" tabindex="0" onkeydown="if(event.key===\'Enter\')openWidgetEditor(\'' + esc(widget.id) + '\', event)">';
+  notes.forEach(function(note) {
+    html += '<div class="sticky-note-card" style="background-color: ' + esc(note.color || '#FFF4D9') + '">' +
+      '<div class="sticky-note-header">' + esc(note.title || '') + '</div>' +
+      '<div class="sticky-note-body">' + esc(note.body || '') + '</div>' +
+    '</div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+// ── Widget Helpers ──
+
+function findWidget_(widgetId) {
+  if (!appState.dashboardConfig) return null;
+  return appState.dashboardConfig.widgets.find(function(w) { return w.id === widgetId; }) || null;
+}
+
+function debounceSaveWidgetConfig_() {
+  if (_widgetConfigSaveTimer) clearTimeout(_widgetConfigSaveTimer);
+  _widgetConfigSaveTimer = setTimeout(function() {
+    _widgetConfigSaveTimer = null;
+    persistWidgetConfig_();
+  }, 1000);
+}
+
+function persistWidgetConfig_() {
+  if (!appState.dashboardConfig) return;
+  google.script.run
+    .withFailureHandler(function(err) {
+      showToast('Error saving widget: ' + (err && err.message ? err.message : String(err)));
+    })
+    .saveDashboardConfig(appState.dashboardConfig);
+}
+
+// ── Add Widget FAB + Picker ──
+
+function openAddWidgetPicker() {
+  var overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+  overlay.id = 'widget-picker-overlay';
+  overlay.innerHTML =
+    '<div class="confirm-dialog" style="max-width:420px">' +
+      '<h3>Add Widget</h3>' +
+      '<p class="hint">Choose a widget to add to your dashboard</p>' +
+      '<div class="widget-picker-grid">' +
+        '<div class="widget-picker-card" onclick="addNewWidget(\'top3\')" role="button" tabindex="0" onkeydown="if(event.key===\'Enter\')addNewWidget(\'top3\')">' +
+          '<svg width="40" height="40" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.11 0 2-.9 2-2V5c0-1.1-.89-2-2-2zm-9 14l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>' +
+          '<h4>Today\'s Top 3</h4>' +
+          '<p>A checklist with your daily priorities</p>' +
+        '</div>' +
+        '<div class="widget-picker-card" onclick="addNewWidget(\'sticky-notes\')" role="button" tabindex="0" onkeydown="if(event.key===\'Enter\')addNewWidget(\'sticky-notes\')">' +
+          '<svg width="40" height="40" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H4.99c-1.11 0-1.98.89-1.98 2L3 19c0 1.1.88 2 1.99 2H19c1.1 0 2-.9 2-2V5c0-1.11-.9-2-2-2zm0 12h-4c0 1.66-1.35 3-3 3s-3-1.34-3-3H4.99V5H19v10z"/></svg>' +
+          '<h4>Sticky Notes</h4>' +
+          '<p>Colorful reminder cards</p>' +
+        '</div>' +
+      '</div>' +
+      '<div class="confirm-actions">' +
+        '<button class="btn btn-outlined" onclick="closeConfirmDialog(this.closest(\'.confirm-overlay\'))">Cancel</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+}
+
+function addNewWidget(type) {
+  closeConfirmDialog(document.getElementById('widget-picker-overlay'));
+  var widget;
+  if (type === 'top3') {
+    widget = {
+      id: 'top3-' + Date.now(),
+      type: 'top3',
+      title: "Today's Top 3",
+      color: '#C41E3A',
+      items: [
+        { text: '', checked: false },
+        { text: '', checked: false },
+        { text: '', checked: false }
+      ]
+    };
+  } else {
+    widget = {
+      id: 'sticky-' + Date.now(),
+      type: 'sticky-notes',
+      notes: [{ title: '', body: '', color: '#FFF4D9' }]
+    };
+  }
+  // Open editor immediately (no source card — use scale-in)
+  openWidgetEditorForNew_(widget);
+}
+
+// ── Container Transform — Widget Editor ──
+
+function openWidgetEditor(widgetId, event) {
+  if (event) event.stopPropagation();
+  var widget = findWidget_(widgetId);
+  if (!widget) return;
+  var sourceEl = document.getElementById('dashboard-widget-' + widgetId);
+  var sourceCard = sourceEl ? sourceEl.querySelector('.top3-widget-card, .sticky-notes-row') : null;
+  openWidgetExpandCard_(widget, sourceCard, false);
+}
+
+function openWidgetEditorForNew_(widget) {
+  openWidgetExpandCard_(widget, null, true);
+}
+
+function openWidgetExpandCard_(widget, sourceCard, isNew) {
+  // Create overlay
+  var overlay = document.createElement('div');
+  overlay.className = 'widget-expand-overlay';
+  overlay.id = 'widget-expand-overlay';
+  overlay.onclick = function(e) {
+    if (e.target === overlay) closeWidgetExpandCard_(isNew);
+  };
+  document.body.appendChild(overlay);
+
+  // Create expand card
+  var card = document.createElement('div');
+  card.className = 'widget-expand-card';
+  card.id = 'widget-expand-card';
+  card.setAttribute('data-widget-id', widget.id);
+  card.setAttribute('data-is-new', isNew ? '1' : '0');
+
+  // Build editor content
+  card.innerHTML = buildWidgetEditorHtml_(widget, isNew);
+
+  // Position & animate
+  if (sourceCard) {
+    _widgetExpandSourceEl = sourceCard;
+    var rect = sourceCard.getBoundingClientRect();
+    card.style.top = rect.top + 'px';
+    card.style.left = rect.left + 'px';
+    card.style.width = rect.width + 'px';
+    card.style.height = rect.height + 'px';
+    card.style.borderRadius = '12px';
+    document.body.appendChild(card);
+    sourceCard.style.visibility = 'hidden';
+
+    // Trigger expand animation on next frame
+    requestAnimationFrame(function() {
+      overlay.classList.add('visible');
+      card.classList.add('expanding');
+      var targetW = Math.min(520, window.innerWidth - 32);
+      var targetH = Math.min(widget.type === 'sticky-notes' ? 580 : 440, window.innerHeight - 48);
+      card.style.top = ((window.innerHeight - targetH) / 2) + 'px';
+      card.style.left = ((window.innerWidth - targetW) / 2) + 'px';
+      card.style.width = targetW + 'px';
+      card.style.height = targetH + 'px';
+      card.style.borderRadius = '28px';
+      card.classList.add('expanded-centered');
+    });
+  } else {
+    // New widget: scale-in from center
+    var targetW = Math.min(520, window.innerWidth - 32);
+    var targetH = Math.min(widget.type === 'sticky-notes' ? 580 : 440, window.innerHeight - 48);
+    card.style.top = ((window.innerHeight - targetH) / 2) + 'px';
+    card.style.left = ((window.innerWidth - targetW) / 2) + 'px';
+    card.style.width = targetW + 'px';
+    card.style.height = targetH + 'px';
+    card.style.borderRadius = '28px';
+    card.classList.add('scale-in', 'expanded-centered');
+    document.body.appendChild(card);
+    requestAnimationFrame(function() { overlay.classList.add('visible'); });
+  }
+
+  // Escape key handler
+  card._escHandler = function(e) {
+    if (e.key === 'Escape') closeWidgetExpandCard_(isNew);
+  };
+  document.addEventListener('keydown', card._escHandler);
+}
+
+function closeWidgetExpandCard_(isNewUnused) {
+  var overlay = document.getElementById('widget-expand-overlay');
+  var card = document.getElementById('widget-expand-card');
+  if (!card || !overlay) return;
+
+  // Remove escape handler
+  if (card._escHandler) {
+    document.removeEventListener('keydown', card._escHandler);
+  }
+
+  if (_widgetExpandSourceEl) {
+    // Reverse container transform
+    var rect = _widgetExpandSourceEl.getBoundingClientRect();
+    card.classList.remove('expanding');
+    card.classList.add('collapsing');
+    card.style.top = rect.top + 'px';
+    card.style.left = rect.left + 'px';
+    card.style.width = rect.width + 'px';
+    card.style.height = rect.height + 'px';
+    card.style.borderRadius = '12px';
+    card.style.opacity = '0.5';
+    overlay.classList.remove('visible');
+    overlay.classList.add('fade-out');
+
+    setTimeout(function() {
+      if (_widgetExpandSourceEl) _widgetExpandSourceEl.style.visibility = '';
+      _widgetExpandSourceEl = null;
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      if (card.parentNode) card.parentNode.removeChild(card);
+    }, 300);
+  } else {
+    // Scale-out
+    card.classList.remove('scale-in');
+    card.classList.add('scale-out');
+    overlay.classList.remove('visible');
+    overlay.classList.add('fade-out');
+    _widgetExpandSourceEl = null;
+    setTimeout(function() {
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      if (card.parentNode) card.parentNode.removeChild(card);
+    }, 200);
+  }
+}
+
+function buildWidgetEditorHtml_(widget, isNew) {
+  var html = '<button class="btn-icon widget-expand-close-btn" onclick="closeWidgetExpandCard_()" aria-label="Close">' +
+    '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>' +
+  '</button>';
+  html += '<div class="widget-editor-content">';
+
+  if (widget.type === 'top3') {
+    html += buildTop3EditorHtml_(widget);
+  } else if (widget.type === 'sticky-notes') {
+    html += buildStickyNotesEditorHtml_(widget);
+  }
+
+  html += '</div>';
+  html += '<div class="widget-editor-actions">';
+  if (!isNew) {
+    html += '<button class="btn btn-ghost widget-delete-btn" onclick="deleteWidgetFromEditor(\'' + esc(widget.id) + '\')">Delete</button>';
+  } else {
+    html += '<div></div>';
+  }
+  html += '<div class="widget-editor-actions-right">' +
+    '<button class="btn btn-outlined" onclick="closeWidgetExpandCard_()">Cancel</button>' +
+    '<button class="btn" onclick="saveWidgetFromEditor(\'' + esc(widget.id) + '\', ' + (isNew ? 'true' : 'false') + ')">Save</button>' +
+  '</div></div>';
+  return html;
+}
+
+// ── Top 3 Editor Content ──
+
+function buildTop3EditorHtml_(widget) {
+  var color = widget.color || '#C41E3A';
+  var html = '<h3 style="color: ' + esc(color) + '">' + (widget.title ? esc(widget.title) : "Today's Top 3") + '</h3>';
+  html += '<div class="form-row">' +
+    '<label class="form-label">Title</label>' +
+    '<input type="text" id="widget-editor-title" class="form-input" value="' + esc(widget.title || "Today's Top 3") + '" maxlength="50">' +
+  '</div>';
+  html += '<div class="form-row">' +
+    '<label class="form-label">Color</label>' +
+    '<div class="color-picker-row" id="widget-color-picker">';
+  WIDGET_BRAND_COLORS.forEach(function(c) {
+    var sel = c.hex.toLowerCase() === color.toLowerCase() ? ' selected' : '';
+    html += '<div class="color-swatch' + sel + '" style="background-color: ' + c.hex + '" ' +
+      'onclick="selectWidgetColor(\'' + c.hex + '\')" ' +
+      'role="button" tabindex="0" onkeydown="if(event.key===\'Enter\')selectWidgetColor(\'' + c.hex + '\')" ' +
+      'title="' + esc(c.name) + '" data-color="' + c.hex + '">' +
+      (sel ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>' : '') +
+    '</div>';
+  });
+  html += '</div></div>';
+  html += '<div class="form-row"><label class="form-label">Items</label>';
+  var items = widget.items || [];
+  for (var i = 0; i < 3; i++) {
+    var val = items[i] ? esc(items[i].text || '') : '';
+    html += '<input type="text" class="form-input widget-top3-item-input" value="' + val + '" placeholder="Task ' + (i + 1) + '" maxlength="100" style="margin-bottom:8px">';
+  }
+  html += '</div>';
+  return html;
+}
+
+function selectWidgetColor(hex) {
+  var picker = document.getElementById('widget-color-picker');
+  if (!picker) return;
+  picker.querySelectorAll('.color-swatch').forEach(function(s) {
+    s.classList.remove('selected');
+    s.innerHTML = '';
+  });
+  var swatch = picker.querySelector('[data-color="' + hex + '"]');
+  if (swatch) {
+    swatch.classList.add('selected');
+    var isDark = hex !== '#e8b34b' && hex !== '#FFF4D9' && hex !== '#FFE9D0' && hex !== '#E1F0DA' && hex !== '#D0F2F2' && hex !== '#E8DFF5';
+    var fill = isDark ? 'white' : 'rgba(0,0,0,0.6)';
+    swatch.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="' + fill + '"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>';
+  }
+}
+
+// ── Sticky Notes Editor Content ──
+
+function buildStickyNotesEditorHtml_(widget) {
+  var html = '<h3>Sticky Notes</h3>';
+  html += '<div id="sticky-editor-list">';
+  var notes = widget.notes || [];
+  notes.forEach(function(note, idx) {
+    html += buildStickyNoteEditorCard_(note, idx);
+  });
+  html += '</div>';
+  if (notes.length < 4) {
+    html += '<button class="btn btn-outlined" id="sticky-add-note-btn" onclick="addStickyNoteEditorCard()" style="width:100%;margin-top:8px">Add Note</button>';
+  }
+  return html;
+}
+
+function buildStickyNoteEditorCard_(note, index) {
+  var html = '<div class="sticky-note-editor-card" data-note-index="' + index + '">' +
+    '<div class="sticky-note-editor-header">' +
+      '<span>Note ' + (index + 1) + '</span>' +
+      '<button class="btn-icon" onclick="removeStickyNoteEditorCard(this)" aria-label="Remove note">' +
+        '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>' +
+      '</button>' +
+    '</div>' +
+    '<input type="text" class="form-input sticky-editor-title" value="' + esc(note.title || '') + '" placeholder="Title" maxlength="30">' +
+    '<textarea class="form-input sticky-editor-body" placeholder="Note content" maxlength="200" rows="2">' + esc(note.body || '') + '</textarea>' +
+    '<div class="color-picker-row">';
+  WIDGET_PASTEL_COLORS.forEach(function(c) {
+    var sel = c.hex.toLowerCase() === (note.color || '#FFF4D9').toLowerCase() ? ' selected' : '';
+    html += '<div class="color-swatch' + sel + '" style="background-color: ' + c.hex + '; border-color: ' + (sel ? 'var(--md-on-surface)' : 'rgba(0,0,0,0.1)') + '" ' +
+      'onclick="selectStickyNoteColor(this, \'' + c.hex + '\')" ' +
+      'role="button" tabindex="0" onkeydown="if(event.key===\'Enter\')selectStickyNoteColor(this, \'' + c.hex + '\')" ' +
+      'title="' + esc(c.name) + '" data-color="' + c.hex + '">' +
+      (sel ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="rgba(0,0,0,0.6)"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>' : '') +
+    '</div>';
+  });
+  html += '</div></div>';
+  return html;
+}
+
+function addStickyNoteEditorCard() {
+  var list = document.getElementById('sticky-editor-list');
+  if (!list) return;
+  var count = list.querySelectorAll('.sticky-note-editor-card').length;
+  if (count >= 4) { showToast('Maximum 4 notes'); return; }
+  var html = buildStickyNoteEditorCard_({ title: '', body: '', color: '#FFF4D9' }, count);
+  list.insertAdjacentHTML('beforeend', html);
+  // Update indices
+  renumberStickyEditorCards_();
+  // Hide add button if at max
+  if (count + 1 >= 4) {
+    var btn = document.getElementById('sticky-add-note-btn');
+    if (btn) btn.style.display = 'none';
+  }
+}
+
+function removeStickyNoteEditorCard(btnEl) {
+  var card = btnEl.closest('.sticky-note-editor-card');
+  if (card) card.remove();
+  renumberStickyEditorCards_();
+  var btn = document.getElementById('sticky-add-note-btn');
+  if (btn) btn.style.display = '';
+}
+
+function renumberStickyEditorCards_() {
+  var cards = document.querySelectorAll('.sticky-note-editor-card');
+  cards.forEach(function(card, idx) {
+    card.setAttribute('data-note-index', idx);
+    var label = card.querySelector('.sticky-note-editor-header span');
+    if (label) label.textContent = 'Note ' + (idx + 1);
+  });
+}
+
+function selectStickyNoteColor(swatchEl, hex) {
+  var card = swatchEl.closest('.sticky-note-editor-card');
+  if (!card) return;
+  card.querySelectorAll('.color-swatch').forEach(function(s) {
+    s.classList.remove('selected');
+    s.style.borderColor = 'rgba(0,0,0,0.1)';
+    s.innerHTML = '';
+  });
+  swatchEl.classList.add('selected');
+  swatchEl.style.borderColor = 'var(--md-on-surface)';
+  swatchEl.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="rgba(0,0,0,0.6)"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>';
+}
+
+// ── Save / Delete Widget from Editor ──
+
+function saveWidgetFromEditor(widgetId, isNew) {
+  var card = document.getElementById('widget-expand-card');
+  if (!card) return;
+  var widgetType = card.querySelector('.widget-top3-item-input') ? 'top3' : 'sticky-notes';
+  var updatedWidget;
+
+  if (widgetType === 'top3') {
+    var titleInput = card.querySelector('#widget-editor-title');
+    var title = titleInput ? titleInput.value.trim() : '';
+    if (!title) { showToast('Please enter a title'); return; }
+    var colorSwatch = card.querySelector('.color-swatch.selected');
+    var color = colorSwatch ? colorSwatch.getAttribute('data-color') : '#C41E3A';
+    var items = [];
+    card.querySelectorAll('.widget-top3-item-input').forEach(function(input) {
+      items.push({ text: input.value.trim(), checked: false });
+    });
+    // Preserve check state from existing widget
+    if (!isNew) {
+      var existing = findWidget_(widgetId);
+      if (existing && existing.items) {
+        items.forEach(function(item, i) {
+          if (existing.items[i] && existing.items[i].text === item.text) {
+            item.checked = existing.items[i].checked;
+          }
+        });
+      }
+    }
+    updatedWidget = { id: widgetId, type: 'top3', title: title, color: color, items: items };
+  } else {
+    var notes = [];
+    card.querySelectorAll('.sticky-note-editor-card').forEach(function(noteCard) {
+      var t = noteCard.querySelector('.sticky-editor-title');
+      var b = noteCard.querySelector('.sticky-editor-body');
+      var cs = noteCard.querySelector('.color-swatch.selected');
+      var noteTitle = t ? t.value.trim() : '';
+      var noteBody = b ? b.value.trim() : '';
+      var noteColor = cs ? cs.getAttribute('data-color') : '#FFF4D9';
+      if (noteTitle || noteBody) {
+        notes.push({ title: noteTitle, body: noteBody, color: noteColor });
+      }
+    });
+    if (notes.length === 0) { showToast('Please add at least one note'); return; }
+    updatedWidget = { id: widgetId, type: 'sticky-notes', notes: notes };
+  }
+
+  if (!appState.dashboardConfig) appState.dashboardConfig = getDefaultDashboardConfig_fe();
+
+  if (isNew) {
+    appState.dashboardConfig.widgets.push(updatedWidget);
+    // Insert after first row
+    var insertIdx = appState.dashboardConfig.rowOrder.length > 0 ? 1 : 0;
+    appState.dashboardConfig.rowOrder.splice(insertIdx, 0, 'widget-' + updatedWidget.id);
+  } else {
+    var idx = appState.dashboardConfig.widgets.findIndex(function(w) { return w.id === widgetId; });
+    if (idx !== -1) appState.dashboardConfig.widgets[idx] = updatedWidget;
+  }
+
+  persistWidgetConfig_();
+  closeWidgetExpandCard_();
+  renderDashboardFromState();
+  showToast(isNew ? 'Widget added' : 'Widget updated');
+}
+
+function deleteWidgetFromEditor(widgetId) {
+  showConfirmDialog({
+    title: 'Delete Widget',
+    body: 'Are you sure you want to delete this widget?',
+    confirmLabel: 'Delete',
+    confirmClass: 'btn-danger',
+    onConfirm: "doDeleteWidget('" + widgetId + "')"
+  });
+}
+
+function doDeleteWidget(widgetId) {
+  if (!appState.dashboardConfig) return;
+  appState.dashboardConfig.widgets = appState.dashboardConfig.widgets.filter(function(w) {
+    return w.id !== widgetId;
+  });
+  appState.dashboardConfig.rowOrder = appState.dashboardConfig.rowOrder.filter(function(r) {
+    return r !== 'widget-' + widgetId;
+  });
+  // Remove DOM element
+  var el = document.getElementById('dashboard-widget-' + widgetId);
+  if (el && el.parentNode) el.parentNode.removeChild(el);
+
+  persistWidgetConfig_();
+  closeWidgetExpandCard_();
+  renderDashboardFromState();
+  showToast('Widget deleted');
+}
+
+// ── Dashboard Reorder Modal ──
+
+function openCustomizeDashboard() {
+  if (!appState.dashboardConfig) {
+    showToast('Dashboard not ready');
+    return;
+  }
+  var overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+  overlay.id = 'customize-dashboard-overlay';
+
+  var html = '<div class="confirm-dialog customize-dashboard-modal" style="max-width:480px">' +
+    '<h3>Customize Dashboard</h3>' +
+    '<p class="hint">Drag rows to reorder your dashboard sections</p>' +
+    '<div id="dashboard-reorder-list" class="dashboard-reorder-list">';
+
+  appState.dashboardConfig.rowOrder.forEach(function(rowId, idx) {
+    var title = getRowDisplayName_(rowId);
+    var iconSvg = getRowIconSvg_(rowId);
+    html += '<div class="reorder-row" draggable="true" data-row-id="' + esc(rowId) + '" data-index="' + idx + '" role="listitem" tabindex="0">' +
+      '<svg class="reorder-handle" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm-2-8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>' +
+      iconSvg +
+      '<span class="reorder-row-title">' + esc(title) + '</span>' +
+    '</div>';
+  });
+
+  html += '</div>' +
+    '<div class="confirm-actions">' +
+      '<button class="btn btn-outlined" onclick="closeConfirmDialog(document.getElementById(\'customize-dashboard-overlay\'))">Cancel</button>' +
+      '<button class="btn" onclick="saveCustomizeDashboard()">Save Order</button>' +
+    '</div></div>';
+
+  overlay.innerHTML = html;
+  document.body.appendChild(overlay);
+  initReorderDragDrop_();
+}
+
+function getRowDisplayName_(rowId) {
+  if (rowId.indexOf('widget-') === 0) {
+    var wid = rowId.substring(7);
+    var w = findWidget_(wid);
+    if (!w) return 'Widget';
+    if (w.type === 'top3') return w.title || "Today's Top 3";
+    if (w.type === 'sticky-notes') return 'Sticky Notes';
+    return 'Widget';
+  }
+  return BUILT_IN_ROW_LABELS_[rowId] || rowId;
+}
+
+function getRowIconSvg_(rowId) {
+  var paths = {
+    'needs-attention': 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z',
+    'at-a-glance': 'M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z',
+    'evals': 'M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z',
+    'missing': 'M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm2 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z',
+    'recent': 'M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z'
+  };
+  if (rowId.indexOf('widget-') === 0) {
+    var wid = rowId.substring(7);
+    var w = findWidget_(wid);
+    if (w && w.type === 'top3') {
+      return '<svg class="reorder-row-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.11 0 2-.9 2-2V5c0-1.1-.89-2-2-2zm-9 14l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>';
+    }
+    return '<svg class="reorder-row-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H4.99c-1.11 0-1.98.89-1.98 2L3 19c0 1.1.88 2 1.99 2H19c1.1 0 2-.9 2-2V5c0-1.11-.9-2-2-2zm0 12h-4c0 1.66-1.35 3-3 3s-3-1.34-3-3H4.99V5H19v10z"/></svg>';
+  }
+  var p = paths[rowId] || 'M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14z';
+  return '<svg class="reorder-row-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="' + p + '"/></svg>';
+}
+
+// ── Reorder Drag & Drop ──
+
+var _reorderDragState = { draggedEl: null, draggedIdx: -1 };
+
+function initReorderDragDrop_() {
+  var list = document.getElementById('dashboard-reorder-list');
+  if (!list) return;
+  list.addEventListener('dragstart', function(e) {
+    var row = e.target.closest('.reorder-row');
+    if (!row) return;
+    _reorderDragState.draggedEl = row;
+    _reorderDragState.draggedIdx = parseInt(row.getAttribute('data-index'), 10);
+    row.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+  });
+  list.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    var row = e.target.closest('.reorder-row');
+    if (!row || row === _reorderDragState.draggedEl) return;
+    list.querySelectorAll('.reorder-row').forEach(function(r) { r.classList.remove('drop-target'); });
+    row.classList.add('drop-target');
+  });
+  list.addEventListener('drop', function(e) {
+    e.preventDefault();
+    var target = e.target.closest('.reorder-row');
+    if (!target || !_reorderDragState.draggedEl || target === _reorderDragState.draggedEl) return;
+    var rows = Array.from(list.querySelectorAll('.reorder-row'));
+    var fromIdx = rows.indexOf(_reorderDragState.draggedEl);
+    var toIdx = rows.indexOf(target);
+    if (fromIdx < 0 || toIdx < 0) return;
+    if (fromIdx < toIdx) {
+      list.insertBefore(_reorderDragState.draggedEl, target.nextSibling);
+    } else {
+      list.insertBefore(_reorderDragState.draggedEl, target);
+    }
+    // Update data-index attributes
+    list.querySelectorAll('.reorder-row').forEach(function(r, i) {
+      r.setAttribute('data-index', i);
+    });
+  });
+  list.addEventListener('dragend', function() {
+    list.querySelectorAll('.reorder-row').forEach(function(r) {
+      r.classList.remove('dragging', 'drop-target');
+    });
+    _reorderDragState = { draggedEl: null, draggedIdx: -1 };
+  });
+
+  // Keyboard reorder support
+  list.addEventListener('keydown', function(e) {
+    var row = e.target.closest('.reorder-row');
+    if (!row) return;
+    if (e.key === 'ArrowUp' && row.previousElementSibling) {
+      e.preventDefault();
+      list.insertBefore(row, row.previousElementSibling);
+      row.focus();
+      list.querySelectorAll('.reorder-row').forEach(function(r, i) { r.setAttribute('data-index', i); });
+    } else if (e.key === 'ArrowDown' && row.nextElementSibling) {
+      e.preventDefault();
+      list.insertBefore(row, row.nextElementSibling.nextSibling);
+      row.focus();
+      list.querySelectorAll('.reorder-row').forEach(function(r, i) { r.setAttribute('data-index', i); });
+    }
+  });
+}
+
+function saveCustomizeDashboard() {
+  var rows = document.querySelectorAll('#dashboard-reorder-list .reorder-row');
+  var newOrder = [];
+  rows.forEach(function(row) {
+    newOrder.push(row.getAttribute('data-row-id'));
+  });
+  appState.dashboardConfig.rowOrder = newOrder;
+
+  google.script.run
+    .withSuccessHandler(function() {
+      showToast('Dashboard layout saved');
+      closeConfirmDialog(document.getElementById('customize-dashboard-overlay'));
+      renderDashboardFromState();
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error saving: ' + (err && err.message ? err.message : String(err)));
+    })
+    .saveDashboardConfig(appState.dashboardConfig);
 }
 
 // ─── Side Panel (Quick View on Double-Click) ───
