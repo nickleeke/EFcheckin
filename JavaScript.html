@@ -604,6 +604,10 @@ function enterApp() {
   var navDrawer = document.getElementById('nav-drawer');
   if (navbar) navbar.style.display = '';
   if (navDrawer) navDrawer.style.display = '';
+
+  // Update nav drawer visibility for SPED Lead
+  updateNavForSpedLead_();
+
   // Load global case managers list
   google.script.run
     .withSuccessHandler(function(cms) {
@@ -649,6 +653,32 @@ function enterApp() {
         renderErrorState(err && err.message ? err.message : String(err));
     })
     .initializeSheets();
+}
+
+/** Show/hide SPED Lead nav items based on user role. */
+function updateNavForSpedLead_() {
+  var spedLeadDivider = document.getElementById('nav-spedlead-divider');
+  var spedLeadDashboard = document.getElementById('drawer-spedlead-dashboard');
+  var spedLeadStudents = document.getElementById('drawer-spedlead-students');
+  var studentsGroup = document.getElementById('nav-group-students');
+  var dueProcessItem = document.getElementById('drawer-dueprocess');
+  var teamItem = document.getElementById('drawer-team');
+
+  if (appState.userRole === 'sped-lead') {
+    // Show SPED Lead nav items
+    if (spedLeadDivider) spedLeadDivider.style.display = '';
+    if (spedLeadDashboard) spedLeadDashboard.style.display = '';
+    if (spedLeadStudents) spedLeadStudents.style.display = '';
+    // Hide standard nav items
+    if (studentsGroup) studentsGroup.style.display = 'none';
+    if (dueProcessItem) dueProcessItem.style.display = 'none';
+    if (teamItem) teamItem.style.display = 'none';
+  } else {
+    // Hide SPED Lead nav items (standard nav items already visible)
+    if (spedLeadDivider) spedLeadDivider.style.display = 'none';
+    if (spedLeadDashboard) spedLeadDashboard.style.display = 'none';
+    if (spedLeadStudents) spedLeadStudents.style.display = 'none';
+  }
 }
 
 // ─── Navigation Drawer Toggle ───
