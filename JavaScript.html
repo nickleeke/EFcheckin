@@ -48,7 +48,13 @@ var appState = {
   autoExpandProgressGoalId: null,
   aiKeyAvailable: false,
   permissions: null,   // null = caseload manager (full access), object = restricted
-  userRole: null       // 'caseload-manager', 'co-teacher', 'service-provider', 'para'
+  userRole: null,      // 'caseload-manager', 'co-teacher', 'service-provider', 'para', 'sped-lead'
+  spedLeadData: null,  // {dashboard, students, timeline, currentCM}
+  spedLeadFilter: {    // Students view filters
+    caseManager: 'all',
+    grade: 'all',
+    search: ''
+  }
 };
 var _persistTimers = {};
 var _persistInFlight = 0;
