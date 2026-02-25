@@ -1611,13 +1611,15 @@ function runAllSpedLeadTests() {
   var tests = [
     'test_spedlead_getSpedLeadsReturnsArray',
     'test_spedlead_getSpedLeadsReturnsEmptyWhenNone',
-    'test_spedlead_getUserStatusReturnsRole'
+    'test_spedlead_getUserStatusReturnsRole',
+    'test_spedlead_getEvalMetricsReturnsZeroForEmpty'
   ];
 
   var testFns = {
     test_spedlead_getSpedLeadsReturnsArray: test_spedlead_getSpedLeadsReturnsArray,
     test_spedlead_getSpedLeadsReturnsEmptyWhenNone: test_spedlead_getSpedLeadsReturnsEmptyWhenNone,
-    test_spedlead_getUserStatusReturnsRole: test_spedlead_getUserStatusReturnsRole
+    test_spedlead_getUserStatusReturnsRole: test_spedlead_getUserStatusReturnsRole,
+    test_spedlead_getEvalMetricsReturnsZeroForEmpty: test_spedlead_getEvalMetricsReturnsZeroForEmpty
   };
 
   tests.forEach(function(name) {
@@ -1665,4 +1667,19 @@ function test_spedlead_getUserStatusReturnsRole() {
   // Cleanup
   PropertiesService.getScriptProperties().deleteProperty('sped_leads');
   PropertiesService.getScriptProperties().deleteProperty('sped_lead_caseloads_' + testEmail);
+}
+
+function test_spedlead_getEvalMetricsReturnsZeroForEmpty() {
+  // Create temporary test spreadsheet
+  var testSS = SpreadsheetApp.create('Test SPED Lead Metrics');
+  var evalsSheet = testSS.insertSheet('Evaluations');
+  evalsSheet.appendRow(['id', 'studentId', 'type', 'createdAt', 'meetingDate']);
+
+  var result = getEvalMetrics_(testSS);
+  assertEqual_(result.activeCount, 0, 'activeCount should be 0 for empty sheet');
+  assertEqual_(result.overdueCount, 0, 'overdueCount should be 0 for empty sheet');
+  assertEqual_(result.dueThisWeekCount, 0, 'dueThisWeekCount should be 0 for empty sheet');
+
+  // Cleanup
+  DriveApp.getFileById(testSS.getId()).setTrashed(true);
 }

@@ -3747,6 +3747,144 @@ function getSpedLeadSpreadsheetId_(spedLeadEmail) {
   return PropertiesService.getScriptProperties().getProperty('sped_lead_spreadsheet_' + spedLeadEmail);
 }
 
+/** Get eval metrics from a case manager's spreadsheet. */
+function getEvalMetrics_(ss) {
+  var evalsSheet = ss.getSheetByName('Evaluations');
+  if (!evalsSheet) {
+    return {activeCount: 0, overdueCount: 0, dueThisWeekCount: 0};
+  }
+
+  var data = evalsSheet.getDataRange().getValues();
+  if (data.length <= 1) {
+    return {activeCount: 0, overdueCount: 0, dueThisWeekCount: 0};
+  }
+
+  var headers = data[0];
+  var colIdx = buildColIdx_(headers);
+  var now = new Date();
+  var oneWeekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+  var activeCount = 0;
+  var overdueCount = 0;
+  var dueThisWeekCount = 0;
+
+  for (var i = 1; i < data.length; i++) {
+    var meetingDate = data[i][colIdx.meetingDate - 1];
+    if (!meetingDate) continue;
+
+    activeCount++;
+
+    if (meetingDate < now) {
+      overdueCount++;
+    } else if (meetingDate <= oneWeekFromNow) {
+      dueThisWeekCount++;
+    }
+  }
+
+  return {
+    activeCount: activeCount,
+    overdueCount: overdueCount,
+    dueThisWeekCount: dueThisWeekCount
+  };
+}
+
+/** Get due process metrics from a case manager's spreadsheet. */
+function getDueProcessMetrics_(ss) {
+  var iepSheet = ss.getSheetByName('IEPMeetings');
+  var progressSheet = ss.getSheetByName('ProgressReporting');
+
+  var upcomingIEPs = 0;
+  var progressCompletionRate = 0;
+
+  // Count upcoming IEPs (next 7 days)
+  if (iepSheet) {
+    var iepData = iepSheet.getDataRange().getValues();
+    if (iepData.length > 1) {
+      var headers = iepData[0];
+      var colIdx = buildColIdx_(headers);
+      var now = new Date();
+      var oneWeekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+      for (var i = 1; i < iepData.length; i++) {
+        var meetingDate = iepData[i][colIdx.meetingDate - 1];
+        if (meetingDate && meetingDate >= now && meetingDate <= oneWeekFromNow) {
+          upcomingIEPs++;
+        }
+      }
+    }
+  }
+
+  // Calculate progress completion rate (simplified - just check if entries exist)
+  if (progressSheet) {
+    var progressData = progressSheet.getDataRange().getValues();
+    if (progressData.length > 1) {
+      var totalEntries = progressData.length - 1;
+      var completedEntries = 0;
+      var headers = progressData[0];
+      var colIdx = buildColIdx_(headers);
+
+      for (var i = 1; i < progressData.length; i++) {
+        var progressRating = progressData[i][colIdx.progressRating - 1];
+        if (progressRating) completedEntries++;
+      }
+
+      progressCompletionRate = totalEntries > 0 ? Math.round((completedEntries / totalEntries) * 100) : 0;
+    }
+  }
+
+  return {
+    upcomingIEPs: upcomingIEPs,
+    progressCompletionRate: progressCompletionRate
+  };
+}
+
+/** Get student summaries from a case manager's spreadsheet. */
+function getStudentSummaries_(ss) {
+  var studentsSheet = ss.getSheetByName('Students');
+  if (!studentsSheet) return [];
+
+  var data = studentsSheet.getDataRange().getValues();
+  if (data.length <= 1) return [];
+
+  var headers = data[0];
+  var colIdx = buildColIdx_(headers);
+
+  var students = [];
+  for (var i = 1; i < data.length; i++) {
+    var row = data[i];
+    students.push({
+      studentId: row[colIdx.id - 1],
+      firstName: row[colIdx.firstName - 1] || '',
+      lastName: row[colIdx.lastName - 1] || '',
+      grade: row[colIdx.grade - 1] || '',
+      evalType: '', // Will be enriched from Evaluations sheet
+      evalStatus: '',
+      nextIEPDate: null,
+      gpa: null
+    });
+  }
+
+  // Enrich with eval data
+  var evalsSheet = ss.getSheetByName('Evaluations');
+  if (evalsSheet) {
+    var evalData = evalsSheet.getDataRange().getValues();
+    if (evalData.length > 1) {
+      var evalHeaders = evalData[0];
+      var evalColIdx = buildColIdx_(evalHeaders);
+
+      for (var i = 1; i < evalData.length; i++) {
+        var studentId = evalData[i][evalColIdx.studentId - 1];
+        var student = students.find(function(s) { return s.studentId === studentId; });
+        if (student) {
+          student.evalType = evalData[i][evalColIdx.type - 1] || '';
+        }
+      }
+    }
+  }
+
+  return students;
+}
+
 /** Check if email is a SPED Lead. */
 function isSpedLead_(email) {
   var spedLeads = getSpedLeads_();
