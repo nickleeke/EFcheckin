@@ -7256,13 +7256,39 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   opacity: 0.5;
 }
 
-/* ─── Sticky Notes Widget (Collapsed) ─── */
+/* ─── Sticky Note Widget (Collapsed) ─── */
 .sticky-note-card {
+  position: relative;
+  width: 240px;
+  max-height: 120px;
+  overflow: hidden;
   border-radius: var(--md-shape-sm);
   padding: 12px;
   min-height: 80px;
   cursor: pointer;
   transition: transform var(--md-duration-short3) var(--md-easing-standard);
+}
+.sticky-note-card::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 20px;
+  background: linear-gradient(to bottom, transparent, rgba(255,255,255,0.25));
+  border-radius: 0 0 var(--md-shape-sm) var(--md-shape-sm);
+  pointer-events: none;
+}
+.sticky-note-card::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  left: 12%;
+  right: 12%;
+  height: 6px;
+  border-radius: 50%;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.12);
+  z-index: -1;
 }
 .sticky-note-card:hover {
   transform: scale(1.02);
