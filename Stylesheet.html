@@ -7208,9 +7208,12 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 
 /* ─── Top 3 Widget Card (Collapsed) ─── */
 .top3-widget-card {
-  border: 1px solid var(--md-outline-variant);
+  width: 240px;
+  max-height: 120px;
+  overflow: hidden;
+  border: 1.5px solid var(--md-outline-variant);
   border-radius: var(--md-shape-md);
-  padding: 16px;
+  padding: 12px 14px;
   background: var(--md-surface);
   cursor: pointer;
   transition: box-shadow var(--md-duration-short3) var(--md-easing-standard),
@@ -7221,10 +7224,10 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   transform: translateY(-1px);
 }
 .widget-header {
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 .top3-item {
-  padding: 4px 0;
+  padding: 2px 0;
 }
 .top3-checkbox {
   display: flex;

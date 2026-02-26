@@ -3624,9 +3624,23 @@ function showFabScrim_() {
 
 // ── Top 3 Widget (collapsed) ──
 
+function hexToRgb_(hex) {
+  var h = hex.replace('#', '');
+  return { r: parseInt(h.substring(0, 2), 16), g: parseInt(h.substring(2, 4), 16), b: parseInt(h.substring(4, 6), 16) };
+}
+function tintColor_(hex, amount) {
+  var c = hexToRgb_(hex);
+  var r = Math.round(c.r + (255 - c.r) * amount);
+  var g = Math.round(c.g + (255 - c.g) * amount);
+  var b = Math.round(c.b + (255 - c.b) * amount);
+  return 'rgb(' + r + ',' + g + ',' + b + ')';
+}
+
 function renderTop3Collapsed_(widget) {
   var color = esc(widget.color || '#C41E3A');
-  var html = '<div class="top3-widget-card" style="border-color: ' + color + '"' +
+  var fillColor = tintColor_(widget.color || '#C41E3A', 0.85);
+  var strokeColor = tintColor_(widget.color || '#C41E3A', 0.45);
+  var html = '<div class="top3-widget-card" style="background-color: ' + fillColor + '; border-color: ' + strokeColor + '"' +
     ' onclick="openWidgetEditor(\'' + esc(widget.id) + '\', event)"' +
     ' role="button" tabindex="0"' +
     ' onkeydown="if(event.key===\'Enter\')openWidgetEditor(\'' + esc(widget.id) + '\', event)">';
