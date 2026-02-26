@@ -4038,6 +4038,9 @@ function openWidgetEditorDialog_(widget, isNew, sourceEl) {
     _widgetTransformSource = null;
     document.body.appendChild(overlay);
   }
+
+  // Attach character counters after DOM is ready
+  setTimeout(setupCharCounters_, _prefersReducedMotion ? 0 : 150);
 }
 
 function closeWidgetEditorDialog_(skipTransform) {
@@ -4095,6 +4098,61 @@ function closeWidgetEditorDialog_(skipTransform) {
       _widgetTransformSource = null;
     }, 300);
   }, 100);
+}
+
+// ── Widget Editor Character Counters ──
+
+function attachCharCounter_(input, maxLen) {
+  var counterId = 'cc-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+  var counter = document.createElement('div');
+  counter.id = counterId;
+  counter.className = 'char-counter';
+  counter.setAttribute('aria-live', 'polite');
+  counter.setAttribute('aria-atomic', 'true');
+  input.setAttribute('aria-describedby', counterId);
+
+  // Insert counter into DOM
+  if (input.classList.contains('top3-editor-item-input')) {
+    var parentItem = input.closest('.top3-editor-item');
+    if (parentItem) parentItem.appendChild(counter);
+  } else {
+    input.parentNode.insertBefore(counter, input.nextSibling);
+  }
+
+  function update() {
+    var len = input.value.length;
+    var pct = (len / maxLen) * 100;
+    var focused = document.activeElement === input;
+    if (focused || pct >= 80) {
+      counter.textContent = len + ' / ' + maxLen;
+      counter.classList.add('char-counter-visible');
+      counter.classList.remove('char-counter-warning', 'char-counter-error');
+      if (len >= maxLen) counter.classList.add('char-counter-error');
+      else if (pct >= 90) counter.classList.add('char-counter-warning');
+    } else {
+      counter.classList.remove('char-counter-visible');
+    }
+  }
+
+  input.addEventListener('input', update);
+  input.addEventListener('focus', update);
+  input.addEventListener('blur', function() { setTimeout(update, 50); });
+  update();
+}
+
+function setupCharCounters_() {
+  var title = document.getElementById('widget-editor-title');
+  if (title) attachCharCounter_(title, 50);
+
+  document.querySelectorAll('.top3-editor-item-input').forEach(function(el) {
+    attachCharCounter_(el, 100);
+  });
+
+  var stickyTitle = document.querySelector('.sticky-editor-title');
+  if (stickyTitle) attachCharCounter_(stickyTitle, 30);
+
+  var stickyBody = document.querySelector('.sticky-editor-body');
+  if (stickyBody) attachCharCounter_(stickyBody, 200);
 }
 
 function buildWidgetEditorHtml_(widget, isNew) {

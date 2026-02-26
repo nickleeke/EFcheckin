@@ -7790,6 +7790,65 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   color: rgba(0,0,0,0.3);
 }
 
+/* ─── Widget Editor Character Counter ─── */
+.char-counter {
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.4px;
+  font-weight: 400;
+  color: var(--md-on-surface-variant);
+  text-align: right;
+  opacity: 0;
+  transition: opacity var(--md-duration-short3) var(--md-easing-standard),
+              color var(--md-duration-short3) var(--md-easing-standard);
+  pointer-events: none;
+  user-select: none;
+}
+.char-counter-visible {
+  opacity: 1;
+}
+.char-counter-warning {
+  color: var(--color-tier-yellow-text);
+  font-weight: 500;
+}
+.char-counter-error {
+  color: var(--md-error);
+  font-weight: 600;
+}
+/* Top 3 title counter */
+.top3-editor-preview .char-counter {
+  margin-top: -6px;
+  margin-bottom: 4px;
+}
+/* Top 3 task item counter — absolute to avoid breaking flex row */
+.top3-editor-item {
+  position: relative;
+}
+.top3-editor-item .char-counter {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  margin-top: -2px;
+}
+/* Sticky note counters — subtle pill for legibility on pastels */
+.sticky-note-preview .char-counter {
+  margin-top: 4px;
+  padding: 1px 6px;
+  border-radius: var(--md-shape-xs);
+  background: rgba(0,0,0,0.05);
+  color: rgba(0,0,0,0.45);
+  display: inline-block;
+  float: right;
+}
+.sticky-note-preview .char-counter-warning {
+  color: var(--color-tier-yellow-text);
+  background: var(--color-tier-yellow-bg);
+}
+.sticky-note-preview .char-counter-error {
+  color: var(--md-error);
+  background: var(--md-error-container);
+}
+
 /* ─── Widget Picker Modal ─── */
 .widget-picker-grid {
   display: grid;
