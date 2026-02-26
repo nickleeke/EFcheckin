@@ -664,6 +664,9 @@ function enterApp() {
     .withFailureHandler(function() {
       appState.dashboardConfig = getDefaultDashboardConfig_fe();
       appState._dashboardConfigLoaded = true;
+      if (appState.dashboardData && appState.dashboardData.length > 0) {
+        renderDashboardFromState();
+      }
     })
     .getDashboardConfig();
 
@@ -1124,10 +1127,7 @@ function loadDashboard(force) {
       try {
         appState.dashboardData = data || [];
         _lastDashboardFetch = Date.now();
-        var filtered = applyFilter_(data);
-        renderNeedsAttention(filtered);
-        renderMissingAggregate(filtered);
-        renderRecentStudents();
+        renderDashboardFromState();
       } catch(e) {
         showToast('Dashboard error: ' + (e.message || String(e)));
       }
