@@ -1418,13 +1418,19 @@ function getAllMeetingsForCalendar_(students) {
     autoPopulateEvalMeetingDates_(calMeetings);
 
     // Deduplicate: skip gcal meetings where an eval/standalone meeting
-    // already exists for the same student on the same date
-    var existingKey = {};
-    meetings.forEach(function(m) {
-      existingKey[m.studentId + '|' + m.date] = true;
+    // already exists for the same student on the same date.
+    // Transfer calendarEventUrl to the existing meeting so it gets a link.
+    var existingByKey = {};
+    meetings.forEach(function(m, idx) {
+      existingByKey[m.studentId + '|' + m.date] = idx;
     });
     calMeetings.forEach(function(cm) {
-      if (!existingKey[cm.studentId + '|' + cm.date]) {
+      var key = cm.studentId + '|' + cm.date;
+      if (key in existingByKey) {
+        if (cm.calendarEventUrl) {
+          meetings[existingByKey[key]].calendarEventUrl = cm.calendarEventUrl;
+        }
+      } else {
         meetings.push(cm);
       }
     });
@@ -1493,6 +1499,8 @@ function getCalendarMeetings_(students, startDate, endDate) {
       initialsMap[key].push({ id: s.id, name: fn + ' ' + ln });
     });
 
+    var calId = cal.getId();
+
     allEvents.forEach(function(evt) {
       var title = (evt.getTitle() || '').trim();
       if (!title) return;
@@ -1505,14 +1513,19 @@ function getCalendarMeetings_(students, startDate, endDate) {
       // e.g. "RT Virtual IEP Meeting" → "Virtual IEP Meeting"
       var meetingType = parts.slice(1).join(' ') || 'IEP Meeting';
 
-      // Determine category: does title contain "Eval Meeting" or "IEP Meeting"?
+      // Determine category: does title contain "Eval" or "IEP"?
       var titleUpper = title.toUpperCase();
-      var meetingCategory = titleUpper.indexOf('EVAL MEETING') !== -1 ? 'eval' : 'iep';
+      var meetingCategory = titleUpper.indexOf('EVAL') !== -1 ? 'eval' : 'iep';
 
       var matched = initialsMap[initials];
       if (!matched || matched.length === 0) return; // no caseload student matched
 
       var eventDate = formatDateValue_(evt.getStartTime());
+
+      // Build Google Calendar event URL
+      var rawId = evt.getId().replace(/@google.com$/, '');
+      var calendarEventUrl = 'https://calendar.google.com/calendar/event?eid=' +
+        Utilities.base64Encode(rawId + ' ' + calId).replace(/=+$/, '');
 
       matched.forEach(function(student) {
         results.push({
@@ -1522,7 +1535,8 @@ function getCalendarMeetings_(students, startDate, endDate) {
           meetingType: meetingType,
           meetingCategory: meetingCategory,
           source: 'gcal',
-          calendarEventTitle: title
+          calendarEventTitle: title,
+          calendarEventUrl: calendarEventUrl
         });
       });
     });
