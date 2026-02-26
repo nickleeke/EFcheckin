@@ -7293,7 +7293,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 /* ─── Top 3 Widget Card (Collapsed) ─── */
 .top3-widget-card {
   position: relative;
-  width: 240px;
+  width: auto;
   max-height: 148px;
   overflow: hidden;
   border: 1.5px solid var(--md-outline-variant);
@@ -7456,15 +7456,25 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   }
 }
 
-/* ─── Sticky Notes Grid Layout ─── */
-.dashboard-sticky-grid {
+/* ─── Unified Widget Grid Layout ─── */
+.dashboard-widget-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 240px));
+  grid-template-columns: repeat(5, 1fr);
   gap: 16px;
 }
+@media (max-width: 1200px) {
+  .dashboard-widget-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+@media (max-width: 900px) {
+  .dashboard-widget-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
 @media (max-width: 600px) {
-  .dashboard-sticky-grid {
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  .dashboard-widget-grid {
+    grid-template-columns: repeat(2, 1fr);
     gap: 12px;
   }
 }
@@ -7521,9 +7531,13 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 }
 .widget-editor-close {
   position: absolute;
-  top: 10px;
-  right: 10px;
+  top: 8px;
+  right: 8px;
   z-index: 3;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
 }
 .widget-editor-cta {
   width: 100%;

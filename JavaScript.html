@@ -3495,20 +3495,23 @@ var WIDGET_PASTEL_COLORS = [
   { hex: '#FFF4D9', name: 'Cream' },
   { hex: '#FFE9D0', name: 'Peach' }
 ];
+// Default row order for new users ('widgets' entry added dynamically when first widget is created)
 var BUILT_IN_ROWS_ = ['needs-attention', 'at-a-glance', 'evals', 'missing', 'recent'];
 var BUILT_IN_ROW_LABELS_ = {
   'needs-attention': 'Needs Attention',
   'at-a-glance': 'At a Glance',
   'evals': 'Evals',
   'missing': 'Missing Assignments',
-  'recent': 'Recent Students'
+  'recent': 'Recent Students',
+  'widgets': 'Widgets'
 };
 var BUILT_IN_ROW_IDS_ = {
   'needs-attention': 'dashboard-needs-attention',
   'at-a-glance': 'dashboard-at-a-glance',
   'evals': 'dashboard-evals-section',
   'missing': 'dashboard-missing-section',
-  'recent': 'dashboard-recent-section'
+  'recent': 'dashboard-recent-section',
+  'widgets': 'dashboard-widget-grid'
 };
 
 function getDefaultDashboardConfig_fe() {
@@ -3551,66 +3554,50 @@ function migrateWidgetConfig_(config) {
     config.rowOrder = newOrder;
     config.widgets = migrated;
   }
+
+  // Migrate per-widget rowOrder entries → single 'widgets' entry
+  var hasWidgetsEntry = config.rowOrder.indexOf('widgets') !== -1;
+  if (!hasWidgetsEntry) {
+    var unifiedOrder = [];
+    var inserted = false;
+    config.rowOrder.forEach(function(r) {
+      if (r.indexOf('widget-') === 0) {
+        if (!inserted) { unifiedOrder.push('widgets'); inserted = true; }
+      } else {
+        unifiedOrder.push(r);
+      }
+    });
+    if (inserted) config.rowOrder = unifiedOrder;
+  }
+
   return config;
 }
 
-/** Reorder dashboard section DOM elements + inject widget containers */
+/** Reorder dashboard section DOM elements + inject unified widget grid */
 function applyDashboardOrder_() {
   if (!appState._dashboardConfigLoaded || !appState.dashboardConfig) return;
   var panel = document.getElementById('tab-panel-caseload');
   if (!panel) return;
   var config = appState.dashboardConfig;
 
-  // Identify sticky note widget IDs
-  var stickyWidgetIds = config.widgets
-    .filter(function(w) { return w.type === 'sticky-note'; })
-    .map(function(w) { return w.id; });
-
-  // Remove old individual widget sections that are no longer in config
-  // (also remove leftover individual sticky-note sections — they now live in the grid)
+  // Remove legacy individual widget containers and old sticky grid
   panel.querySelectorAll('.dashboard-widget').forEach(function(el) {
-    var wid = el.getAttribute('data-widget-id');
-    if (!wid) return;
-    if (stickyWidgetIds.indexOf(wid) !== -1 || config.rowOrder.indexOf('widget-' + wid) === -1) {
-      el.parentNode.removeChild(el);
-    }
+    el.parentNode.removeChild(el);
   });
+  var oldStickyGrid = document.getElementById('dashboard-sticky-grid');
+  if (oldStickyGrid && oldStickyGrid.parentNode) oldStickyGrid.parentNode.removeChild(oldStickyGrid);
 
   // Reorder: appendChild moves existing elements
-  var stickyGridPlaced = false;
   config.rowOrder.forEach(function(rowId) {
-    if (rowId.indexOf('widget-') === 0) {
-      var widgetId = rowId.substring(7);
-
-      if (stickyWidgetIds.indexOf(widgetId) !== -1) {
-        // Sticky note: place grid container once at position of first sticky
-        if (!stickyGridPlaced) {
-          stickyGridPlaced = true;
-          var grid = document.getElementById('dashboard-sticky-grid');
-          if (!grid) {
-            grid = document.createElement('div');
-            grid.className = 'dashboard-section dashboard-sticky-grid';
-            grid.id = 'dashboard-sticky-grid';
-          }
-          panel.appendChild(grid);
-        }
-      } else {
-        // Non-sticky widget (top3): individual container
-        var existing = document.getElementById('dashboard-widget-' + widgetId);
-        if (!existing) {
-          existing = document.createElement('div');
-          existing.className = 'dashboard-section dashboard-widget';
-          existing.id = 'dashboard-widget-' + widgetId;
-          existing.setAttribute('data-widget-id', widgetId);
-        }
-        panel.appendChild(existing);
+    var domId = BUILT_IN_ROW_IDS_[rowId];
+    if (domId) {
+      var el = document.getElementById(domId);
+      if (!el && rowId === 'widgets') {
+        el = document.createElement('div');
+        el.className = 'dashboard-section dashboard-widget-grid';
+        el.id = 'dashboard-widget-grid';
       }
-    } else {
-      var domId = BUILT_IN_ROW_IDS_[rowId];
-      if (domId) {
-        var el = document.getElementById(domId);
-        if (el) panel.appendChild(el);
-      }
+      if (el) panel.appendChild(el);
     }
   });
 
@@ -3619,34 +3606,41 @@ function applyDashboardOrder_() {
   if (fabContainer) panel.appendChild(fabContainer);
 }
 
-/** Render all custom widget content */
+/** Render all custom widgets into unified grid (Top 3 first, stickies by creation date) */
 function renderCustomWidgets_() {
   if (!appState._dashboardConfigLoaded || !appState.dashboardConfig) return;
 
-  // Render sticky notes into the grid container
-  var grid = document.getElementById('dashboard-sticky-grid');
-  if (grid) {
-    var stickyWidgets = appState.dashboardConfig.widgets.filter(function(w) {
-      return w.type === 'sticky-note';
-    });
-    var stickyHtml = '';
-    stickyWidgets.slice(0, 8).forEach(function(w) {
-      stickyHtml += renderStickyNoteCollapsed_(w);
-    });
-    grid.innerHTML = stickyHtml;
-    grid.style.display = stickyWidgets.length ? '' : 'none';
+  var grid = document.getElementById('dashboard-widget-grid');
+  if (!grid) return;
+
+  var widgets = appState.dashboardConfig.widgets;
+  if (!widgets || !widgets.length) {
+    grid.style.display = 'none';
+    return;
   }
 
-  // Render non-sticky widgets into individual containers
-  appState.dashboardConfig.widgets.forEach(function(w) {
-    if (w.type === 'sticky-note') return;
-    var container = document.getElementById('dashboard-widget-' + w.id);
-    if (!container) return;
-    container.style.display = '';
+  // Sort: Top 3 first, then sticky notes by creation timestamp (oldest first)
+  var sorted = widgets.slice().sort(function(a, b) {
+    if (a.type === 'top3' && b.type !== 'top3') return -1;
+    if (a.type !== 'top3' && b.type === 'top3') return 1;
+    var tsA = parseInt(a.id.replace(/^(top3|sticky)-/, ''), 10) || 0;
+    var tsB = parseInt(b.id.replace(/^(top3|sticky)-/, ''), 10) || 0;
+    return tsA - tsB;
+  });
+
+  // Cap at 10 total (max 5 per row, max 2 rows)
+  sorted = sorted.slice(0, 10);
+
+  var html = '';
+  sorted.forEach(function(w) {
     if (w.type === 'top3') {
-      container.innerHTML = renderTop3Collapsed_(w);
+      html += renderTop3Collapsed_(w);
+    } else if (w.type === 'sticky-note') {
+      html += renderStickyNoteCollapsed_(w);
     }
   });
+  grid.innerHTML = html;
+  grid.style.display = '';
 }
 
 /** Show/hide the FAB based on current view state */
@@ -3907,13 +3901,10 @@ function addNewWidget(type) {
   var pickerOverlay = document.getElementById('widget-picker-overlay');
   if (pickerOverlay) closeConfirmDialog(pickerOverlay);
 
-  // Enforce max 8 sticky notes
-  if (type === 'sticky-note' && appState.dashboardConfig) {
-    var stickyCount = appState.dashboardConfig.widgets.filter(function(w) { return w.type === 'sticky-note'; }).length;
-    if (stickyCount >= 8) {
-      showToast('Maximum of 8 sticky notes reached');
-      return;
-    }
+  // Enforce max 10 total widgets (5 per row, max 2 rows)
+  if (appState.dashboardConfig && appState.dashboardConfig.widgets.length >= 10) {
+    showToast('Maximum of 10 widgets reached');
+    return;
   }
 
   var widget;
@@ -4052,10 +4043,9 @@ function closeWidgetEditorDialog_(skipTransform) {
   var dialog = overlay.querySelector('.widget-editor-dialog');
   if (!dialog) { overlay.remove(); _widgetTransformSource = null; return; }
 
-  // Find source card in current DOM (sticky notes live in grid, top3 in individual containers)
+  // Find source card in unified widget grid
   var widgetId = _widgetTransformSource.widgetId;
-  var sourceCard = document.querySelector('.sticky-note-card[data-widget-id="' + widgetId + '"]') ||
-                   document.querySelector('#dashboard-widget-' + widgetId + ' .top3-widget-card');
+  var sourceCard = document.querySelector('#dashboard-widget-grid [data-widget-id="' + widgetId + '"]');
 
   if (!sourceCard) {
     _widgetTransformSource = null;
@@ -4099,7 +4089,7 @@ function closeWidgetEditorDialog_(skipTransform) {
 function buildWidgetEditorHtml_(widget, isNew) {
   // X close button (top-right corner, both modes)
   var html = '<button class="btn-icon widget-editor-close" onclick="closeWidgetEditorDialog_()" aria-label="Close">' +
-    '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>' +
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>' +
   '</button>';
   if (widget.type === 'top3') {
     html += buildTop3EditorHtml_(widget);
@@ -4287,9 +4277,11 @@ function saveWidgetFromEditor(widgetId, isNew) {
 
   if (isNew) {
     appState.dashboardConfig.widgets.push(updatedWidget);
-    // Insert after first row
-    var insertIdx = appState.dashboardConfig.rowOrder.length > 0 ? 1 : 0;
-    appState.dashboardConfig.rowOrder.splice(insertIdx, 0, 'widget-' + updatedWidget.id);
+    // Ensure 'widgets' entry exists in rowOrder (insert after first row if new)
+    if (appState.dashboardConfig.rowOrder.indexOf('widgets') === -1) {
+      var insertIdx = appState.dashboardConfig.rowOrder.length > 0 ? 1 : 0;
+      appState.dashboardConfig.rowOrder.splice(insertIdx, 0, 'widgets');
+    }
   } else {
     var idx = appState.dashboardConfig.widgets.findIndex(function(w) { return w.id === widgetId; });
     if (idx !== -1) appState.dashboardConfig.widgets[idx] = updatedWidget;
@@ -4298,7 +4290,9 @@ function saveWidgetFromEditor(widgetId, isNew) {
   persistWidgetConfig_();
   closeWidgetEditorDialog_(true);
   renderDashboardFromState();
-  showToast(isNew ? 'Widget added' : 'Widget updated');
+  showToast(widgetType === 'sticky-note'
+    ? (isNew ? 'Note created' : 'Note saved')
+    : (isNew ? 'Top 3 created' : 'Top 3 saved'));
 }
 
 function deleteWidgetFromCard(widgetId, event) {
@@ -4315,9 +4309,11 @@ function deleteWidgetFromCard(widgetId, event) {
 }
 
 function deleteWidgetFromEditor(widgetId) {
+  var widget = findWidget_(widgetId);
+  var typeLabel = widget && widget.type === 'sticky-note' ? 'Note' : 'List';
   showConfirmDialog({
-    title: 'Delete Widget',
-    body: 'Are you sure you want to delete this widget?',
+    title: 'Delete ' + typeLabel,
+    body: 'Are you sure you want to delete this ' + typeLabel.toLowerCase() + '?',
     confirmLabel: 'Delete',
     confirmClass: 'btn-danger',
     onConfirm: "doDeleteWidget('" + widgetId + "')"
@@ -4326,22 +4322,25 @@ function deleteWidgetFromEditor(widgetId) {
 
 function doDeleteWidget(widgetId) {
   if (!appState.dashboardConfig) return;
+  var widget = findWidget_(widgetId);
+  var widgetType = widget ? widget.type : null;
   appState.dashboardConfig.widgets = appState.dashboardConfig.widgets.filter(function(w) {
     return w.id !== widgetId;
   });
-  appState.dashboardConfig.rowOrder = appState.dashboardConfig.rowOrder.filter(function(r) {
-    return r !== 'widget-' + widgetId;
-  });
-  // Remove DOM element (individual container for top3, or grid card for sticky notes)
-  var el = document.getElementById('dashboard-widget-' + widgetId);
-  if (el && el.parentNode) el.parentNode.removeChild(el);
-  var stickyEl = document.querySelector('.sticky-note-card[data-widget-id="' + widgetId + '"]');
-  if (stickyEl && stickyEl.parentNode) stickyEl.parentNode.removeChild(stickyEl);
+  // Remove 'widgets' from rowOrder only if no widgets remain
+  if (appState.dashboardConfig.widgets.length === 0) {
+    appState.dashboardConfig.rowOrder = appState.dashboardConfig.rowOrder.filter(function(r) {
+      return r !== 'widgets';
+    });
+  }
+  // Remove card from unified widget grid
+  var cardEl = document.querySelector('#dashboard-widget-grid [data-widget-id="' + widgetId + '"]');
+  if (cardEl && cardEl.parentNode) cardEl.parentNode.removeChild(cardEl);
 
   persistWidgetConfig_();
   closeWidgetEditorDialog_(true);
   renderDashboardFromState();
-  showToast('Widget deleted');
+  showToast(widgetType === 'sticky-note' ? 'Note deleted' : 'List deleted');
 }
 
 // ── Dashboard Reorder Modal ──
@@ -4401,6 +4400,9 @@ function getRowIconSvg_(rowId) {
     'missing': 'M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm2 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z',
     'recent': 'M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z'
   };
+  if (rowId === 'widgets') {
+    return '<svg class="reorder-row-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>';
+  }
   if (rowId.indexOf('widget-') === 0) {
     var wid = rowId.substring(7);
     var w = findWidget_(wid);
