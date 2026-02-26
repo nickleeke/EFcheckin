@@ -3520,9 +3520,9 @@ function applyDashboardOrder_() {
     }
   });
 
-  // Ensure FAB stays at the end
-  var fab = document.getElementById('dashboard-add-widget-fab');
-  if (fab) panel.appendChild(fab);
+  // Ensure FAB container stays at the end
+  var fabContainer = document.getElementById('dashboard-fab-container');
+  if (fabContainer) panel.appendChild(fabContainer);
 }
 
 /** Render all custom widget content */
@@ -3547,10 +3547,39 @@ function updateWidgetFabVisibility_() {
     var caseloadTab = document.getElementById('tab-panel-caseload');
     show = caseloadTab && caseloadTab.classList.contains('active');
   }
-  var fab = document.getElementById('dashboard-add-widget-fab');
-  if (fab) fab.style.display = show ? 'flex' : 'none';
+  var fabContainer = document.getElementById('dashboard-fab-container');
+  if (fabContainer) fabContainer.style.display = show ? 'flex' : 'none';
+  if (!show) closeFabMenu();
   var customizeBtn = document.querySelector('.customize-dashboard-btn');
   if (customizeBtn) customizeBtn.style.display = show ? 'flex' : 'none';
+}
+
+function toggleFabMenu() {
+  var container = document.getElementById('dashboard-fab-container');
+  if (!container) return;
+  var isOpen = container.classList.toggle('fab-open');
+  var fab = document.getElementById('dashboard-add-widget-fab');
+  if (fab) fab.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+  if (isOpen) { showFabScrim_(); } else { closeFabMenu(); }
+}
+
+function closeFabMenu() {
+  var container = document.getElementById('dashboard-fab-container');
+  if (!container) return;
+  container.classList.remove('fab-open');
+  var fab = document.getElementById('dashboard-add-widget-fab');
+  if (fab) fab.setAttribute('aria-expanded', 'false');
+  var scrim = document.getElementById('fab-menu-scrim');
+  if (scrim) scrim.remove();
+}
+
+function showFabScrim_() {
+  if (document.getElementById('fab-menu-scrim')) return;
+  var scrim = document.createElement('div');
+  scrim.id = 'fab-menu-scrim';
+  scrim.className = 'fab-menu-scrim';
+  scrim.onclick = closeFabMenu;
+  document.body.appendChild(scrim);
 }
 
 // ── Top 3 Widget (collapsed) ──
@@ -3674,7 +3703,8 @@ function openAddWidgetPicker() {
 }
 
 function addNewWidget(type) {
-  closeConfirmDialog(document.getElementById('widget-picker-overlay'));
+  var pickerOverlay = document.getElementById('widget-picker-overlay');
+  if (pickerOverlay) closeConfirmDialog(pickerOverlay);
   var widget;
   if (type === 'top3') {
     widget = {
@@ -3754,12 +3784,12 @@ function buildWidgetEditorHtml_(widget, isNew) {
 function buildTop3EditorHtml_(widget) {
   var color = widget.color || '#C41E3A';
   var html = '<h3>' + (widget.title ? esc(widget.title) : "Today's Top 3") + '</h3>';
-  html += '<div class="form-row">' +
-    '<label class="form-label">Title</label>' +
-    '<input type="text" id="widget-editor-title" class="form-input" value="' + esc(widget.title || "Today's Top 3") + '" maxlength="50">' +
+  html += '<div class="form-group">' +
+    '<label>Title</label>' +
+    '<input type="text" id="widget-editor-title" value="' + esc(widget.title || "Today's Top 3") + '" maxlength="50">' +
   '</div>';
-  html += '<div class="form-row">' +
-    '<label class="form-label">Color</label>' +
+  html += '<div class="form-group">' +
+    '<label>Color</label>' +
     '<div class="color-picker-row" id="widget-color-picker">';
   WIDGET_BRAND_COLORS.forEach(function(c) {
     var sel = c.hex.toLowerCase() === color.toLowerCase() ? ' selected' : '';
@@ -3771,11 +3801,11 @@ function buildTop3EditorHtml_(widget) {
     '</div>';
   });
   html += '</div></div>';
-  html += '<div class="form-row"><label class="form-label">Items</label>';
+  html += '<div class="form-group"><label>Items</label>';
   var items = widget.items || [];
   for (var i = 0; i < 3; i++) {
     var val = items[i] ? esc(items[i].text || '') : '';
-    html += '<input type="text" class="form-input widget-top3-item-input" value="' + val + '" placeholder="Task ' + (i + 1) + '" maxlength="100" style="margin-bottom:8px">';
+    html += '<input type="text" class="widget-top3-item-input" value="' + val + '" placeholder="Task ' + (i + 1) + '" maxlength="100" style="margin-bottom:8px">';
   }
   html += '</div>';
   return html;
@@ -3821,8 +3851,12 @@ function buildStickyNoteEditorCard_(note, index) {
         '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>' +
       '</button>' +
     '</div>' +
-    '<input type="text" class="form-input sticky-editor-title" value="' + esc(note.title || '') + '" placeholder="Title" maxlength="30">' +
-    '<textarea class="form-input sticky-editor-body" placeholder="Note content" maxlength="200" rows="2">' + esc(note.body || '') + '</textarea>' +
+    '<div class="form-group" style="margin-bottom:10px"><label>Title</label>' +
+    '<input type="text" class="sticky-editor-title" value="' + esc(note.title || '') + '" placeholder="Title" maxlength="30">' +
+    '</div>' +
+    '<div class="form-group" style="margin-bottom:10px"><label>Content</label>' +
+    '<textarea class="sticky-editor-body" placeholder="Note content" maxlength="200" rows="2">' + esc(note.body || '') + '</textarea>' +
+    '</div>' +
     '<div class="color-picker-row">';
   WIDGET_PASTEL_COLORS.forEach(function(c) {
     var sel = c.hex.toLowerCase() === (note.color || '#FFF4D9').toLowerCase() ? ' selected' : '';

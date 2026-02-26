@@ -3245,7 +3245,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 }
 
 /* ─── Button Ripple Effect ─── */
-.btn, .btn-icon, .btn-ghost, .btn-outlined, .action-btn, .rating-btn, .nav-drawer-item, .goal-met-btn, .eval-filter-chip, .eval-nav-btn, .dp-cal-day, .header-search-result-item, .dp-progress-checkbox-row, .dp-progress-flat-card, .email-picker-row, .eval-file-ai-btn, .widget-picker-card, .reorder-row, .dashboard-add-widget-fab, .customize-dashboard-btn {
+.btn, .btn-icon, .btn-ghost, .btn-outlined, .action-btn, .rating-btn, .nav-drawer-item, .goal-met-btn, .eval-filter-chip, .eval-nav-btn, .dp-cal-day, .header-search-result-item, .dp-progress-checkbox-row, .dp-progress-flat-card, .email-picker-row, .eval-file-ai-btn, .widget-picker-card, .reorder-row, .dashboard-add-widget-fab, .customize-dashboard-btn, .fab-menu-item {
   position: relative;
   overflow: hidden;
 }
@@ -7116,11 +7116,18 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   color: var(--md-on-surface);
 }
 
-/* ─── Add Widget FAB ─── */
-.dashboard-add-widget-fab {
+/* ─── Add Widget FAB + Menu ─── */
+.fab-container {
   position: fixed;
   bottom: 24px;
   right: 24px;
+  display: none;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+  z-index: 200;
+}
+.dashboard-add-widget-fab {
   width: 56px;
   height: 56px;
   border-radius: var(--md-shape-lg);
@@ -7128,18 +7135,71 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   color: var(--md-on-primary-container);
   border: none;
   cursor: pointer;
-  display: none;
+  display: flex;
   align-items: center;
   justify-content: center;
   box-shadow: var(--md-elevation-3);
   transition: box-shadow var(--md-duration-short3) var(--md-easing-standard),
-              background var(--md-duration-short3) var(--md-easing-standard);
-  z-index: 200;
+              background var(--md-duration-short3) var(--md-easing-standard),
+              transform var(--md-duration-medium1) var(--md-easing-standard);
+  flex-shrink: 0;
 }
 .dashboard-add-widget-fab:hover {
   box-shadow: var(--md-elevation-4, 0 6px 10px 0 rgba(0,0,0,.14), 0 1px 18px 0 rgba(0,0,0,.12), 0 3px 5px -1px rgba(0,0,0,.2));
   background: var(--md-primary);
   color: var(--md-on-primary);
+}
+.dashboard-add-widget-fab .fab-icon-close { display: none; }
+.fab-open .dashboard-add-widget-fab .fab-icon-add { display: none; }
+.fab-open .dashboard-add-widget-fab .fab-icon-close { display: block; }
+.fab-open .dashboard-add-widget-fab {
+  background: var(--md-primary);
+  color: var(--md-on-primary);
+}
+.fab-menu {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+  opacity: 0;
+  transform: translateY(16px) scale(0.9);
+  pointer-events: none;
+  transition: opacity var(--md-duration-medium1) var(--md-easing-emphasized-decelerate),
+              transform var(--md-duration-medium1) var(--md-easing-emphasized-decelerate);
+}
+.fab-open .fab-menu {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+.fab-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  border: none;
+  border-radius: var(--md-shape-lg);
+  background: var(--md-primary-container);
+  color: var(--md-on-primary-container);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.1px;
+  cursor: pointer;
+  box-shadow: var(--md-elevation-2);
+  white-space: nowrap;
+  transition: box-shadow var(--md-duration-short3) var(--md-easing-standard),
+              background var(--md-duration-short3) var(--md-easing-standard);
+}
+.fab-menu-item:hover {
+  box-shadow: var(--md-elevation-3);
+  background: var(--md-primary);
+  color: var(--md-on-primary);
+}
+.fab-menu-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 199;
+  background: transparent;
 }
 
 /* ─── Top 3 Widget Card (Collapsed) ─── */
@@ -7428,7 +7488,8 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   /* Widget responsive */
   .sticky-notes-row { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
   .widget-picker-grid { grid-template-columns: 1fr; }
-  .dashboard-add-widget-fab { width: 48px; height: 48px; right: 16px; bottom: 16px; }
+  .fab-container { right: 16px; bottom: 16px; }
+  .dashboard-add-widget-fab { width: 48px; height: 48px; }
 }
 
 /* ─── Reduced Motion ─── */
