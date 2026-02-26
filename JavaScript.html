@@ -1036,7 +1036,7 @@ function closeConfirmDialog(overlayEl) {
 // ─── View Management ───
 var VIEW_ORDER = {
   'auth-loading': -1, 'onboarding-view': -1,
-  'dashboard-view': 0, 'dueprocess-view': 1, 'coteacher-view': 2,
+  'dashboard-view': 0, 'dueprocess-view': 1, 'coteacher-view': 2, 'settings-view': 2,
   'student-view': 3, 'missing-view': 4, 'eval-checklist-view': 4, 'checkin-view': 5
 };
 var _currentViewId = 'auth-loading';
@@ -1044,6 +1044,17 @@ var _currentViewId = 'auth-loading';
 function showView(viewId) {
   closeHeaderSearch();
   var oldId = _currentViewId;
+
+  if (oldId === 'settings-view' && viewId !== 'settings-view' && appState._settingsDirty) {
+    appState._pendingNavTarget = viewId;
+    showConfirmDialog({
+      title: 'Unsaved Changes',
+      body: 'You have unsaved template changes. Discard them?',
+      confirmLabel: 'Discard',
+      onConfirm: "appState._settingsDirty = false; showView(appState._pendingNavTarget)"
+    });
+    return;
+  }
   _currentViewId = viewId;
 
   document.querySelectorAll('.view').forEach(function(v) {
@@ -10113,6 +10124,252 @@ function renderMyCaseload() {
   html += '</tbody></table>';
   container.innerHTML = html;
   animateContentIn(container);
+}
+
+// ─── Settings View ───
+
+function showSettings() {
+  document.querySelectorAll('.nav-drawer-item').forEach(function(t) { t.classList.remove('active'); });
+  var settingsItem = document.getElementById('drawer-settings');
+  if (settingsItem) settingsItem.classList.add('active');
+  closeNavDrawerIfMobile_();
+  showView('settings-view');
+
+  var container = document.getElementById('settings-content-container');
+  if (container) {
+    container.innerHTML =
+      '<div class="skeleton-fade-in"><div class="form-card">' +
+        '<div class="skeleton skeleton-section-title" style="width:30%;"></div>' +
+        '<div class="skeleton skeleton-input" style="margin-bottom:12px;"></div>' +
+        '<div class="skeleton skeleton-input" style="margin-bottom:12px;"></div>' +
+        '<div class="skeleton skeleton-input" style="margin-bottom:12px;"></div>' +
+      '</div></div>';
+  }
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      try { renderSettingsView(result); }
+      catch (e) { showToast('Render error: ' + e.message); }
+    })
+    .withFailureHandler(function(err) {
+      showToast('Error loading settings: ' + (err && err.message ? err.message : String(err)));
+    })
+    .getEvalTemplateSettings();
+}
+
+function renderSettingsView(data) {
+  appState._settingsTemplates = JSON.parse(JSON.stringify(data.templates));
+  appState._settingsDefaults = data.defaults;
+  appState._settingsDirty = false;
+
+  var container = document.getElementById('settings-content-container');
+  if (!container) return;
+  var html = '';
+
+  html += '<div class="form-card">' +
+    '<div class="form-section-title">Eval Checklist Templates</div>' +
+    '<p class="body-medium" style="color:var(--md-on-surface-variant);margin:0 0 4px;">Customize the default tasks for each evaluation type. ' +
+    'Changes apply only to new evaluations you create.</p>' +
+  '</div>';
+
+  EVAL_TYPES.forEach(function(et) {
+    html += buildTemplateSection_(et.value, et.label);
+  });
+
+  html += '<div class="settings-save-bar">' +
+    '<button class="btn btn-primary" id="settings-save-btn" onclick="saveTemplateSettings()">' +
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:6px;"><path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg>' +
+      'Save Templates</button>' +
+  '</div>';
+
+  container.innerHTML = html;
+  animateContentIn(container);
+}
+
+function buildTemplateSection_(typeValue, typeLabel) {
+  var tasks = appState._settingsTemplates[typeValue] || [];
+  var safeType = typeValue.replace(/[^a-zA-Z0-9-]/g, '');
+
+  var html = '<div class="form-card" id="settings-section-' + safeType + '">' +
+    '<div class="form-section-title">' + esc(typeLabel) + ' Template' +
+      '<span class="body-small" style="color:var(--md-on-surface-variant);margin-left:8px;">(' + tasks.length + ' tasks)</span>' +
+    '</div>' +
+    '<div class="settings-task-list" id="settings-list-' + safeType + '">';
+
+  tasks.forEach(function(text, idx) {
+    html += buildTaskRow_(safeType, idx, text, tasks.length);
+  });
+
+  html += '</div>' +
+    '<div class="settings-task-actions">' +
+      '<button class="btn btn-ghost" onclick="addTemplateTask(\'' + safeType + '\')">' +
+        '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="margin-right:4px;"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>' +
+        'Add task' +
+      '</button>' +
+      '<button class="btn btn-ghost" onclick="resetTemplateSection(\'' + safeType + '\')">' +
+        'Reset to Defaults' +
+      '</button>' +
+    '</div>' +
+  '</div>';
+  return html;
+}
+
+function buildTaskRow_(safeType, idx, text, totalTasks) {
+  var escapedText = esc(text).replace(/"/g, '&quot;');
+  return '<div class="settings-task-row">' +
+    '<span class="settings-task-number">' + (idx + 1) + '</span>' +
+    '<input type="text" class="settings-task-input" ' +
+      'id="settings-task-' + safeType + '-' + idx + '" ' +
+      'value="' + escapedText + '" ' +
+      'oninput="markSettingsDirty()" maxlength="200" ' +
+      'placeholder="Task description...">' +
+    '<button class="btn-icon btn-icon-sm" onclick="moveTemplateTask(\'' + safeType + '\',' + idx + ',-1)"' +
+      (idx === 0 ? ' disabled' : '') + ' aria-label="Move up" title="Move up">' +
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/></svg>' +
+    '</button>' +
+    '<button class="btn-icon btn-icon-sm" onclick="moveTemplateTask(\'' + safeType + '\',' + idx + ',1)"' +
+      (idx === totalTasks - 1 ? ' disabled' : '') + ' aria-label="Move down" title="Move down">' +
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg>' +
+    '</button>' +
+    '<button class="btn-icon btn-icon-sm" onclick="removeTemplateTask(\'' + safeType + '\',' + idx + ')" aria-label="Remove task" title="Remove task">' +
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>' +
+    '</button>' +
+  '</div>';
+}
+
+function collectTaskInputs_(safeType) {
+  var tasks = appState._settingsTemplates[safeType];
+  if (!tasks) return;
+  for (var i = 0; i < tasks.length; i++) {
+    var input = document.getElementById('settings-task-' + safeType + '-' + i);
+    if (input) tasks[i] = input.value;
+  }
+}
+
+function rerenderTemplateSection_(safeType) {
+  var listEl = document.getElementById('settings-list-' + safeType);
+  if (!listEl) return;
+  var tasks = appState._settingsTemplates[safeType] || [];
+  var html = '';
+  tasks.forEach(function(text, idx) {
+    html += buildTaskRow_(safeType, idx, text, tasks.length);
+  });
+  listEl.innerHTML = html;
+
+  var section = document.getElementById('settings-section-' + safeType);
+  if (section) {
+    var countSpan = section.querySelector('.form-section-title .body-small');
+    if (countSpan) countSpan.textContent = '(' + tasks.length + ' tasks)';
+  }
+  markSettingsDirty();
+}
+
+function markSettingsDirty() {
+  appState._settingsDirty = true;
+}
+
+function addTemplateTask(safeType) {
+  collectTaskInputs_(safeType);
+  var tasks = appState._settingsTemplates[safeType];
+  if (!tasks) return;
+  if (tasks.length >= 30) {
+    showToast('Maximum 30 tasks per template.');
+    return;
+  }
+  tasks.push('');
+  rerenderTemplateSection_(safeType);
+  var newInput = document.getElementById('settings-task-' + safeType + '-' + (tasks.length - 1));
+  if (newInput) newInput.focus();
+}
+
+function removeTemplateTask(safeType, idx) {
+  collectTaskInputs_(safeType);
+  var tasks = appState._settingsTemplates[safeType];
+  if (!tasks || tasks.length <= 1) {
+    showToast('Each template must have at least one task.');
+    return;
+  }
+  tasks.splice(idx, 1);
+  rerenderTemplateSection_(safeType);
+}
+
+function moveTemplateTask(safeType, idx, direction) {
+  collectTaskInputs_(safeType);
+  var tasks = appState._settingsTemplates[safeType];
+  if (!tasks) return;
+  var target = idx + direction;
+  if (target < 0 || target >= tasks.length) return;
+  var temp = tasks[idx];
+  tasks[idx] = tasks[target];
+  tasks[target] = temp;
+  rerenderTemplateSection_(safeType);
+  var movedInput = document.getElementById('settings-task-' + safeType + '-' + target);
+  if (movedInput) movedInput.focus();
+}
+
+function resetTemplateSection(safeType) {
+  var typeLabel = '';
+  EVAL_TYPES.forEach(function(et) {
+    if (et.value.replace(/[^a-zA-Z0-9-]/g, '') === safeType) typeLabel = et.label;
+  });
+  showConfirmDialog({
+    title: 'Reset ' + typeLabel + ' Template',
+    body: 'Reset to system defaults? Your customizations for this template will be lost.',
+    confirmLabel: 'Reset',
+    onConfirm: "doResetTemplateSection_('" + safeType + "')"
+  });
+}
+
+function doResetTemplateSection_(safeType) {
+  if (appState._settingsDefaults && appState._settingsDefaults[safeType]) {
+    appState._settingsTemplates[safeType] = appState._settingsDefaults[safeType].slice();
+  }
+  rerenderTemplateSection_(safeType);
+}
+
+function saveTemplateSettings() {
+  EVAL_TYPES.forEach(function(et) {
+    collectTaskInputs_(et.value.replace(/[^a-zA-Z0-9-]/g, ''));
+  });
+
+  var payload = {};
+  EVAL_TYPES.forEach(function(et) {
+    payload[et.value] = (appState._settingsTemplates[et.value] || [])
+      .map(function(t) { return String(t).trim(); })
+      .filter(function(t) { return t.length > 0; });
+  });
+
+  for (var key in payload) {
+    if (payload[key].length === 0) {
+      showToast('Each template needs at least one task.');
+      return;
+    }
+    if (payload[key].length > 30) {
+      showToast('Maximum 30 tasks per template.');
+      return;
+    }
+  }
+
+  var btn = document.getElementById('settings-save-btn');
+  if (btn) btn.disabled = true;
+  showToast('Saving templates\u2026');
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (btn) btn.disabled = false;
+      if (result.success) {
+        appState._settingsDirty = false;
+        appState._settingsTemplates = JSON.parse(JSON.stringify(payload));
+        showToast('Templates saved');
+      } else {
+        showToast(result.error || 'Error saving templates');
+      }
+    })
+    .withFailureHandler(function(err) {
+      if (btn) btn.disabled = false;
+      showToast('Error: ' + (err && err.message ? err.message : String(err)));
+    })
+    .saveEvalTemplateSettings(payload);
 }
 
 // ─── Admin View (Superuser Only) ───

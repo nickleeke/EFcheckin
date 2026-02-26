@@ -1492,6 +1492,156 @@ function test_eval_summaryNoDuplicateActiveEvals() {
   }
 }
 
+// ───── Eval Template Settings Tests ─────
+
+function runAllEvalTemplateTests() {
+  var tests = [
+    'test_evalTemplateSettings_defaultsReturnedWhenNoCustom',
+    'test_evalTemplateSettings_saveAndRetrieve',
+    'test_evalTemplateSettings_validationRejectsEmpty',
+    'test_evalTemplateSettings_validationRejectsTooMany',
+    'test_createEvaluation_usesCustomTemplate',
+    'test_createEvaluation_fallsBackToDefaults'
+  ];
+
+  var testFns = {
+    test_evalTemplateSettings_defaultsReturnedWhenNoCustom: test_evalTemplateSettings_defaultsReturnedWhenNoCustom,
+    test_evalTemplateSettings_saveAndRetrieve: test_evalTemplateSettings_saveAndRetrieve,
+    test_evalTemplateSettings_validationRejectsEmpty: test_evalTemplateSettings_validationRejectsEmpty,
+    test_evalTemplateSettings_validationRejectsTooMany: test_evalTemplateSettings_validationRejectsTooMany,
+    test_createEvaluation_usesCustomTemplate: test_createEvaluation_usesCustomTemplate,
+    test_createEvaluation_fallsBackToDefaults: test_createEvaluation_fallsBackToDefaults
+  };
+
+  var passed = 0, failed = 0, errors = [];
+  tests.forEach(function(name) {
+    try {
+      testFns[name]();
+      passed++;
+      Logger.log('PASS: ' + name);
+    } catch(e) {
+      failed++;
+      errors.push(name + ': ' + e.message);
+      Logger.log('FAIL: ' + name + ' — ' + e.message);
+    }
+  });
+
+  Logger.log('');
+  Logger.log('Eval Template Results: ' + passed + ' passed, ' + failed + ' failed');
+  if (errors.length > 0) {
+    Logger.log('Failures:');
+    errors.forEach(function(e) { Logger.log('  ' + e); });
+  }
+  return { passed: passed, failed: failed, errors: errors };
+}
+
+function test_evalTemplateSettings_defaultsReturnedWhenNoCustom() {
+  try {
+    resetEvalTemplateSettings();
+    var result = getEvalTemplateSettings();
+    assert_(!result.isCustomized, 'Should not be customized after reset');
+    assert_(Array.isArray(result.templates['annual-iep']), 'annual-iep should be an array');
+    assert_(Array.isArray(result.templates['3-year-reeval']), '3-year-reeval should be an array');
+    assert_(Array.isArray(result.templates['initial-eval']), 'initial-eval should be an array');
+    assertEqual_(result.templates['initial-eval'].length, 12, 'initial-eval default should have 12 tasks');
+    assertEqual_(result.templates['annual-iep'].length, 11, 'annual-iep default should have 11 tasks');
+    assertEqual_(result.templates['3-year-reeval'].length, 11, '3-year-reeval default should have 11 tasks');
+  } finally {
+    resetEvalTemplateSettings();
+  }
+}
+
+function test_evalTemplateSettings_saveAndRetrieve() {
+  try {
+    resetEvalTemplateSettings();
+    var custom = {
+      'annual-iep': ['Custom annual task 1', 'Custom annual task 2'],
+      '3-year-reeval': ['Custom reeval task 1'],
+      'initial-eval': ['Custom init task 1', 'Custom init task 2', 'Custom init task 3']
+    };
+    var saveResult = saveEvalTemplateSettings(custom);
+    assert_(saveResult.success, 'Save should succeed');
+
+    var retrieved = getEvalTemplateSettings();
+    assert_(retrieved.isCustomized, 'Should be customized after save');
+    assertEqual_(retrieved.templates['annual-iep'].length, 2, 'annual-iep should have 2 custom tasks');
+    assertEqual_(retrieved.templates['initial-eval'].length, 3, 'initial-eval should have 3 custom tasks');
+    assertEqual_(retrieved.templates['annual-iep'][0], 'Custom annual task 1', 'First task text should match');
+  } finally {
+    resetEvalTemplateSettings();
+  }
+}
+
+function test_evalTemplateSettings_validationRejectsEmpty() {
+  try {
+    resetEvalTemplateSettings();
+    var result = saveEvalTemplateSettings({
+      'annual-iep': [],
+      '3-year-reeval': ['Task 1'],
+      'initial-eval': ['Task 1']
+    });
+    assert_(!result.success, 'Should reject empty template');
+    assertContains_(result.error, 'at least one task', 'Error should mention minimum');
+  } finally {
+    resetEvalTemplateSettings();
+  }
+}
+
+function test_evalTemplateSettings_validationRejectsTooMany() {
+  try {
+    resetEvalTemplateSettings();
+    var tooMany = [];
+    for (var i = 0; i < 31; i++) tooMany.push('Task ' + (i + 1));
+    var result = saveEvalTemplateSettings({
+      'annual-iep': tooMany,
+      '3-year-reeval': ['Task 1'],
+      'initial-eval': ['Task 1']
+    });
+    assert_(!result.success, 'Should reject too many tasks');
+    assertContains_(result.error, 'Maximum', 'Error should mention maximum');
+  } finally {
+    resetEvalTemplateSettings();
+  }
+}
+
+function test_createEvaluation_usesCustomTemplate() {
+  var evalId = null;
+  try {
+    resetEvalTemplateSettings();
+    var custom = {
+      'annual-iep': ['Custom annual 1', 'Custom annual 2'],
+      '3-year-reeval': ['Custom reeval 1'],
+      'initial-eval': ['Custom init 1', 'Custom init 2', 'Custom init 3']
+    };
+    saveEvalTemplateSettings(custom);
+
+    var result = createEvaluation('stu-test-template-001', 'initial-eval');
+    assert_(result.success, 'Eval creation should succeed');
+    evalId = result.id;
+    assertEqual_(result.items.length, 3, 'Should have 3 items from custom template');
+    assertEqual_(result.items[0].text, 'Custom init 1', 'First item text should match custom');
+    assertEqual_(result.items[2].text, 'Custom init 3', 'Third item text should match custom');
+  } finally {
+    if (evalId) deleteEvaluation(evalId);
+    resetEvalTemplateSettings();
+  }
+}
+
+function test_createEvaluation_fallsBackToDefaults() {
+  var evalId = null;
+  try {
+    resetEvalTemplateSettings();
+    var result = createEvaluation('stu-test-template-002', 'initial-eval');
+    assert_(result.success, 'Eval creation should succeed');
+    evalId = result.id;
+    assertEqual_(result.items.length, 12, 'Should have 12 default items');
+    assertEqual_(result.items[0].text, 'Review referral and obtain parent consent', 'First item should be default');
+  } finally {
+    if (evalId) deleteEvaluation(evalId);
+    resetEvalTemplateSettings();
+  }
+}
+
 // ───── Permission Tests ─────
 
 function runAllPermissionTests() {

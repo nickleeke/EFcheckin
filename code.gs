@@ -259,6 +259,9 @@ var COTEACHER_HEADERS = ['email', 'role', 'addedAt', 'permissionsJson'];
 var EVALUATION_HEADERS = ['id', 'studentId', 'type', 'itemsJson', 'createdAt', 'updatedAt', 'filesJson', 'meetingDate'];
 var VALID_EVAL_TYPES = ['annual-iep', '3-year-reeval', 'initial-eval', 'eval', 'reeval'];
 var EVAL_INITIAL_TYPES_ = ['initial-eval', 'eval'];
+var EVAL_TEMPLATE_PROP_KEY = 'eval_templates';
+var MAX_TEMPLATE_TASKS = 30;
+var MAX_TASK_TEXT_LENGTH = 200;
 
 var PROGRESS_HEADERS = [
   'id', 'studentId', 'goalId', 'objectiveId', 'quarter',
@@ -2200,7 +2203,7 @@ function createEvaluation(studentId, type) {
       ensureHeaders_(sheet, EVALUATION_HEADERS);
     }
 
-    var items = EVAL_INITIAL_TYPES_.indexOf(type) !== -1 ? getEvalTemplateItems_() : getReEvalTemplateItems_();
+    var items = getTemplateItemsForType_(type);
     var now = new Date().toISOString();
     var id = Utilities.getUuid();
 
@@ -2493,6 +2496,80 @@ function getReEvalTemplateItems_() {
   return items.map(function(text, idx) {
     return { id: 'item-' + (idx + 1), text: text, checked: false, completedAt: null, dueDate: null };
   });
+}
+
+function getDefaultTemplateTexts_() {
+  return {
+    'annual-iep': getReEvalTemplateItems_().map(function(i) { return i.text; }),
+    '3-year-reeval': getReEvalTemplateItems_().map(function(i) { return i.text; }),
+    'initial-eval': getEvalTemplateItems_().map(function(i) { return i.text; })
+  };
+}
+
+function getTemplateItemsForType_(type) {
+  var canonical = type;
+  if (type === 'eval') canonical = 'initial-eval';
+  if (type === 'reeval') canonical = '3-year-reeval';
+
+  var props = PropertiesService.getUserProperties();
+  var raw = props.getProperty(EVAL_TEMPLATE_PROP_KEY);
+  if (raw) {
+    try {
+      var custom = JSON.parse(raw);
+      if (custom[canonical] && Array.isArray(custom[canonical]) && custom[canonical].length > 0) {
+        return custom[canonical].map(function(text, idx) {
+          return { id: 'item-' + (idx + 1), text: text, checked: false, completedAt: null, dueDate: null };
+        });
+      }
+    } catch (e) { /* fall through to defaults */ }
+  }
+
+  if (canonical === 'initial-eval') return getEvalTemplateItems_();
+  return getReEvalTemplateItems_();
+}
+
+// ───── Eval Template Settings ─────
+
+function getEvalTemplateSettings() {
+  var props = PropertiesService.getUserProperties();
+  var raw = props.getProperty(EVAL_TEMPLATE_PROP_KEY);
+  var defaults = getDefaultTemplateTexts_();
+  var custom = null;
+  if (raw) {
+    try { custom = JSON.parse(raw); } catch (e) { /* ignore corrupt data */ }
+  }
+  return {
+    templates: custom || defaults,
+    defaults: defaults,
+    isCustomized: !!custom
+  };
+}
+
+function saveEvalTemplateSettings(templates) {
+  var keys = ['annual-iep', '3-year-reeval', 'initial-eval'];
+  for (var i = 0; i < keys.length; i++) {
+    var k = keys[i];
+    if (!templates[k] || !Array.isArray(templates[k])) {
+      return { success: false, error: 'Missing template for ' + k };
+    }
+    if (templates[k].length > MAX_TEMPLATE_TASKS) {
+      return { success: false, error: 'Maximum ' + MAX_TEMPLATE_TASKS + ' tasks per template.' };
+    }
+    templates[k] = templates[k]
+      .map(function(t) { return String(t).trim().substring(0, MAX_TASK_TEXT_LENGTH); })
+      .filter(function(t) { return t.length > 0; });
+    if (templates[k].length === 0) {
+      return { success: false, error: 'Each template must have at least one task.' };
+    }
+  }
+  var props = PropertiesService.getUserProperties();
+  props.setProperty(EVAL_TEMPLATE_PROP_KEY, JSON.stringify(templates));
+  return { success: true };
+}
+
+function resetEvalTemplateSettings() {
+  PropertiesService.getUserProperties().deleteProperty(EVAL_TEMPLATE_PROP_KEY);
+  return { success: true, templates: getDefaultTemplateTexts_() };
 }
 
 // ───── Progress Reporting ─────

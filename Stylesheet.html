@@ -4210,6 +4210,93 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
 
+/* ─── Settings: Template Editor ─── */
+
+#settings-content-container {
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.settings-task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.settings-task-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.settings-task-number {
+  min-width: 24px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--md-on-surface-variant);
+}
+
+.settings-task-input {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-xs);
+  font-size: 14px;
+  font-family: 'Roboto', sans-serif;
+  background: var(--md-surface);
+  color: var(--md-on-surface);
+  transition: border-color var(--md-duration-short3) var(--md-easing-standard);
+}
+
+.settings-task-input:focus {
+  outline: none;
+  border-color: var(--md-primary);
+  box-shadow: 0 0 0 1px var(--md-primary);
+}
+
+.settings-task-input::placeholder {
+  color: var(--md-on-surface-variant);
+  opacity: 0.6;
+}
+
+.settings-task-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding-top: 8px;
+}
+
+.settings-save-bar {
+  position: sticky;
+  bottom: 0;
+  padding: 16px 0;
+  background: var(--md-surface);
+  display: flex;
+  justify-content: flex-end;
+  z-index: 2;
+}
+
+@media (max-width: 600px) {
+  .settings-task-row {
+    flex-wrap: wrap;
+  }
+  .settings-task-input {
+    width: calc(100% - 32px);
+    flex: none;
+    order: 2;
+    margin-left: 32px;
+  }
+  .settings-task-number {
+    order: 1;
+  }
+  .settings-task-row .btn-icon {
+    order: 3;
+  }
+}
+
 /* ─── Admin View (Superuser) ─── */
 .admin-cm-row {
   display: flex;
