@@ -7142,10 +7142,11 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
   box-shadow: var(--md-elevation-3);
   transition: box-shadow var(--md-duration-short3) var(--md-easing-standard),
               background var(--md-duration-short3) var(--md-easing-standard),
-              transform var(--md-duration-medium1) var(--md-easing-standard);
+              transform var(--md-duration-medium2) var(--md-easing-emphasized-accelerate);
   flex-shrink: 0;
 }
 .dashboard-add-widget-fab:hover {
@@ -7153,13 +7154,28 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   background: var(--md-primary);
   color: var(--md-on-primary);
 }
-.dashboard-add-widget-fab .fab-icon-close { display: none; }
-.fab-open .dashboard-add-widget-fab .fab-icon-add { display: none; }
-.fab-open .dashboard-add-widget-fab .fab-icon-close { display: block; }
+/* Fix #1: Cross-fade icons with opacity instead of display toggle */
+.dashboard-add-widget-fab .fab-icon-add,
+.dashboard-add-widget-fab .fab-icon-close {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  transition: opacity var(--md-duration-short4) var(--md-easing-standard);
+}
+.dashboard-add-widget-fab .fab-icon-close { opacity: 0; }
+.fab-open .dashboard-add-widget-fab .fab-icon-add { opacity: 0; }
+.fab-open .dashboard-add-widget-fab .fab-icon-close { opacity: 1; }
+/* Fix #1: Rotate FAB 45deg on open (+ morphs toward x) */
 .fab-open .dashboard-add-widget-fab {
   background: var(--md-primary);
   color: var(--md-on-primary);
+  transform: rotate(45deg);
+  transition: box-shadow var(--md-duration-short3) var(--md-easing-standard),
+              background var(--md-duration-short3) var(--md-easing-standard),
+              transform var(--md-duration-medium2) var(--md-easing-emphasized-decelerate);
 }
+/* Fix #2: Asymmetric easing — default (closing) uses accelerate + medium1 */
 .fab-menu {
   display: flex;
   flex-direction: column;
@@ -7168,14 +7184,18 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   opacity: 0;
   transform: translateY(16px) scale(0.9);
   pointer-events: none;
-  transition: opacity var(--md-duration-medium1) var(--md-easing-emphasized-decelerate),
-              transform var(--md-duration-medium1) var(--md-easing-emphasized-decelerate);
+  transition: opacity var(--md-duration-medium1) var(--md-easing-emphasized-accelerate),
+              transform var(--md-duration-medium1) var(--md-easing-emphasized-accelerate);
 }
+/* Fix #2 & #3: Open state uses decelerate + medium2 (300ms) */
 .fab-open .fab-menu {
   opacity: 1;
   transform: translateY(0) scale(1);
   pointer-events: auto;
+  transition: opacity var(--md-duration-medium2) var(--md-easing-emphasized-decelerate),
+              transform var(--md-duration-medium2) var(--md-easing-emphasized-decelerate);
 }
+/* Fix #4: Individual menu item stagger — closed state */
 .fab-menu-item {
   display: flex;
   align-items: center;
@@ -7191,19 +7211,40 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   cursor: pointer;
   box-shadow: var(--md-elevation-2);
   white-space: nowrap;
-  transition: box-shadow var(--md-duration-short3) var(--md-easing-standard),
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity var(--md-duration-short3) var(--md-easing-emphasized-accelerate),
+              transform var(--md-duration-short3) var(--md-easing-emphasized-accelerate),
+              box-shadow var(--md-duration-short3) var(--md-easing-standard),
               background var(--md-duration-short3) var(--md-easing-standard);
 }
+/* Fix #4: Staggered reveal — items closest to FAB (last) appear first */
+.fab-open .fab-menu-item {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity var(--md-duration-short4) var(--md-easing-emphasized-decelerate),
+              transform var(--md-duration-short4) var(--md-easing-emphasized-decelerate),
+              box-shadow var(--md-duration-short3) var(--md-easing-standard),
+              background var(--md-duration-short3) var(--md-easing-standard);
+}
+.fab-open .fab-menu-item:last-child  { transition-delay: 0ms; }
+.fab-open .fab-menu-item:first-child { transition-delay: 50ms; }
 .fab-menu-item:hover {
   box-shadow: var(--md-elevation-3);
   background: var(--md-primary);
   color: var(--md-on-primary);
 }
+/* Fix #5: Scrim fades in/out instead of instant appear/remove */
 .fab-menu-scrim {
   position: fixed;
   inset: 0;
   z-index: 199;
-  background: transparent;
+  background: rgba(0,0,0,0.08);
+  opacity: 0;
+  transition: opacity var(--md-duration-medium1) var(--md-easing-standard);
+}
+.fab-menu-scrim.scrim-visible {
+  opacity: 1;
 }
 
 /* ─── Top 3 Widget Card (Collapsed) ─── */

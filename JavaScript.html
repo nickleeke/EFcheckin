@@ -3610,7 +3610,15 @@ function closeFabMenu() {
   var fab = document.getElementById('dashboard-add-widget-fab');
   if (fab) fab.setAttribute('aria-expanded', 'false');
   var scrim = document.getElementById('fab-menu-scrim');
-  if (scrim) scrim.remove();
+  if (scrim) {
+    scrim.classList.remove('scrim-visible');
+    scrim.addEventListener('transitionend', function handler() {
+      scrim.removeEventListener('transitionend', handler);
+      scrim.remove();
+    });
+    // Fallback removal if transitionend doesn't fire
+    setTimeout(function() { if (scrim.parentNode) scrim.remove(); }, 300);
+  }
 }
 
 function showFabScrim_() {
@@ -3620,6 +3628,9 @@ function showFabScrim_() {
   scrim.className = 'fab-menu-scrim';
   scrim.onclick = closeFabMenu;
   document.body.appendChild(scrim);
+  // Force reflow then add visible class so opacity transition plays
+  scrim.offsetWidth;
+  scrim.classList.add('scrim-visible');
 }
 
 // ── Top 3 Widget (collapsed) ──
