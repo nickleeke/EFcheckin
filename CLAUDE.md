@@ -210,6 +210,8 @@ Material Design 3 motion creates responsive, expressive UI through consistent ea
 | Token | CSS Variable | `cubic-bezier()` | When to Use |
 |---|---|---|---|
 | **Standard** | `var(--md-easing-standard)` | `cubic-bezier(0.2, 0, 0, 1)` | Simple state changes: color, opacity, elevation on hover/press. Symmetric — same curve for both directions. |
+| **Standard decelerate** | `var(--md-easing-standard-decelerate)` | `cubic-bezier(0, 0, 0.2, 1)` | Standard entrance: elements enter at full velocity and slow to rest. Less expressive than emphasized variant. |
+| **Standard accelerate** | `var(--md-easing-standard-accelerate)` | `cubic-bezier(0.4, 0, 1, 1)` | Standard exit: elements leave at full velocity. Less expressive than emphasized variant. |
 | **Emphasized decelerate** | `var(--md-easing-emphasized-decelerate)` | `cubic-bezier(0.05, 0.7, 0.1, 1)` | **Entering / expanding** elements. Elements slow into their resting position. Use for: menu open, dialog appear, FAB expand, view enter, content fade-in. |
 | **Emphasized accelerate** | `var(--md-easing-emphasized-accelerate)` | `cubic-bezier(0.3, 0, 0.8, 0.15)` | **Exiting / collapsing** elements. Elements speed away from the screen. Use for: menu close, dialog dismiss, FAB collapse, view exit, content fade-out. |
 
@@ -232,7 +234,7 @@ Material Design 3 motion creates responsive, expressive UI through consistent ea
 
 | Token | Variable | Value | Typical Use |
 |---|---|---|---|
-| short1 | — (not defined) | 50ms | — |
+| **short1** | `var(--md-duration-short1)` | 50ms | Ultra-micro interactions |
 | **short2** | `var(--md-duration-short2)` | 100ms | Micro-interactions: checkbox, switch, ripple start |
 | **short3** | `var(--md-duration-short3)` | 150ms | Hover states: background, border-color, box-shadow, icon color |
 | **short4** | `var(--md-duration-short4)` | 200ms | Small element transitions: icon cross-fade, chip toggle, focus ring |
@@ -252,8 +254,8 @@ Material Design 3 motion creates responsive, expressive UI through consistent ea
 | **Simple state** (hover, press) | `short3` + `standard` | same | Button background, elevation |
 | **Icon morph** (cross-fade, rotate) | `short4` + `standard` | same | FAB + to x, chevron rotate |
 | **Small surface** (chip, tooltip) | `short4` + `emphasized-decelerate` | `short3` + `emphasized-accelerate` | Filter chip expand, tooltip |
-| **Menu / dropdown** | `medium2` + `emphasized-decelerate` | `medium1` + `emphasized-accelerate` | FAB menu, overflow menu |
-| **Dialog / modal** | `short3` + `emphasized-decelerate` | `short3` + `emphasized-accelerate` | Confirm dialog (uses `animation`) |
+| **Menu / dropdown** | `short4` + `emphasized-decelerate` | `short3` + `emphasized-accelerate` | Dropdown menu, overflow menu |
+| **Dialog / modal** | `medium2` + `emphasized-decelerate` | `short4` + `emphasized-accelerate` | Confirm dialog (uses `animation`) |
 | **Side sheet / drawer** | `medium3` + `emphasized-decelerate` | `medium3` + `emphasized-accelerate` | Nav drawer, side panel |
 | **View transition** | `medium2` + `emphasized-decelerate` | `medium2` + `emphasized-decelerate` | Shared Axis X (both use decel) |
 | **Expanding surface** | `medium4` + `standard` | `medium2` + `standard` | Card expand, accordion |

@@ -83,6 +83,10 @@ var _lastEvalSummaryFetch = 0;
 var _lastDueProcessFetch = 0;
 var _widgetConfigSaveTimer = null;
 var _widgetTransformSource = null;
+var _prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+window.matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', function(e) {
+  _prefersReducedMotion = e.matches;
+});
 var DATA_FRESH_MS = 30000; // 30s — frontend staleness window for navigation
 var EVAL_FRESH_MS = 60000; // 60s — eval summary changes less often
 
@@ -1021,7 +1025,7 @@ function toggleKeyboardHelp() {
 function closeConfirmDialog(overlayEl) {
   if (!overlayEl || overlayEl.classList.contains('dialog-closing')) return;
   overlayEl.classList.add('dialog-closing');
-  var fallback = setTimeout(function() { overlayEl.remove(); }, 200);
+  var fallback = setTimeout(function() { overlayEl.remove(); }, 250);
   overlayEl.addEventListener('animationend', function() {
     clearTimeout(fallback);
     overlayEl.remove();
@@ -3831,7 +3835,7 @@ function openWidgetEditorDialog_(widget, isNew, sourceEl) {
   dialog.innerHTML = buildWidgetEditorHtml_(widget, isNew);
   overlay.appendChild(dialog);
 
-  if (sourceEl) {
+  if (sourceEl && !_prefersReducedMotion) {
     var sourceRect = sourceEl.getBoundingClientRect();
     var sourceBg = getComputedStyle(sourceEl).backgroundColor || '';
 
@@ -3870,20 +3874,18 @@ function openWidgetEditorDialog_(widget, isNew, sourceEl) {
     // FLIP: play — animate to final state
     requestAnimationFrame(function() {
       requestAnimationFrame(function() {
-        var dur = '350ms';
-        var ease = 'cubic-bezier(0.2, 0, 0, 1)';
-        dialog.style.transition = 'transform ' + dur + ' ' + ease +
-          ', background-color ' + dur + ' ' + ease;
+        dialog.style.transition = 'transform var(--md-duration-medium3) var(--md-easing-standard)' +
+          ', background-color var(--md-duration-medium3) var(--md-easing-standard)';
         dialog.style.transform = '';
         dialog.style.backgroundColor = '';
 
-        overlay.style.transition = 'background 300ms ease';
+        overlay.style.transition = 'background var(--md-duration-medium2) var(--md-easing-standard)';
         overlay.style.background = '';
 
-        // Fade in content partway through transform
+        // Fade in content partway through transform (120ms ≈ short2 delay)
         setTimeout(function() {
           Array.from(dialog.children).forEach(function(child) {
-            child.style.transition = 'opacity 200ms ease';
+            child.style.transition = 'opacity var(--md-duration-short4) var(--md-easing-emphasized-decelerate)';
             child.style.opacity = '';
           });
         }, 120);
@@ -3929,23 +3931,21 @@ function closeWidgetEditorDialog_(skipTransform) {
   var dx = (sourceRect.left + sourceRect.width / 2) - (dialogRect.left + dialogRect.width / 2);
   var dy = (sourceRect.top + sourceRect.height / 2) - (dialogRect.top + dialogRect.height / 2);
 
-  // Phase 1: fade out content
+  // Phase 1: fade out content (100ms ≈ short2)
   Array.from(dialog.children).forEach(function(child) {
-    child.style.transition = 'opacity 100ms ease';
+    child.style.transition = 'opacity var(--md-duration-short2) var(--md-easing-emphasized-accelerate)';
     child.style.opacity = '0';
   });
 
-  // Phase 2: reverse transform back to source card
+  // Phase 2: reverse transform back to source card (after content fades)
   setTimeout(function() {
-    var dur = '300ms';
-    var ease = 'cubic-bezier(0.2, 0, 0, 1)';
-    dialog.style.transition = 'transform ' + dur + ' ' + ease +
-      ', background-color ' + dur + ' ' + ease;
+    dialog.style.transition = 'transform var(--md-duration-medium2) var(--md-easing-standard)' +
+      ', background-color var(--md-duration-medium2) var(--md-easing-standard)';
     dialog.style.transformOrigin = 'center center';
     dialog.style.transform = 'translate(' + dx + 'px, ' + dy + 'px) scale(' + scaleX + ', ' + scaleY + ')';
     if (sourceBg) dialog.style.backgroundColor = sourceBg;
 
-    overlay.style.transition = 'background 250ms ease';
+    overlay.style.transition = 'background var(--md-duration-medium1) var(--md-easing-standard)';
     overlay.style.background = 'transparent';
 
     setTimeout(function() {
@@ -4515,7 +4515,7 @@ function spMarkDone(studentId, classIdx, assignmentIdx, btnEl) {
   // Optimistic: remove the row from detail table
   var row = btnEl.closest('tr');
   if (row) {
-    row.style.transition = 'opacity 0.2s, height 0.2s';
+    row.style.transition = 'opacity var(--md-duration-short4) var(--md-easing-emphasized-accelerate), height var(--md-duration-short4) var(--md-easing-emphasized-accelerate)';
     row.style.opacity = '0';
     setTimeout(function() { row.remove(); }, 200);
   }
@@ -5651,6 +5651,7 @@ function toggleMissingClass(idx) {
 }
 
 function launchConfetti(originEl) {
+  if (_prefersReducedMotion) return;
   var rect = originEl ? originEl.getBoundingClientRect() : { left: window.innerWidth / 2, top: window.innerHeight / 2 };
   var colors = ['#4CAF50', '#FFC107', '#2196F3', '#E91E63', '#9C27B0', '#FF5722', '#00BCD4'];
   var shapes = ['circle', 'square'];
@@ -7200,7 +7201,7 @@ function closeAiSummaryModal_() {
   var overlay = document.getElementById('ai-summary-overlay');
   if (!overlay || overlay.classList.contains('dialog-closing')) return;
   overlay.classList.add('dialog-closing');
-  var fallback = setTimeout(function() { overlay.remove(); }, 200);
+  var fallback = setTimeout(function() { overlay.remove(); }, 250);
   overlay.addEventListener('animationend', function() {
     clearTimeout(fallback);
     overlay.remove();

@@ -84,10 +84,13 @@
 
   /* M3 Motion — Easing */
   --md-easing-standard: cubic-bezier(0.2, 0, 0, 1);
+  --md-easing-standard-decelerate: cubic-bezier(0, 0, 0.2, 1);
+  --md-easing-standard-accelerate: cubic-bezier(0.4, 0, 1, 1);
   --md-easing-emphasized-decelerate: cubic-bezier(0.05, 0.7, 0.1, 1);
   --md-easing-emphasized-accelerate: cubic-bezier(0.3, 0, 0.8, 0.15);
 
   /* M3 Motion — Duration */
+  --md-duration-short1: 50ms;
   --md-duration-short2: 100ms;
   --md-duration-short3: 150ms;
   --md-duration-short4: 200ms;
@@ -3090,17 +3093,17 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   to   { opacity: 0; transform: scale(0.8); }
 }
 .confirm-overlay .confirm-dialog {
-  animation: dialogScaleIn var(--md-duration-short3) var(--md-easing-emphasized-decelerate) both;
+  animation: dialogScaleIn var(--md-duration-medium2) var(--md-easing-emphasized-decelerate) both;
 }
 .confirm-overlay.container-transform,
 .confirm-overlay.container-transform .confirm-dialog {
   animation: none;
 }
 .confirm-overlay.dialog-closing {
-  animation: dialogOverlayOut var(--md-duration-short3) var(--md-easing-emphasized-accelerate) both;
+  animation: dialogOverlayOut var(--md-duration-short4) var(--md-easing-emphasized-accelerate) both;
 }
 .confirm-overlay.dialog-closing .confirm-dialog {
-  animation: dialogScaleOut var(--md-duration-short3) var(--md-easing-emphasized-accelerate) both;
+  animation: dialogScaleOut var(--md-duration-short4) var(--md-easing-emphasized-accelerate) both;
 }
 
 /* ─── AI Summary Modal ─── */
@@ -3112,7 +3115,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   max-width: 420px;
   width: 90%;
   box-shadow: var(--md-elevation-3);
-  animation: dialogScaleIn var(--md-duration-short3) var(--md-easing-emphasized-decelerate) both;
+  animation: dialogScaleIn var(--md-duration-medium2) var(--md-easing-emphasized-decelerate) both;
   transition: max-width var(--md-duration-medium4) var(--md-easing-standard);
 }
 .ai-summary-dialog-expanded {
@@ -3155,7 +3158,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   border: 2px solid var(--md-outline-variant);
   border-top-color: var(--md-primary);
   border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+  animation: spin 0.8s linear infinite; /* Spinner speed — intentionally outside MD3 token scale */
   flex-shrink: 0;
 }
 .ai-summary-error-text {
@@ -3207,10 +3210,10 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   margin-top: 16px;
 }
 #ai-summary-overlay.dialog-closing .ai-summary-dialog {
-  animation: dialogScaleOut var(--md-duration-short3) var(--md-easing-emphasized-accelerate) both;
+  animation: dialogScaleOut var(--md-duration-short4) var(--md-easing-emphasized-accelerate) both;
 }
 #ai-summary-overlay.dialog-closing {
-  animation: dialogOverlayOut var(--md-duration-short3) var(--md-easing-emphasized-accelerate) both;
+  animation: dialogOverlayOut var(--md-duration-short4) var(--md-easing-emphasized-accelerate) both;
 }
 
 /* ─── Dropdown Menu Animation ─── */
@@ -3219,13 +3222,15 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   transform-origin: top right;
   opacity: 0;
   transform: scaleY(0.8);
-  transition: opacity var(--md-duration-short4) var(--md-easing-emphasized-decelerate),
-              transform var(--md-duration-short4) var(--md-easing-emphasized-decelerate);
+  transition: opacity var(--md-duration-short3) var(--md-easing-emphasized-accelerate),
+              transform var(--md-duration-short3) var(--md-easing-emphasized-accelerate);
   pointer-events: none;
 }
 .dropdown-menu.dropdown-open {
   opacity: 1;
   transform: scaleY(1);
+  transition: opacity var(--md-duration-short4) var(--md-easing-emphasized-decelerate),
+              transform var(--md-duration-short4) var(--md-easing-emphasized-decelerate);
   pointer-events: auto;
 }
 
@@ -3595,7 +3600,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   border: 2px solid var(--md-outline-variant);
   border-top-color: var(--md-primary);
   border-radius: 50%;
-  animation: spin var(--md-duration-long1) linear infinite;
+  animation: spin 0.8s linear infinite; /* Spinner speed — intentionally outside MD3 token scale */
   flex-shrink: 0;
   display: inline-block;
 }
@@ -3952,7 +3957,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   border: 4px solid var(--md-outline-variant);
   border-top-color: var(--md-primary);
   border-radius: 50%;
-  animation: spin var(--md-duration-long1) linear infinite;
+  animation: spin 0.8s linear infinite; /* Spinner speed — intentionally outside MD3 token scale */
   margin: 0 auto 16px;
 }
 @keyframes spin {
