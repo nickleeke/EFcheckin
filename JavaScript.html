@@ -7322,6 +7322,7 @@ function generateAiSummary_(studentId, quarter) {
           var errText = document.getElementById('ai-summary-error-text');
           if (errText) errText.textContent = result.error || 'Failed to generate summary.';
         }
+        console.error('[AI Summary] generateAiProgressSummary error:', result.error || 'Failed to generate summary.');
         return;
       }
       var expandedEl = document.getElementById('ai-summary-expanded');
@@ -7332,6 +7333,7 @@ function generateAiSummary_(studentId, quarter) {
       if (dialogEl) dialogEl.classList.add('ai-summary-dialog-expanded');
     })
     .withFailureHandler(function(err) {
+      console.error('[AI Summary] generateAiProgressSummary failure:', err);
       if (loadingEl) loadingEl.style.display = 'none';
       var errorEl = document.getElementById('ai-summary-error');
       if (errorEl) {
@@ -11801,10 +11803,13 @@ function generateFileSummaryHandler(evalId, fileId, driveFileId) {
         showToast('AI summary created');
       } else {
         renderEvalFilesCard(appState.currentEvaluation);
-        showToast('Error: ' + ((result && result.error) || 'Failed to generate summary'));
+        var sheetErr = (result && result.error) || 'Failed to generate summary';
+        console.error('[AI Summary] generateSheetSummary error:', sheetErr);
+        showToast('Error: ' + sheetErr);
       }
     })
     .withFailureHandler(function(err) {
+      console.error('[AI Summary] generateSheetSummary failure:', err);
       delete _generatingFileSummary[driveFileId];
       if (appState.currentEvaluation && appState.currentEvaluation.id === evalId) {
         appState.currentEvaluation.files = (appState.currentEvaluation.files || [])
