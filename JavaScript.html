@@ -3655,7 +3655,7 @@ function renderTop3Collapsed_(widget) {
   var color = esc(widget.color || '#C41E3A');
   var fillColor = tintColor_(widget.color || '#C41E3A', 0.85);
   var strokeColor = tintColor_(widget.color || '#C41E3A', 0.45);
-  var html = '<div class="top3-widget-card" style="background-color: ' + fillColor + '; border-color: ' + strokeColor + '"' +
+  var html = '<div class="top3-widget-card" data-widget-id="' + esc(widget.id) + '" style="background-color: ' + fillColor + '; border-color: ' + strokeColor + '"' +
     ' onclick="openWidgetEditor(\'' + esc(widget.id) + '\', event)"' +
     ' role="button" tabindex="0"' +
     ' onkeydown="if(event.key===\'Enter\')openWidgetEditor(\'' + esc(widget.id) + '\', event)">';
@@ -3666,11 +3666,14 @@ function renderTop3Collapsed_(widget) {
   items.forEach(function(item, idx) {
     if (!item.text) return;
     var checked = item.checked ? ' checked' : '';
+    var checkedCls = item.checked ? ' checked' : '';
     html += '<div class="top3-item">' +
       '<label class="top3-checkbox" onclick="event.stopPropagation()">' +
         '<input type="checkbox"' + checked + ' onchange="toggleTop3Item(\'' + esc(widget.id) + '\', ' + idx + ', this)">' +
-        '<span class="top3-checkmark" style="border-color: ' + color + '; background: ' + (item.checked ? color : 'transparent') + '">' +
-          '<svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>' +
+        '<span class="top3-check-btn' + checkedCls + '" style="color: ' + color + '">' +
+          '<svg class="top3-check-icon" width="18" height="18" viewBox="0 0 24 24">' +
+            '<path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" fill="currentColor" stroke="currentColor" stroke-width="0.8" stroke-linejoin="round"/>' +
+          '</svg>' +
         '</span>' +
         '<span class="top3-text' + (item.checked ? ' completed' : '') + '">' + esc(item.text) + '</span>' +
       '</label>' +
@@ -3688,17 +3691,69 @@ function toggleTop3Item(widgetId, itemIndex, checkbox) {
   // Optimistic UI: update visuals immediately
   var label = checkbox.closest('.top3-checkbox');
   if (label) {
-    var checkmark = label.querySelector('.top3-checkmark');
+    var checkBtn = label.querySelector('.top3-check-btn');
     var text = label.querySelector('.top3-text');
-    if (checkmark) {
-      checkmark.style.background = checkbox.checked ? (widget.color || '#C41E3A') : 'transparent';
+    if (checkBtn) {
+      if (checkbox.checked) checkBtn.classList.add('checked');
+      else checkBtn.classList.remove('checked');
     }
     if (text) {
       if (checkbox.checked) text.classList.add('completed');
       else text.classList.remove('completed');
     }
   }
+
+  // Celebration: check if all items with text are now complete
+  if (checkbox.checked && !_prefersReducedMotion && checkAllCompleted_(widget)) {
+    showWidgetCelebration_(widgetId);
+  }
+
   debounceSaveWidgetConfig_();
+}
+
+function checkAllCompleted_(widget) {
+  var withText = (widget.items || []).filter(function(i) { return i.text; });
+  return withText.length > 0 && withText.every(function(i) { return i.checked; });
+}
+
+function showWidgetCelebration_(widgetId) {
+  var card = document.querySelector('[data-widget-id="' + widgetId + '"]');
+  if (!card || card.querySelector('.widget-celebration-blur')) return;
+
+  // Blur layer (z-index 1)
+  var blur = document.createElement('div');
+  blur.className = 'widget-celebration-blur';
+  blur.onclick = function(e) { e.stopPropagation(); };
+  card.appendChild(blur);
+
+  // Lottie animation layer (z-index 2)
+  var lottie = document.createElement('dotlottie-wc');
+  lottie.setAttribute('src', 'https://lottie.host/cf69825e-33ef-4ab2-a5d0-3fdd65b94db0/PJLIvrZACE.lottie');
+  lottie.setAttribute('autoplay', '');
+  lottie.setAttribute('loop', '');
+  lottie.className = 'widget-celebration-lottie';
+  lottie.onclick = function(e) { e.stopPropagation(); };
+  card.appendChild(lottie);
+
+  // Fade in (force reflow before adding class)
+  blur.offsetWidth;
+  blur.classList.add('visible');
+  lottie.classList.add('visible');
+
+  // Auto-dismiss after 3.5s
+  setTimeout(function() {
+    blur.classList.remove('visible');
+    lottie.classList.remove('visible');
+    var cleaned = false;
+    var cleanup = function() {
+      if (cleaned) return;
+      cleaned = true;
+      if (blur.parentNode) blur.remove();
+      if (lottie.parentNode) lottie.remove();
+    };
+    blur.addEventListener('transitionend', cleanup, { once: true });
+    setTimeout(cleanup, 400); // fallback
+  }, 3500);
 }
 
 // ── Sticky Notes Widget (collapsed) ──
@@ -3718,6 +3773,9 @@ function renderStickyNoteCollapsed_(widget) {
   if (!widget.title && !widget.body) {
     html += '<div class="sticky-note-body" style="color:rgba(0,0,0,0.4)">Click to edit</div>';
   }
+  html += '<button class="btn-icon widget-card-delete" onclick="deleteWidgetFromCard(\'' + esc(widget.id) + '\', event)" aria-label="Delete">' +
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>' +
+  '</button>';
   html += '</div>';
   return html;
 }
@@ -3956,23 +4014,24 @@ function closeWidgetEditorDialog_(skipTransform) {
 }
 
 function buildWidgetEditorHtml_(widget, isNew) {
-  var html = '';
+  // X close button (top-right corner, both modes)
+  var html = '<button class="btn-icon widget-editor-close" onclick="closeWidgetEditorDialog_()" aria-label="Close">' +
+    '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>' +
+  '</button>';
   if (widget.type === 'top3') {
     html += buildTop3EditorHtml_(widget);
   } else if (widget.type === 'sticky-note') {
     html += buildStickyNoteEditorHtml_(widget);
   }
-  html += '<div class="widget-editor-actions">';
-  if (!isNew) {
-    html += '<button class="btn btn-ghost btn-danger" onclick="deleteWidgetFromEditor(\'' + esc(widget.id) + '\')">Delete</button>';
+  if (isNew) {
+    var ctaLabel = widget.type === 'sticky-note' ? 'Create Note' : 'Create List';
+    html += '<button class="btn btn-primary widget-editor-cta" onclick="saveWidgetFromEditor(\'' + esc(widget.id) + '\', true)">' + ctaLabel + '</button>';
   } else {
-    html += '<div></div>';
+    html += '<div class="widget-editor-actions">' +
+      '<button class="btn btn-ghost btn-danger" onclick="deleteWidgetFromEditor(\'' + esc(widget.id) + '\')">Delete</button>' +
+      '<button class="btn btn-primary" onclick="saveWidgetFromEditor(\'' + esc(widget.id) + '\', false)">Save</button>' +
+    '</div>';
   }
-  var saveLabel = isNew ? 'Create' : 'Save';
-  html += '<div class="widget-editor-actions-right">' +
-    '<button class="btn btn-outlined" onclick="closeWidgetEditorDialog_()">Cancel</button>' +
-    '<button class="btn" onclick="saveWidgetFromEditor(\'' + esc(widget.id) + '\', ' + (isNew ? 'true' : 'false') + ')">' + saveLabel + '</button>' +
-  '</div></div>';
   return html;
 }
 
@@ -4122,6 +4181,19 @@ function saveWidgetFromEditor(widgetId, isNew) {
   closeWidgetEditorDialog_(true);
   renderDashboardFromState();
   showToast(isNew ? 'Widget added' : 'Widget updated');
+}
+
+function deleteWidgetFromCard(widgetId, event) {
+  event.stopPropagation();
+  var widget = findWidget_(widgetId);
+  var typeLabel = widget && widget.type === 'sticky-note' ? 'Note' : 'List';
+  showConfirmDialog({
+    title: 'Delete ' + typeLabel,
+    body: 'Are you sure you want to delete this ' + typeLabel.toLowerCase() + '?',
+    confirmLabel: 'Delete',
+    confirmClass: 'btn-danger',
+    onConfirm: "doDeleteWidget('" + widgetId + "')"
+  });
 }
 
 function deleteWidgetFromEditor(widgetId) {
