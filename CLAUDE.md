@@ -198,8 +198,108 @@ The MD3 token system is derived from the Richfield Red seed color `#942022`, wit
 | **Outline** | `--md-outline: #757575`, `--md-outline-variant: #C8C8C8` |
 | **Shape** | xs: 4px, sm: 8px, md: 12px, lg: 16px, xl: 28px, full: 9999px |
 | **Elevation** | Levels 1-3 via box-shadow |
-| **Motion** | Easing: `standard`, `emphasized-decelerate`, `emphasized-accelerate`. Duration: short1-4 (50-200ms), medium1-4 (250-400ms), long1-2 (450-500ms) |
+| **Motion** | See **MD3 Motion & Animation** section below for full easing curves, duration tokens, and per-component guidance |
 | **Color Tiers** | `--color-tier-gold-bg/text`, `--color-tier-green-bg/text`, `--color-tier-yellow-bg/text` |
+
+### MD3 Motion & Animation
+
+Material Design 3 motion creates responsive, expressive UI through consistent easing curves and duration tokens. All animations in this app must use the token variables — never hardcode `cubic-bezier()` or millisecond values.
+
+#### Easing Tokens
+
+| Token | CSS Variable | `cubic-bezier()` | When to Use |
+|---|---|---|---|
+| **Standard** | `var(--md-easing-standard)` | `cubic-bezier(0.2, 0, 0, 1)` | Simple state changes: color, opacity, elevation on hover/press. Symmetric — same curve for both directions. |
+| **Emphasized decelerate** | `var(--md-easing-emphasized-decelerate)` | `cubic-bezier(0.05, 0.7, 0.1, 1)` | **Entering / expanding** elements. Elements slow into their resting position. Use for: menu open, dialog appear, FAB expand, view enter, content fade-in. |
+| **Emphasized accelerate** | `var(--md-easing-emphasized-accelerate)` | `cubic-bezier(0.3, 0, 0.8, 0.15)` | **Exiting / collapsing** elements. Elements speed away from the screen. Use for: menu close, dialog dismiss, FAB collapse, view exit, content fade-out. |
+
+**Asymmetric motion is a core MD3 principle.** Enter and exit must use different easing curves. A common mistake is using `emphasized-decelerate` for both open and close — the close will feel sluggish. The pattern:
+
+```css
+/* DEFAULT = closed/exiting state */
+.menu {
+  opacity: 0;
+  transition: opacity var(--md-duration-medium1) var(--md-easing-emphasized-accelerate);
+}
+/* OPEN = entering state (override transition on the open selector) */
+.menu.open {
+  opacity: 1;
+  transition: opacity var(--md-duration-medium2) var(--md-easing-emphasized-decelerate);
+}
+```
+
+#### Duration Tokens
+
+| Token | Variable | Value | Typical Use |
+|---|---|---|---|
+| short1 | — (not defined) | 50ms | — |
+| **short2** | `var(--md-duration-short2)` | 100ms | Micro-interactions: checkbox, switch, ripple start |
+| **short3** | `var(--md-duration-short3)` | 150ms | Hover states: background, border-color, box-shadow, icon color |
+| **short4** | `var(--md-duration-short4)` | 200ms | Small element transitions: icon cross-fade, chip toggle, focus ring |
+| **medium1** | `var(--md-duration-medium1)` | 250ms | Exit animations: menu close, dialog dismiss, FAB collapse |
+| **medium2** | `var(--md-duration-medium2)` | 300ms | Enter animations: menu open, dialog appear, FAB expand, content fade-in, view transitions |
+| **medium3** | `var(--md-duration-medium3)` | 350ms | Larger enter/exit: side sheet slide, nav drawer |
+| **medium4** | `var(--md-duration-medium4)` | 400ms | Expanding surfaces: card expand, accordion, ripple expand |
+| **long1** | `var(--md-duration-long1)` | 450ms | Complex sequences: page transitions, multi-step animations |
+| **long2** | `var(--md-duration-long2)` | 500ms | Dramatic effects: highlight flash, onboarding sequences |
+
+**Key rule:** Exit animations should be **faster** than enter animations (typically one duration step shorter: `medium1` exit vs `medium2` enter).
+
+#### Transition Patterns by Component Type
+
+| Pattern | Enter | Exit | Example |
+|---|---|---|---|
+| **Simple state** (hover, press) | `short3` + `standard` | same | Button background, elevation |
+| **Icon morph** (cross-fade, rotate) | `short4` + `standard` | same | FAB + to x, chevron rotate |
+| **Small surface** (chip, tooltip) | `short4` + `emphasized-decelerate` | `short3` + `emphasized-accelerate` | Filter chip expand, tooltip |
+| **Menu / dropdown** | `medium2` + `emphasized-decelerate` | `medium1` + `emphasized-accelerate` | FAB menu, overflow menu |
+| **Dialog / modal** | `short3` + `emphasized-decelerate` | `short3` + `emphasized-accelerate` | Confirm dialog (uses `animation`) |
+| **Side sheet / drawer** | `medium3` + `emphasized-decelerate` | `medium3` + `emphasized-accelerate` | Nav drawer, side panel |
+| **View transition** | `medium2` + `emphasized-decelerate` | `medium2` + `emphasized-decelerate` | Shared Axis X (both use decel) |
+| **Expanding surface** | `medium4` + `standard` | `medium2` + `standard` | Card expand, accordion |
+| **Skeleton → content** | `medium2` + `emphasized-decelerate` | — | `animateContentIn()` cross-fade |
+| **Scrim overlay** | `medium1` + `standard` | `medium1` + `standard` | Dialog scrim, sheet scrim |
+
+#### Staggered Reveals
+
+When multiple sibling elements appear together (menu items, list items, card grid), stagger their entrance with `transition-delay`:
+
+- **Delay increment:** 35–50ms between items
+- **Direction:** Items closest to the trigger appear first (e.g., FAB menu items nearest the FAB button)
+- **Close direction:** No stagger on exit — all items disappear simultaneously for a snappy close
+- **Implementation:** Use `:nth-child` selectors on the `.open` parent state:
+
+```css
+.open .item:last-child  { transition-delay: 0ms; }   /* closest to trigger */
+.open .item:first-child { transition-delay: 50ms; }
+```
+
+#### Icon Morphing
+
+Never toggle icons with `display: none/block` — this causes an instant hard cut with zero motion. Instead:
+
+- **Rotation morph:** Rotate the container (e.g., FAB rotates 45deg so + becomes x)
+- **Cross-fade:** Layer icons with `position: absolute` and transition `opacity`
+- **Combine both** for the richest effect (rotation + cross-fade)
+
+#### Scrim Behavior
+
+Scrims (click-away overlays) should fade in/out, not appear instantly:
+
+- Use a class toggle (e.g., `.scrim-visible`) with an `opacity` transition
+- Force a reflow (`el.offsetWidth`) after DOM insertion before adding the visible class
+- On close: remove the visible class, wait for `transitionend`, then remove from DOM
+- Always add a `setTimeout` fallback for DOM removal in case `transitionend` doesn't fire
+
+#### Animation Safety Checklist
+
+1. Never set explicit `opacity: 0` on elements that rely on `animation` — use `animation-fill-mode: both`
+2. Always add `setTimeout` fallbacks for `animationend` / `transitionend` listeners
+3. Debounce repeated animations (don't restart mid-flight)
+4. Respect `prefers-reduced-motion` — the global `@media` rule handles this automatically
+5. Use `var(--md-duration-*)` and `var(--md-easing-*)` — never hardcode values
+6. For asymmetric transitions, define the exit curve on the default state and the enter curve on the active/open state
+7. Verify stagger delays reset to 0 on close (only apply delays on the `.open` selector)
 
 ### Typography (Roboto)
 
@@ -311,9 +411,7 @@ When adding a new button class, add it to this selector in `Stylesheet.html`.
 ### CSS Rules
 
 - **`.selected:hover`:** Always define a `:hover` rule for `.selected` states — otherwise the base `:hover` overrides the selected background.
-- **Animation safety:** Never set explicit `opacity: 0` on elements that rely on animation. Use `animation-fill-mode: both`. Always add timeout fallbacks for `animationend`. Debounce repeated animations.
-- **Respect `prefers-reduced-motion`:** Global `@media` rule reduces all durations to `0.01ms`.
-- **Motion tokens:** Use `--md-duration-*` and `--md-easing-*` variables. Never hardcode durations.
+- **Motion:** Follow the full **MD3 Motion & Animation** section above. Key rules: always use `var(--md-easing-*)` and `var(--md-duration-*)` tokens, use asymmetric easing (decelerate for enter, accelerate for exit), never toggle icons with `display` — use opacity cross-fade and/or rotation. See that section's Animation Safety Checklist for complete guidance.
 - **Color tier tokens:** Use `var(--color-tier-*)` for gold/green/yellow tier colors. Never hardcode `#FFDEAB`, `#D6F5D6`, `#FFF3CD`, etc. in Stylesheet.html. Tokens are defined in `:root`. JS inline styles (sparkline dots, progress report CSS strings) may use raw hex since CSS vars aren't available there.
 - **No single-side strokes:** Never use `border-left`, `border-top`, etc. as accent indicators. Always use a full `border` around the entire element. For emphasis, use color (e.g., `border: 1px solid var(--md-error)`) rather than a thicker single-side stripe.
 
