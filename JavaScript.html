@@ -10624,18 +10624,19 @@ function buildEvalItemRow(evalId, item) {
       '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>' +
     '</span>';
   }
-  html += '<label class="eval-item-label">' +
+  html += '<div class="eval-item-label">' +
     '<input type="checkbox" class="eval-item-checkbox"' + (item.checked ? ' checked' : '') +
       ' onchange="toggleEvalItem(\'' + esc(evalId) + '\', \'' + esc(item.id) + '\', this.checked)">';
   if (isEditing) {
-    html += '<input type="text" class="eval-item-edit-input" id="eval-edit-text-' + esc(item.id) + '" value="' + esc(item.text) + '" ' +
-      'onkeydown="if(event.key===\'Enter\'){event.preventDefault();exitEvalEditMode();} if(event.key===\'Escape\'){cancelEvalEditMode(\'' + esc(item.id) + '\');}">';
+    html += '<textarea class="eval-item-edit-input eval-item-edit-textarea" id="eval-edit-text-' + esc(item.id) + '" rows="1" ' +
+      'onkeydown="if(event.key===\'Enter\'&&!event.shiftKey){event.preventDefault();exitEvalEditMode();} if(event.key===\'Escape\'){cancelEvalEditMode(\'' + esc(item.id) + '\');}" ' +
+      'oninput="autoResizeEvalTextarea_(this)">' + esc(item.text) + '</textarea>';
   } else {
-    html += '<span class="eval-item-text">' + esc(item.text) + '</span>';
+    html += '<span class="eval-item-text" ondblclick="enterEvalEditMode(\'' + esc(item.id) + '\')">' + esc(item.text) + '</span>';
   }
-  html += '</label>';
-  // File indicator (non-edit mode, when item has files)
-  if (itemFiles.length > 0 && !isEditing) {
+  html += '</div>';
+  // File indicator (paperclip toggle, always shown when files exist)
+  if (itemFiles.length > 0) {
     html += '<span class="eval-item-file-indicator" role="button" tabindex="0" ' +
       'onclick="event.stopPropagation();toggleEvalItemFiles(\'' + esc(item.id) + '\')" ' +
       'onkeydown="if(event.key===\'Enter\'){event.stopPropagation();toggleEvalItemFiles(\'' + esc(item.id) + '\');}" ' +
@@ -10653,7 +10654,7 @@ function buildEvalItemRow(evalId, item) {
     html += '<input type="date" class="eval-item-due-date" id="eval-edit-due-' + esc(item.id) + '" value="' + esc(item.dueDate || '') + '">';
   } else if (item.dueDate) {
     var dueTextClass = isOverdue ? ' eval-due-text-overdue' : (isDueSoon ? ' eval-due-text-soon' : '');
-    html += '<span class="eval-due-text' + dueTextClass + '">' + esc(formatDateDisplay(item.dueDate)) + '</span>';
+    html += '<span class="eval-due-text' + dueTextClass + '" ondblclick="enterEvalEditMode(\'' + esc(item.id) + '\')">' + esc(formatDateDisplay(item.dueDate)) + '</span>';
   }
   html += '</div>';
 
@@ -10679,12 +10680,13 @@ function buildEvalItemRow(evalId, item) {
   '</button>';
   html += '</div>';
 
-  // Expanded file list (spans all grid columns)
-  if (itemFiles.length > 0 && (isFilesExpanded || isEditing)) {
+  // Expanded file list (spans all grid columns, only when paperclip toggled)
+  if (itemFiles.length > 0 && isFilesExpanded) {
     html += '<div class="eval-item-files-panel">';
     itemFiles.forEach(function(file) {
       html += '<div class="eval-item-file-row">' +
-        '<a href="' + esc(file.url) + '" target="_blank" rel="noopener" class="eval-item-file-link" title="Open ' + esc(file.name) + '">' +
+        '<a href="' + esc(file.url) + '" target="_blank" rel="noopener" class="eval-item-file-link" title="Open ' + esc(file.name) + '"' +
+          ' ondblclick="event.preventDefault();enterEvalEditMode(\'' + esc(item.id) + '\')">' +
           '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" class="eval-item-file-link-icon"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg>' +
           '<span class="eval-item-file-name">' + esc(file.name) + '</span>' +
         '</a>';
@@ -10701,11 +10703,18 @@ function buildEvalItemRow(evalId, item) {
   // Add files section (edit mode only, spans all grid columns)
   if (isEditing) {
     html += '<div class="eval-item-add-file-section">' +
-      '<button type="button" class="btn-ghost btn-sm eval-item-add-file-btn" id="eval-item-add-file-btn-' + esc(item.id) + '" ' +
-        'onclick="event.stopPropagation();showEvalItemAddFileForm(\'' + esc(item.id) + '\')">' +
-        '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="margin-right:4px"><path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z"/></svg>' +
-        '+ Add File' +
-      '</button>' +
+      '<div class="eval-item-add-file-buttons" id="eval-item-add-file-buttons-' + esc(item.id) + '">' +
+        '<button type="button" class="btn-ghost btn-sm eval-item-add-file-btn" ' +
+          'onclick="event.stopPropagation();showEvalItemAddFileForm(\'' + esc(item.id) + '\')">' +
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="margin-right:4px"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg>' +
+          '+ Add by URL' +
+        '</button>' +
+        '<button type="button" class="btn-ghost btn-sm eval-item-add-file-btn" ' +
+          'onclick="event.stopPropagation();showDriveFileBrowser_(\'' + esc(evalId) + '\',\'' + esc(item.id) + '\')">' +
+          '<svg width="14" height="14" viewBox="0 0 87.3 78" fill="currentColor" style="margin-right:4px"><path d="M6.6 66.85l3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8H1.05c0 1.6.4 3.2 1.2 4.6z"/><path d="M43.65 25.15L29.9 1.35c-1.35.8-2.5 1.9-3.3 3.3L1.2 52.3c-.8 1.4-1.2 3-1.2 4.6h27.5z"/><path d="M73.55 13.3c-.8-1.4-1.95-2.5-3.3-3.3L57.45 25.15 43.65 48.95h27.5l13.75 23.8c1.35-.8 2.5-1.9 3.3-3.3z"/><path d="M43.65 25.15L57.4 1.35C56.05.55 54.5 0 52.8 0H34.5c-1.7 0-3.25.55-4.6 1.35z"/><path d="M27.55 48.95H0l13.75 23.8c1.35-.8 2.5-1.9 3.3-3.3z" opacity=".0"/><path d="M71.15 48.95H43.65l13.8 23.85 13.75-23.8-.05-.05z"/><path d="M73.55 13.3L57.45 25.15 43.65 48.95h27.5z" opacity=".0"/></svg>' +
+          'Add from Drive' +
+        '</button>' +
+      '</div>' +
       '<div class="eval-item-add-file-form" id="eval-item-add-file-form-' + esc(item.id) + '" style="display:none;">' +
         '<div class="eval-item-add-file-row">' +
           '<input type="text" class="eval-item-add-file-name" id="eval-item-add-file-name-' + esc(item.id) + '" placeholder="File name...">' +
@@ -10713,6 +10722,10 @@ function buildEvalItemRow(evalId, item) {
             'onkeydown="if(event.key===\'Enter\'){event.preventDefault();confirmAddEvalItemFile(\'' + esc(evalId) + '\',\'' + esc(item.id) + '\');}">' +
           '<button type="button" class="mv-confirm-btn" onclick="event.stopPropagation();confirmAddEvalItemFile(\'' + esc(evalId) + '\',\'' + esc(item.id) + '\')" title="Add file">' +
             '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>' +
+          '</button>' +
+          '<button type="button" class="btn-icon btn-sm eval-item-add-file-cancel" ' +
+            'onclick="event.stopPropagation();hideEvalItemAddFileForm(\'' + esc(item.id) + '\')" title="Cancel">' +
+            '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>' +
           '</button>' +
         '</div>' +
       '</div>' +
@@ -11074,7 +11087,11 @@ function enterEvalEditMode(itemId) {
   appState.editingEvalItemId = itemId;
   rerenderEvalItem(itemId);
   var textInput = document.getElementById('eval-edit-text-' + itemId);
-  if (textInput) { textInput.focus(); textInput.select(); }
+  if (textInput) {
+    textInput.focus();
+    textInput.select();
+    if (textInput.tagName === 'TEXTAREA') autoResizeEvalTextarea_(textInput);
+  }
 }
 
 function exitEvalEditMode() {
@@ -11089,6 +11106,11 @@ function exitEvalEditMode() {
 function cancelEvalEditMode(itemId) {
   appState.editingEvalItemId = null;
   rerenderEvalItem(itemId);
+}
+
+function autoResizeEvalTextarea_(el) {
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
 }
 
 function saveEvalEditModeChanges(itemId) {
@@ -11136,12 +11158,23 @@ function toggleEvalItemFiles(itemId) {
 }
 
 function showEvalItemAddFileForm(itemId) {
-  var btn = document.getElementById('eval-item-add-file-btn-' + itemId);
+  var btns = document.getElementById('eval-item-add-file-buttons-' + itemId);
   var form = document.getElementById('eval-item-add-file-form-' + itemId);
-  if (btn) btn.style.display = 'none';
+  if (btns) btns.style.display = 'none';
   if (form) form.style.display = '';
   var nameInput = document.getElementById('eval-item-add-file-name-' + itemId);
   if (nameInput) nameInput.focus();
+}
+
+function hideEvalItemAddFileForm(itemId) {
+  var btns = document.getElementById('eval-item-add-file-buttons-' + itemId);
+  var form = document.getElementById('eval-item-add-file-form-' + itemId);
+  if (form) form.style.display = 'none';
+  if (btns) btns.style.display = '';
+  var nameInput = document.getElementById('eval-item-add-file-name-' + itemId);
+  var urlInput = document.getElementById('eval-item-add-file-url-' + itemId);
+  if (nameInput) nameInput.value = '';
+  if (urlInput) urlInput.value = '';
 }
 
 function confirmAddEvalItemFile(evalId, itemId) {
@@ -11166,6 +11199,27 @@ function confirmAddEvalItemFile(evalId, itemId) {
   rerenderEvalItem(itemId);
   scheduleEvalAutosave();
   showToast('File added');
+}
+
+function addEvalItemFileFromDrive(evalId, itemId, fileData) {
+  if (!appState.currentEvaluation) return;
+  for (var i = 0; i < appState.currentEvaluation.items.length; i++) {
+    if (appState.currentEvaluation.items[i].id === itemId) {
+      if (!appState.currentEvaluation.items[i].files) appState.currentEvaluation.items[i].files = [];
+      appState.currentEvaluation.items[i].files.push({
+        id: 'file-' + Date.now(),
+        driveFileId: fileData.driveFileId || '',
+        name: fileData.name,
+        mimeType: fileData.mimeType || '',
+        url: fileData.url
+      });
+      break;
+    }
+  }
+  _expandedEvalItemFiles[itemId] = true;
+  rerenderEvalItem(itemId);
+  scheduleEvalAutosave();
+  showToast('File added from Drive');
 }
 
 function removeEvalItemFile(evalId, itemId, fileId) {
@@ -11538,7 +11592,7 @@ function confirmAddEvalFileByUrl_(evalId) {
 }
 
 
-function showDriveFileBrowser_(evalId) {
+function showDriveFileBrowser_(evalId, itemId) {
   // Remove existing modal if present
   var existing = document.getElementById('drive-browser-overlay');
   if (existing) existing.remove();
@@ -11570,8 +11624,9 @@ function showDriveFileBrowser_(evalId) {
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
 
-  // Store evalId for selection handler
+  // Store evalId and optional itemId for selection handler
   overlay.dataset.evalId = evalId;
+  if (itemId) overlay.dataset.itemId = itemId;
 
   // Load initial results (recent files)
   performDriveSearch_('');
@@ -11643,6 +11698,7 @@ function renderDriveSearchResults_(files) {
 function selectDriveFile_(file) {
   var overlay = document.getElementById('drive-browser-overlay');
   var evalId = overlay ? overlay.dataset.evalId : '';
+  var itemId = overlay ? (overlay.dataset.itemId || '') : '';
   if (!evalId) return;
 
   var fileData = {
@@ -11653,7 +11709,12 @@ function selectDriveFile_(file) {
   };
 
   closeDriveFileBrowser_();
-  addEvalFileHandler(evalId, fileData);
+
+  if (itemId) {
+    addEvalItemFileFromDrive(evalId, itemId, fileData);
+  } else {
+    addEvalFileHandler(evalId, fileData);
+  }
 }
 
 function closeDriveFileBrowser_() {
