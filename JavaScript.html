@@ -82,6 +82,7 @@ var _lastDashboardFetch = 0;
 var _lastEvalSummaryFetch = 0;
 var _lastDueProcessFetch = 0;
 var _widgetConfigSaveTimer = null;
+var _widgetTransformSource = null;
 var DATA_FRESH_MS = 30000; // 30s — frontend staleness window for navigation
 var EVAL_FRESH_MS = 60000; // 60s — eval summary changes less often
 
@@ -648,7 +649,7 @@ function enterApp() {
   // Load dashboard widget config in parallel (available to all roles)
   google.script.run
     .withSuccessHandler(function(config) {
-      appState.dashboardConfig = config;
+      appState.dashboardConfig = migrateWidgetConfig_(config);
       appState._dashboardConfigLoaded = true;
       // Re-render if dashboard data already loaded
       if (appState.dashboardData && appState.dashboardData.length > 0) {
@@ -3484,6 +3485,45 @@ function getDefaultDashboardConfig_fe() {
   return { rowOrder: BUILT_IN_ROWS_.slice(), widgets: [] };
 }
 
+/** Migrate legacy sticky-notes (multi) → individual sticky-note widgets */
+function migrateWidgetConfig_(config) {
+  if (!config || !config.widgets) return config;
+  var migrated = [];
+  var orderPatches = [];
+  config.widgets.forEach(function(w) {
+    if (w.type === 'sticky-notes' && w.notes) {
+      w.notes.forEach(function(note, idx) {
+        var newId = w.id + '-n' + idx;
+        migrated.push({
+          id: newId,
+          type: 'sticky-note',
+          title: note.title || '',
+          body: note.body || '',
+          color: note.color || '#FFF4D9'
+        });
+        orderPatches.push({ oldKey: 'widget-' + w.id, newKey: 'widget-' + newId });
+      });
+    } else {
+      migrated.push(w);
+    }
+  });
+  if (orderPatches.length > 0) {
+    // Replace old row-order entry with new individual entries
+    var newOrder = [];
+    config.rowOrder.forEach(function(r) {
+      var patches = orderPatches.filter(function(p) { return p.oldKey === r; });
+      if (patches.length > 0) {
+        patches.forEach(function(p) { newOrder.push(p.newKey); });
+      } else {
+        newOrder.push(r);
+      }
+    });
+    config.rowOrder = newOrder;
+    config.widgets = migrated;
+  }
+  return config;
+}
+
 /** Reorder dashboard section DOM elements + inject widget containers */
 function applyDashboardOrder_() {
   if (!appState._dashboardConfigLoaded || !appState.dashboardConfig) return;
@@ -3534,8 +3574,8 @@ function renderCustomWidgets_() {
     container.style.display = '';
     if (w.type === 'top3') {
       container.innerHTML = renderTop3Collapsed_(w);
-    } else if (w.type === 'sticky-notes') {
-      container.innerHTML = renderStickyNotesCollapsed_(w);
+    } else if (w.type === 'sticky-note') {
+      container.innerHTML = renderStickyNoteCollapsed_(w);
     }
   });
 }
@@ -3634,17 +3674,21 @@ function toggleTop3Item(widgetId, itemIndex, checkbox) {
 
 // ── Sticky Notes Widget (collapsed) ──
 
-function renderStickyNotesCollapsed_(widget) {
-  var notes = widget.notes || [];
-  if (notes.length === 0) return '<div class="sticky-notes-row" style="min-height:60px;display:flex;align-items:center;justify-content:center;color:var(--md-on-surface-variant);cursor:pointer" onclick="openWidgetEditor(\'' + esc(widget.id) + '\', event)" role="button" tabindex="0" onkeydown="if(event.key===\'Enter\')openWidgetEditor(\'' + esc(widget.id) + '\', event)">Click to add notes</div>';
-  var html = '<div class="widget-header"><h2 class="dashboard-subheader" style="margin:0">Sticky Notes</h2></div>';
-  html += '<div class="sticky-notes-row" onclick="openWidgetEditor(\'' + esc(widget.id) + '\', event)" role="button" tabindex="0" onkeydown="if(event.key===\'Enter\')openWidgetEditor(\'' + esc(widget.id) + '\', event)">';
-  notes.forEach(function(note) {
-    html += '<div class="sticky-note-card" style="background-color: ' + esc(note.color || '#FFF4D9') + '">' +
-      '<div class="sticky-note-header">' + esc(note.title || '') + '</div>' +
-      '<div class="sticky-note-body">' + esc(note.body || '') + '</div>' +
-    '</div>';
-  });
+function renderStickyNoteCollapsed_(widget) {
+  var color = esc(widget.color || '#FFF4D9');
+  var html = '<div class="sticky-note-card" style="background-color: ' + color + '"' +
+    ' onclick="openWidgetEditor(\'' + esc(widget.id) + '\', event)"' +
+    ' role="button" tabindex="0"' +
+    ' onkeydown="if(event.key===\'Enter\')openWidgetEditor(\'' + esc(widget.id) + '\', event)">';
+  if (widget.title) {
+    html += '<div class="sticky-note-header">' + esc(widget.title) + '</div>';
+  }
+  if (widget.body) {
+    html += '<div class="sticky-note-body">' + esc(widget.body) + '</div>';
+  }
+  if (!widget.title && !widget.body) {
+    html += '<div class="sticky-note-body" style="color:rgba(0,0,0,0.4)">Click to edit</div>';
+  }
   html += '</div>';
   return html;
 }
@@ -3689,10 +3733,10 @@ function openAddWidgetPicker() {
           '<h4>Today\'s Top 3</h4>' +
           '<p>A checklist with your daily priorities</p>' +
         '</div>' +
-        '<div class="widget-picker-card" onclick="addNewWidget(\'sticky-notes\')" role="button" tabindex="0" onkeydown="if(event.key===\'Enter\')addNewWidget(\'sticky-notes\')">' +
+        '<div class="widget-picker-card" onclick="addNewWidget(\'sticky-note\')" role="button" tabindex="0" onkeydown="if(event.key===\'Enter\')addNewWidget(\'sticky-note\')">' +
           '<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 9a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 15 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2z"/><path d="M15 3v5a1 1 0 0 0 1 1h5"/></svg>' +
-          '<h4>Sticky Notes</h4>' +
-          '<p>Colorful reminder cards</p>' +
+          '<h4>Sticky Note</h4>' +
+          '<p>A colorful reminder card</p>' +
         '</div>' +
       '</div>' +
       '<div class="confirm-actions">' +
@@ -3718,12 +3762,16 @@ function addNewWidget(type) {
         { text: '', checked: false }
       ]
     };
-  } else {
+  } else if (type === 'sticky-note') {
     widget = {
       id: 'sticky-' + Date.now(),
-      type: 'sticky-notes',
-      notes: [{ title: '', body: '', color: '#FFF4D9' }]
+      type: 'sticky-note',
+      title: '',
+      body: '',
+      color: '#FFF4D9'
     };
+  } else {
+    return;
   }
   // Open editor immediately (no source card — use scale-in)
   openWidgetEditorForNew_(widget);
@@ -3735,14 +3783,19 @@ function openWidgetEditor(widgetId, event) {
   if (event) event.stopPropagation();
   var widget = findWidget_(widgetId);
   if (!widget) return;
-  openWidgetEditorDialog_(widget, false);
+  // Capture source card for container transform
+  var sourceEl = null;
+  if (event) {
+    sourceEl = event.target.closest('.sticky-note-card') || event.target.closest('.top3-widget-card');
+  }
+  openWidgetEditorDialog_(widget, false, sourceEl);
 }
 
 function openWidgetEditorForNew_(widget) {
-  openWidgetEditorDialog_(widget, true);
+  openWidgetEditorDialog_(widget, true, null);
 }
 
-function openWidgetEditorDialog_(widget, isNew) {
+function openWidgetEditorDialog_(widget, isNew, sourceEl) {
   var overlay = document.createElement('div');
   overlay.className = 'confirm-overlay';
   overlay.id = 'widget-editor-overlay';
@@ -3752,19 +3805,137 @@ function openWidgetEditorDialog_(widget, isNew) {
   dialog.setAttribute('data-is-new', isNew ? '1' : '0');
   dialog.innerHTML = buildWidgetEditorHtml_(widget, isNew);
   overlay.appendChild(dialog);
-  document.body.appendChild(overlay);
+
+  if (sourceEl) {
+    var sourceRect = sourceEl.getBoundingClientRect();
+    var sourceBg = getComputedStyle(sourceEl).backgroundColor || '';
+
+    // Store for reverse close animation
+    _widgetTransformSource = { widgetId: widget.id, color: sourceBg };
+
+    // Disable default dialog animations
+    overlay.classList.add('container-transform');
+
+    // Render hidden to measure final dialog rect
+    overlay.style.opacity = '0';
+    overlay.style.pointerEvents = 'none';
+    document.body.appendChild(overlay);
+    var finalRect = dialog.getBoundingClientRect();
+
+    // FLIP: invert — transform dialog from final position to source card position
+    var scaleX = sourceRect.width / finalRect.width;
+    var scaleY = sourceRect.height / finalRect.height;
+    var dx = (sourceRect.left + sourceRect.width / 2) - (finalRect.left + finalRect.width / 2);
+    var dy = (sourceRect.top + sourceRect.height / 2) - (finalRect.top + finalRect.height / 2);
+
+    dialog.style.transformOrigin = 'center center';
+    dialog.style.transform = 'translate(' + dx + 'px, ' + dy + 'px) scale(' + scaleX + ', ' + scaleY + ')';
+    if (sourceBg) dialog.style.backgroundColor = sourceBg;
+
+    // Hide dialog children during morph
+    Array.from(dialog.children).forEach(function(child) {
+      child.style.opacity = '0';
+    });
+
+    // Show overlay frame (scrim transparent)
+    overlay.style.opacity = '1';
+    overlay.style.background = 'transparent';
+    overlay.style.pointerEvents = '';
+
+    // FLIP: play — animate to final state
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() {
+        var dur = '350ms';
+        var ease = 'cubic-bezier(0.2, 0, 0, 1)';
+        dialog.style.transition = 'transform ' + dur + ' ' + ease +
+          ', background-color ' + dur + ' ' + ease;
+        dialog.style.transform = '';
+        dialog.style.backgroundColor = '';
+
+        overlay.style.transition = 'background 300ms ease';
+        overlay.style.background = '';
+
+        // Fade in content partway through transform
+        setTimeout(function() {
+          Array.from(dialog.children).forEach(function(child) {
+            child.style.transition = 'opacity 200ms ease';
+            child.style.opacity = '';
+          });
+        }, 120);
+      });
+    });
+  } else {
+    _widgetTransformSource = null;
+    document.body.appendChild(overlay);
+  }
 }
 
-function closeWidgetEditorDialog_() {
-  closeConfirmDialog(document.getElementById('widget-editor-overlay'));
+function closeWidgetEditorDialog_(skipTransform) {
+  var overlay = document.getElementById('widget-editor-overlay');
+  if (!overlay) return;
+
+  // Standard close for save/delete or when no transform source
+  if (skipTransform || !_widgetTransformSource) {
+    _widgetTransformSource = null;
+    closeConfirmDialog(overlay);
+    return;
+  }
+
+  var dialog = overlay.querySelector('.widget-editor-dialog');
+  if (!dialog) { overlay.remove(); _widgetTransformSource = null; return; }
+
+  // Find source card in current DOM
+  var widgetId = _widgetTransformSource.widgetId;
+  var sourceCard = document.querySelector('#dashboard-widget-' + widgetId + ' .sticky-note-card') ||
+                   document.querySelector('#dashboard-widget-' + widgetId + ' .top3-widget-card');
+
+  if (!sourceCard) {
+    _widgetTransformSource = null;
+    closeConfirmDialog(overlay);
+    return;
+  }
+
+  var sourceRect = sourceCard.getBoundingClientRect();
+  var dialogRect = dialog.getBoundingClientRect();
+  var sourceBg = _widgetTransformSource.color || '';
+
+  var scaleX = sourceRect.width / dialogRect.width;
+  var scaleY = sourceRect.height / dialogRect.height;
+  var dx = (sourceRect.left + sourceRect.width / 2) - (dialogRect.left + dialogRect.width / 2);
+  var dy = (sourceRect.top + sourceRect.height / 2) - (dialogRect.top + dialogRect.height / 2);
+
+  // Phase 1: fade out content
+  Array.from(dialog.children).forEach(function(child) {
+    child.style.transition = 'opacity 100ms ease';
+    child.style.opacity = '0';
+  });
+
+  // Phase 2: reverse transform back to source card
+  setTimeout(function() {
+    var dur = '300ms';
+    var ease = 'cubic-bezier(0.2, 0, 0, 1)';
+    dialog.style.transition = 'transform ' + dur + ' ' + ease +
+      ', background-color ' + dur + ' ' + ease;
+    dialog.style.transformOrigin = 'center center';
+    dialog.style.transform = 'translate(' + dx + 'px, ' + dy + 'px) scale(' + scaleX + ', ' + scaleY + ')';
+    if (sourceBg) dialog.style.backgroundColor = sourceBg;
+
+    overlay.style.transition = 'background 250ms ease';
+    overlay.style.background = 'transparent';
+
+    setTimeout(function() {
+      overlay.remove();
+      _widgetTransformSource = null;
+    }, 300);
+  }, 100);
 }
 
 function buildWidgetEditorHtml_(widget, isNew) {
   var html = '';
   if (widget.type === 'top3') {
     html += buildTop3EditorHtml_(widget);
-  } else if (widget.type === 'sticky-notes') {
-    html += buildStickyNotesEditorHtml_(widget);
+  } else if (widget.type === 'sticky-note') {
+    html += buildStickyNoteEditorHtml_(widget);
   }
   html += '<div class="widget-editor-actions">';
   if (!isNew) {
@@ -3772,9 +3943,10 @@ function buildWidgetEditorHtml_(widget, isNew) {
   } else {
     html += '<div></div>';
   }
+  var saveLabel = isNew ? 'Create' : 'Save';
   html += '<div class="widget-editor-actions-right">' +
     '<button class="btn btn-outlined" onclick="closeWidgetEditorDialog_()">Cancel</button>' +
-    '<button class="btn" onclick="saveWidgetFromEditor(\'' + esc(widget.id) + '\', ' + (isNew ? 'true' : 'false') + ')">Save</button>' +
+    '<button class="btn" onclick="saveWidgetFromEditor(\'' + esc(widget.id) + '\', ' + (isNew ? 'true' : 'false') + ')">' + saveLabel + '</button>' +
   '</div></div>';
   return html;
 }
@@ -3827,94 +3999,46 @@ function selectWidgetColor(hex) {
   }
 }
 
-// ── Sticky Notes Editor Content ──
+// ── Sticky Note Editor (Single Note Preview) ──
 
-function buildStickyNotesEditorHtml_(widget) {
-  var html = '<h3>Sticky Notes</h3>';
-  html += '<div id="sticky-editor-list">';
-  var notes = widget.notes || [];
-  notes.forEach(function(note, idx) {
-    html += buildStickyNoteEditorCard_(note, idx);
-  });
-  html += '</div>';
-  if (notes.length < 4) {
-    html += '<button class="btn btn-outlined" id="sticky-add-note-btn" onclick="addStickyNoteEditorCard()" style="width:100%;margin-top:8px">Add Note</button>';
-  }
-  return html;
-}
-
-function buildStickyNoteEditorCard_(note, index) {
-  var html = '<div class="sticky-note-editor-card" data-note-index="' + index + '">' +
-    '<div class="sticky-note-editor-header">' +
-      '<span>Note ' + (index + 1) + '</span>' +
-      '<button class="btn-icon" onclick="removeStickyNoteEditorCard(this)" aria-label="Remove note">' +
-        '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>' +
-      '</button>' +
-    '</div>' +
-    '<div class="form-group" style="margin-bottom:10px"><label>Title</label>' +
-    '<input type="text" class="sticky-editor-title" value="' + esc(note.title || '') + '" placeholder="Title" maxlength="30">' +
-    '</div>' +
-    '<div class="form-group" style="margin-bottom:10px"><label>Content</label>' +
-    '<textarea class="sticky-editor-body" placeholder="Note content" maxlength="200" rows="2">' + esc(note.body || '') + '</textarea>' +
-    '</div>' +
-    '<div class="color-picker-row">';
+function buildStickyNoteEditorHtml_(widget) {
+  var color = widget.color || '#FFF4D9';
+  var html = '<div class="sticky-note-preview" id="sticky-note-preview" style="background-color: ' + esc(color) + '">' +
+    '<input type="text" class="sticky-editor-title" value="' + esc(widget.title || '') + '" placeholder="Title" maxlength="30">' +
+    '<textarea class="sticky-editor-body" placeholder="Write your note..." maxlength="200" rows="3">' + esc(widget.body || '') + '</textarea>' +
+  '</div>';
+  html += '<div class="color-picker-row" style="margin-top:16px">';
   WIDGET_PASTEL_COLORS.forEach(function(c) {
-    var sel = c.hex.toLowerCase() === (note.color || '#FFF4D9').toLowerCase() ? ' selected' : '';
+    var sel = c.hex.toLowerCase() === color.toLowerCase() ? ' selected' : '';
     html += '<div class="color-swatch' + sel + '" style="background-color: ' + c.hex + '; border-color: ' + (sel ? 'var(--md-on-surface)' : 'rgba(0,0,0,0.1)') + '" ' +
-      'onclick="selectStickyNoteColor(this, \'' + c.hex + '\')" ' +
-      'role="button" tabindex="0" onkeydown="if(event.key===\'Enter\')selectStickyNoteColor(this, \'' + c.hex + '\')" ' +
+      'onclick="selectStickyPreviewColor(\'' + c.hex + '\')" ' +
+      'role="button" tabindex="0" onkeydown="if(event.key===\'Enter\')selectStickyPreviewColor(\'' + c.hex + '\')" ' +
       'title="' + esc(c.name) + '" data-color="' + c.hex + '">' +
       (sel ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="rgba(0,0,0,0.6)"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>' : '') +
     '</div>';
   });
-  html += '</div></div>';
+  html += '</div>';
   return html;
 }
 
-function addStickyNoteEditorCard() {
-  var list = document.getElementById('sticky-editor-list');
-  if (!list) return;
-  var count = list.querySelectorAll('.sticky-note-editor-card').length;
-  if (count >= 4) { showToast('Maximum 4 notes'); return; }
-  var html = buildStickyNoteEditorCard_({ title: '', body: '', color: '#FFF4D9' }, count);
-  list.insertAdjacentHTML('beforeend', html);
-  // Update indices
-  renumberStickyEditorCards_();
-  // Hide add button if at max
-  if (count + 1 >= 4) {
-    var btn = document.getElementById('sticky-add-note-btn');
-    if (btn) btn.style.display = 'none';
-  }
-}
-
-function removeStickyNoteEditorCard(btnEl) {
-  var card = btnEl.closest('.sticky-note-editor-card');
-  if (card) card.remove();
-  renumberStickyEditorCards_();
-  var btn = document.getElementById('sticky-add-note-btn');
-  if (btn) btn.style.display = '';
-}
-
-function renumberStickyEditorCards_() {
-  var cards = document.querySelectorAll('.sticky-note-editor-card');
-  cards.forEach(function(card, idx) {
-    card.setAttribute('data-note-index', idx);
-    var label = card.querySelector('.sticky-note-editor-header span');
-    if (label) label.textContent = 'Note ' + (idx + 1);
-  });
-}
-
-function selectStickyNoteColor(swatchEl, hex) {
-  var card = swatchEl.closest('.sticky-note-editor-card');
-  if (!card) return;
-  card.querySelectorAll('.color-swatch').forEach(function(s) {
+function selectStickyPreviewColor(hex) {
+  // Update preview card background
+  var preview = document.getElementById('sticky-note-preview');
+  if (preview) preview.style.backgroundColor = hex;
+  // Update swatch selection
+  var dialog = document.querySelector('.widget-editor-dialog');
+  if (!dialog) return;
+  dialog.querySelectorAll('.color-swatch').forEach(function(s) {
     s.classList.remove('selected');
     s.style.borderColor = 'rgba(0,0,0,0.1)';
     s.innerHTML = '';
   });
-  swatchEl.classList.add('selected');
-  swatchEl.style.borderColor = 'var(--md-on-surface)';
-  swatchEl.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="rgba(0,0,0,0.6)"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>';
+  var swatch = dialog.querySelector('.color-swatch[data-color="' + hex + '"]');
+  if (swatch) {
+    swatch.classList.add('selected');
+    swatch.style.borderColor = 'var(--md-on-surface)';
+    swatch.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="rgba(0,0,0,0.6)"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>';
+  }
 }
 
 // ── Save / Delete Widget from Editor ──
@@ -3922,7 +4046,7 @@ function selectStickyNoteColor(swatchEl, hex) {
 function saveWidgetFromEditor(widgetId, isNew) {
   var card = document.querySelector('.widget-editor-dialog');
   if (!card) return;
-  var widgetType = card.querySelector('.widget-top3-item-input') ? 'top3' : 'sticky-notes';
+  var widgetType = card.querySelector('.widget-top3-item-input') ? 'top3' : 'sticky-note';
   var updatedWidget;
 
   if (widgetType === 'top3') {
@@ -3948,20 +4072,13 @@ function saveWidgetFromEditor(widgetId, isNew) {
     }
     updatedWidget = { id: widgetId, type: 'top3', title: title, color: color, items: items };
   } else {
-    var notes = [];
-    card.querySelectorAll('.sticky-note-editor-card').forEach(function(noteCard) {
-      var t = noteCard.querySelector('.sticky-editor-title');
-      var b = noteCard.querySelector('.sticky-editor-body');
-      var cs = noteCard.querySelector('.color-swatch.selected');
-      var noteTitle = t ? t.value.trim() : '';
-      var noteBody = b ? b.value.trim() : '';
-      var noteColor = cs ? cs.getAttribute('data-color') : '#FFF4D9';
-      if (noteTitle || noteBody) {
-        notes.push({ title: noteTitle, body: noteBody, color: noteColor });
-      }
-    });
-    if (notes.length === 0) { showToast('Please add at least one note'); return; }
-    updatedWidget = { id: widgetId, type: 'sticky-notes', notes: notes };
+    var t = card.querySelector('.sticky-editor-title');
+    var b = card.querySelector('.sticky-editor-body');
+    var cs = card.querySelector('.color-swatch.selected');
+    var noteTitle = t ? t.value.trim() : '';
+    var noteBody = b ? b.value.trim() : '';
+    var noteColor = cs ? cs.getAttribute('data-color') : '#FFF4D9';
+    updatedWidget = { id: widgetId, type: 'sticky-note', title: noteTitle, body: noteBody, color: noteColor };
   }
 
   if (!appState.dashboardConfig) appState.dashboardConfig = getDefaultDashboardConfig_fe();
@@ -3977,7 +4094,7 @@ function saveWidgetFromEditor(widgetId, isNew) {
   }
 
   persistWidgetConfig_();
-  closeWidgetEditorDialog_();
+  closeWidgetEditorDialog_(true);
   renderDashboardFromState();
   showToast(isNew ? 'Widget added' : 'Widget updated');
 }
@@ -4005,7 +4122,7 @@ function doDeleteWidget(widgetId) {
   if (el && el.parentNode) el.parentNode.removeChild(el);
 
   persistWidgetConfig_();
-  closeWidgetEditorDialog_();
+  closeWidgetEditorDialog_(true);
   renderDashboardFromState();
   showToast('Widget deleted');
 }
@@ -4053,7 +4170,7 @@ function getRowDisplayName_(rowId) {
     var w = findWidget_(wid);
     if (!w) return 'Widget';
     if (w.type === 'top3') return w.title || "Today's Top 3";
-    if (w.type === 'sticky-notes') return 'Sticky Notes';
+    if (w.type === 'sticky-note') return w.title || 'Sticky Note';
     return 'Widget';
   }
   return BUILT_IN_ROW_LABELS_[rowId] || rowId;

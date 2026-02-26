@@ -3092,6 +3092,10 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .confirm-overlay .confirm-dialog {
   animation: dialogScaleIn var(--md-duration-short3) var(--md-easing-emphasized-decelerate) both;
 }
+.confirm-overlay.container-transform,
+.confirm-overlay.container-transform .confirm-dialog {
+  animation: none;
+}
 .confirm-overlay.dialog-closing {
   animation: dialogOverlayOut var(--md-duration-short3) var(--md-easing-emphasized-accelerate) both;
 }
@@ -7253,16 +7257,11 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 }
 
 /* ─── Sticky Notes Widget (Collapsed) ─── */
-.sticky-notes-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 10px;
-  cursor: pointer;
-}
 .sticky-note-card {
   border-radius: var(--md-shape-sm);
   padding: 12px;
   min-height: 80px;
+  cursor: pointer;
   transition: transform var(--md-duration-short3) var(--md-easing-standard);
 }
 .sticky-note-card:hover {
@@ -7284,7 +7283,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 
 /* ─── Widget Editor Dialog ─── */
 .widget-editor-dialog {
-  max-width: 480px;
+  max-width: 420px;
 }
 .widget-editor-actions {
   display: flex;
@@ -7330,22 +7329,41 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   transform: scale(1.15);
 }
 
-/* ─── Sticky Note Editor Cards ─── */
-.sticky-note-editor-card {
-  border: 1px solid var(--md-outline-variant);
-  border-radius: var(--md-shape-sm);
-  padding: 12px;
-  margin-bottom: 10px;
-  background: var(--md-surface);
+/* ─── Sticky Note Preview (Editor Modal) ─── */
+.sticky-note-preview {
+  border-radius: var(--md-shape-md);
+  padding: 16px;
+  min-height: 120px;
+  transition: background-color var(--md-duration-short3) var(--md-easing-standard);
 }
-.sticky-note-editor-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.sticky-note-preview .sticky-editor-title {
+  width: 100%;
+  border: none;
+  background: transparent;
+  font-size: 15px;
+  font-weight: 600;
+  color: rgba(0,0,0,0.75);
+  padding: 0;
   margin-bottom: 8px;
+  outline: none;
+}
+.sticky-note-preview .sticky-editor-title::placeholder {
+  color: rgba(0,0,0,0.35);
+}
+.sticky-note-preview .sticky-editor-body {
+  width: 100%;
+  border: none;
+  background: transparent;
   font-size: 13px;
-  font-weight: 500;
-  color: var(--md-on-surface-variant);
+  line-height: 1.5;
+  color: rgba(0,0,0,0.65);
+  padding: 0;
+  resize: none;
+  outline: none;
+  min-height: 60px;
+}
+.sticky-note-preview .sticky-editor-body::placeholder {
+  color: rgba(0,0,0,0.3);
 }
 
 /* ─── Widget Picker Modal ─── */
@@ -7486,7 +7504,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   .staleness-relative { display: none; }
   .staleness-compact { display: inline; }
   /* Widget responsive */
-  .sticky-notes-row { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
   .widget-picker-grid { grid-template-columns: 1fr; }
   .fab-container { right: 16px; bottom: 16px; }
   .dashboard-add-widget-fab { width: 48px; height: 48px; }
