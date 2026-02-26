@@ -47,6 +47,7 @@ var appState = {
   lastProgressQuarter: {},
   autoExpandProgressGoalId: null,
   aiKeyAvailable: false,
+  _aiKeyChecked: false,
   permissions: null,   // null = caseload manager (full access), object = restricted
   userRole: null,      // 'caseload-manager', 'co-teacher', 'service-provider', 'para', 'sped-lead'
   spedLeadData: null,  // {dashboard, students, timeline, currentCM}
@@ -10301,6 +10302,7 @@ function loadEvalCardState(studentId) {
         appState.currentEvaluation = evaluation;
 
         // Check AI availability for sparkle buttons (non-blocking)
+        appState._aiKeyChecked = true;
         google.script.run
           .withSuccessHandler(function(r) {
             appState.aiKeyAvailable = !!(r && r.available);
@@ -11337,6 +11339,21 @@ function getFileTypeIcon(mimeType) {
 function renderEvalFilesCard(evaluation) {
   var container = document.getElementById('eval-files-card');
   if (!container) return;
+
+  // Ensure AI key availability is checked (fixes paths that bypass loadEvalCardState)
+  if (!appState._aiKeyChecked) {
+    appState._aiKeyChecked = true;
+    google.script.run
+      .withSuccessHandler(function(r) {
+        var newVal = !!(r && r.available);
+        if (newVal !== appState.aiKeyAvailable) {
+          appState.aiKeyAvailable = newVal;
+          if (appState.currentEvaluation) renderEvalFilesCard(appState.currentEvaluation);
+        }
+      })
+      .withFailureHandler(function() { appState.aiKeyAvailable = false; })
+      .hasGeminiKey();
+  }
 
   var files = evaluation.files || [];
   var html = '<div class="eval-files-header">' +
