@@ -1565,7 +1565,8 @@ function renderDashboard(data, opts) {
     html += buildBirthdayBadge_(s.birthday);
     if (s.evalType) {
       var evalLabel = getEvalTypeLabel(s.evalType);
-      html += ' <span class="chip chip-clickable eval-badge" onclick="event.stopPropagation(); openEvalFromBadge(\'' + s.id + '\')" title="View ' + evalLabel + ' checklist">' + evalLabel + '</span>';
+      var evalBadgeCat = s.evalType === 'annual-iep' ? 'iep' : 'eval';
+      html += ' <span class="chip chip-clickable eval-badge eval-badge-' + evalBadgeCat + '" onclick="event.stopPropagation(); openEvalFromBadge(\'' + s.id + '\')" title="View ' + evalLabel + ' checklist">' + evalLabel + '</span>';
     }
     html += '</td>';
     html += '<td>' + esc(s.grade || '-') + '</td>';
@@ -2350,13 +2351,10 @@ function buildDPSummarySection_(data) {
 }
 
 function getMeetingBadge_(m, badgePrefix) {
-  if (m.source === 'gcal') {
-    return { badgeClass: badgePrefix + ' ' + badgePrefix + '-gcal', badgeLabel: '&#x1F4C5;', title: 'Google Calendar' };
-  }
   if (m.meetingCategory === 'eval') {
     return { badgeClass: badgePrefix + ' ' + badgePrefix + '-eval', badgeLabel: 'EVAL', title: 'Eval Meeting' };
   }
-  return { badgeClass: badgePrefix, badgeLabel: 'IEP', title: 'IEP Meeting' };
+  return { badgeClass: badgePrefix + ' ' + badgePrefix + '-iep', badgeLabel: 'IEP', title: 'IEP Meeting' };
 }
 
 function buildDPMeetingsDropdownList_(meetings) {
@@ -2368,14 +2366,21 @@ function buildDPMeetingsDropdownList_(meetings) {
       var parts = m.date.split('-');
       dateLabel = parseInt(parts[1], 10) + '/' + parseInt(parts[2], 10);
     }
-    var sourceTag = m.source === 'gcal' ? ' <span class="dp-gcal-tag">Cal</span>' : '';
     var catTag = m.meetingCategory === 'eval'
       ? ' <span class="dp-meeting-tag dp-meeting-tag-eval" title="Eval Meeting">Eval</span>'
       : ' <span class="dp-meeting-tag dp-meeting-tag-iep" title="IEP Meeting">IEP</span>';
+    var calIcon = m.calendarEventUrl
+      ? ' <a href="' + esc(m.calendarEventUrl) + '" target="_blank" rel="noopener" ' +
+        'class="dp-meeting-cal-link-inline" title="Open in Google Calendar" ' +
+        'onclick="event.stopPropagation()" onkeydown="event.stopPropagation()">' +
+        '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">' +
+        '<path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/>' +
+        '</svg></a>'
+      : '';
     html += '<div class="eval-metric-dropdown-item" onclick="showStudentProfile(\'' + esc(m.studentId) + '\')" ' +
       'role="link" tabindex="0">' +
       '<div class="eval-metric-dropdown-item-main">' +
-        '<span class="eval-metric-dropdown-item-text">' + esc(m.meetingType) + catTag + sourceTag + '</span>' +
+        '<span class="eval-metric-dropdown-item-text">' + esc(m.meetingType) + catTag + calIcon + '</span>' +
         '<span class="eval-metric-dropdown-item-date">' + dateLabel + '</span>' +
       '</div>' +
       '<span class="eval-metric-dropdown-item-student">' + esc(m.studentName) +
@@ -2582,6 +2587,15 @@ function buildDPExpandedDayHtml_(day) {
   if (hasMeetings) {
     day.meetings.forEach(function(m) {
       var badge = getMeetingBadge_(m, 'dp-expanded-meeting-badge');
+      var calLink = '';
+      if (m.calendarEventUrl) {
+        calLink = '<a href="' + esc(m.calendarEventUrl) + '" target="_blank" rel="noopener" ' +
+          'class="dp-meeting-cal-link btn-icon btn-sm" title="Open in Google Calendar" ' +
+          'onclick="event.stopPropagation()" onkeydown="event.stopPropagation()">' +
+          '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">' +
+          '<path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/>' +
+          '</svg></a>';
+      }
       html += '<div class="dp-expanded-meeting" role="button" tabindex="0" ' +
         'onclick="showStudentProfile(\'' + esc(m.studentId) + '\')" ' +
         'onkeydown="if(event.key===\'Enter\')showStudentProfile(\'' + esc(m.studentId) + '\')">' +
@@ -2591,6 +2605,7 @@ function buildDPExpandedDayHtml_(day) {
           '<span class="dp-expanded-meeting-student">' + esc(m.studentName) +
           (m.notes ? ' &middot; ' + esc(m.notes) : '') + '</span>' +
         '</div>' +
+        calLink +
       '</div>';
     });
   }
@@ -2686,6 +2701,15 @@ function buildDPUpcomingMeetingsList_(meetings, days) {
     var isToday = m.date === todayStr;
 
     var badge = getMeetingBadge_(m, 'dp-upcoming-badge');
+    var calLink = '';
+    if (m.calendarEventUrl) {
+      calLink = '<a href="' + esc(m.calendarEventUrl) + '" target="_blank" rel="noopener" ' +
+        'class="dp-meeting-cal-link btn-icon btn-sm" title="Open in Google Calendar" ' +
+        'onclick="event.stopPropagation()" onkeydown="event.stopPropagation()">' +
+        '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">' +
+        '<path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/>' +
+        '</svg></a>';
+    }
     html += '<div class="dp-upcoming-row" role="button" tabindex="0" ' +
       'onclick="showStudentProfile(\'' + esc(m.studentId) + '\')" ' +
       'onkeydown="if(event.key===\'Enter\')showStudentProfile(\'' + esc(m.studentId) + '\')">' +
@@ -2697,6 +2721,7 @@ function buildDPUpcomingMeetingsList_(meetings, days) {
         (m.notes ? ' &#x00B7; ' + esc(m.notes) : '') + '</span>' +
       '</div>' +
       '<span class="' + badge.badgeClass + '" title="' + badge.title + '">' + badge.badgeLabel + '</span>' +
+      calLink +
     '</div>';
   });
 
@@ -3535,26 +3560,50 @@ function applyDashboardOrder_() {
   if (!panel) return;
   var config = appState.dashboardConfig;
 
-  // Remove old widget sections that are no longer in config
+  // Identify sticky note widget IDs
+  var stickyWidgetIds = config.widgets
+    .filter(function(w) { return w.type === 'sticky-note'; })
+    .map(function(w) { return w.id; });
+
+  // Remove old individual widget sections that are no longer in config
+  // (also remove leftover individual sticky-note sections — they now live in the grid)
   panel.querySelectorAll('.dashboard-widget').forEach(function(el) {
     var wid = el.getAttribute('data-widget-id');
-    if (wid && config.rowOrder.indexOf('widget-' + wid) === -1) {
+    if (!wid) return;
+    if (stickyWidgetIds.indexOf(wid) !== -1 || config.rowOrder.indexOf('widget-' + wid) === -1) {
       el.parentNode.removeChild(el);
     }
   });
 
   // Reorder: appendChild moves existing elements
+  var stickyGridPlaced = false;
   config.rowOrder.forEach(function(rowId) {
     if (rowId.indexOf('widget-') === 0) {
       var widgetId = rowId.substring(7);
-      var existing = document.getElementById('dashboard-widget-' + widgetId);
-      if (!existing) {
-        existing = document.createElement('div');
-        existing.className = 'dashboard-section dashboard-widget';
-        existing.id = 'dashboard-widget-' + widgetId;
-        existing.setAttribute('data-widget-id', widgetId);
+
+      if (stickyWidgetIds.indexOf(widgetId) !== -1) {
+        // Sticky note: place grid container once at position of first sticky
+        if (!stickyGridPlaced) {
+          stickyGridPlaced = true;
+          var grid = document.getElementById('dashboard-sticky-grid');
+          if (!grid) {
+            grid = document.createElement('div');
+            grid.className = 'dashboard-section dashboard-sticky-grid';
+            grid.id = 'dashboard-sticky-grid';
+          }
+          panel.appendChild(grid);
+        }
+      } else {
+        // Non-sticky widget (top3): individual container
+        var existing = document.getElementById('dashboard-widget-' + widgetId);
+        if (!existing) {
+          existing = document.createElement('div');
+          existing.className = 'dashboard-section dashboard-widget';
+          existing.id = 'dashboard-widget-' + widgetId;
+          existing.setAttribute('data-widget-id', widgetId);
+        }
+        panel.appendChild(existing);
       }
-      panel.appendChild(existing);
     } else {
       var domId = BUILT_IN_ROW_IDS_[rowId];
       if (domId) {
@@ -3572,14 +3621,29 @@ function applyDashboardOrder_() {
 /** Render all custom widget content */
 function renderCustomWidgets_() {
   if (!appState._dashboardConfigLoaded || !appState.dashboardConfig) return;
+
+  // Render sticky notes into the grid container
+  var grid = document.getElementById('dashboard-sticky-grid');
+  if (grid) {
+    var stickyWidgets = appState.dashboardConfig.widgets.filter(function(w) {
+      return w.type === 'sticky-note';
+    });
+    var stickyHtml = '';
+    stickyWidgets.slice(0, 8).forEach(function(w) {
+      stickyHtml += renderStickyNoteCollapsed_(w);
+    });
+    grid.innerHTML = stickyHtml;
+    grid.style.display = stickyWidgets.length ? '' : 'none';
+  }
+
+  // Render non-sticky widgets into individual containers
   appState.dashboardConfig.widgets.forEach(function(w) {
+    if (w.type === 'sticky-note') return;
     var container = document.getElementById('dashboard-widget-' + w.id);
     if (!container) return;
     container.style.display = '';
     if (w.type === 'top3') {
       container.innerHTML = renderTop3Collapsed_(w);
-    } else if (w.type === 'sticky-note') {
-      container.innerHTML = renderStickyNoteCollapsed_(w);
     }
   });
 }
@@ -3649,6 +3713,10 @@ function tintColor_(hex, amount) {
   var g = Math.round(c.g + (255 - c.g) * amount);
   var b = Math.round(c.b + (255 - c.b) * amount);
   return 'rgb(' + r + ',' + g + ',' + b + ')';
+}
+function shadeColor_(hex, amount) {
+  var c = hexToRgb_(hex);
+  return 'rgb(' + Math.round(c.r * (1 - amount)) + ',' + Math.round(c.g * (1 - amount)) + ',' + Math.round(c.b * (1 - amount)) + ')';
 }
 
 function renderTop3Collapsed_(widget) {
@@ -3760,7 +3828,8 @@ function showWidgetCelebration_(widgetId) {
 
 function renderStickyNoteCollapsed_(widget) {
   var color = esc(widget.color || '#FFF4D9');
-  var html = '<div class="sticky-note-card" style="background-color: ' + color + '"' +
+  var strokeColor = shadeColor_(widget.color || '#FFF4D9', 0.15);
+  var html = '<div class="sticky-note-card" data-widget-id="' + esc(widget.id) + '" style="background-color: ' + color + '; border-color: ' + strokeColor + '"' +
     ' onclick="openWidgetEditor(\'' + esc(widget.id) + '\', event)"' +
     ' role="button" tabindex="0"' +
     ' onkeydown="if(event.key===\'Enter\')openWidgetEditor(\'' + esc(widget.id) + '\', event)">';
@@ -3774,7 +3843,7 @@ function renderStickyNoteCollapsed_(widget) {
     html += '<div class="sticky-note-body" style="color:rgba(0,0,0,0.4)">Click to edit</div>';
   }
   html += '<button class="btn-icon widget-card-delete" onclick="deleteWidgetFromCard(\'' + esc(widget.id) + '\', event)" aria-label="Delete">' +
-    '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>' +
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>' +
   '</button>';
   html += '</div>';
   return html;
@@ -3836,6 +3905,16 @@ function openAddWidgetPicker() {
 function addNewWidget(type) {
   var pickerOverlay = document.getElementById('widget-picker-overlay');
   if (pickerOverlay) closeConfirmDialog(pickerOverlay);
+
+  // Enforce max 8 sticky notes
+  if (type === 'sticky-note' && appState.dashboardConfig) {
+    var stickyCount = appState.dashboardConfig.widgets.filter(function(w) { return w.type === 'sticky-note'; }).length;
+    if (stickyCount >= 8) {
+      showToast('Maximum of 8 sticky notes reached');
+      return;
+    }
+  }
+
   var widget;
   if (type === 'top3') {
     widget = {
@@ -3886,6 +3965,9 @@ function openWidgetEditorDialog_(widget, isNew, sourceEl) {
   var overlay = document.createElement('div');
   overlay.className = 'confirm-overlay';
   overlay.id = 'widget-editor-overlay';
+  overlay.onclick = function(e) {
+    if (e.target === overlay) closeWidgetEditorDialog_();
+  };
   var dialog = document.createElement('div');
   dialog.className = 'confirm-dialog widget-editor-dialog';
   dialog.setAttribute('data-widget-id', widget.id);
@@ -3969,9 +4051,9 @@ function closeWidgetEditorDialog_(skipTransform) {
   var dialog = overlay.querySelector('.widget-editor-dialog');
   if (!dialog) { overlay.remove(); _widgetTransformSource = null; return; }
 
-  // Find source card in current DOM
+  // Find source card in current DOM (sticky notes live in grid, top3 in individual containers)
   var widgetId = _widgetTransformSource.widgetId;
-  var sourceCard = document.querySelector('#dashboard-widget-' + widgetId + ' .sticky-note-card') ||
+  var sourceCard = document.querySelector('.sticky-note-card[data-widget-id="' + widgetId + '"]') ||
                    document.querySelector('#dashboard-widget-' + widgetId + ' .top3-widget-card');
 
   if (!sourceCard) {
@@ -4035,39 +4117,77 @@ function buildWidgetEditorHtml_(widget, isNew) {
   return html;
 }
 
-// ── Top 3 Editor Content ──
+// ── Top 3 Editor Content (Preview Style) ──
 
 function buildTop3EditorHtml_(widget) {
   var color = widget.color || '#C41E3A';
-  var html = '<h3>' + (widget.title ? esc(widget.title) : "Today's Top 3") + '</h3>';
-  html += '<div class="form-group">' +
-    '<label>Title</label>' +
-    '<input type="text" id="widget-editor-title" value="' + esc(widget.title || "Today's Top 3") + '" maxlength="50">' +
-  '</div>';
-  html += '<div class="form-group">' +
-    '<label>Color</label>' +
-    '<div class="color-picker-row" id="widget-color-picker">';
+  var fillColor = tintColor_(color, 0.85);
+  var strokeColor = tintColor_(color, 0.45);
+
+  // Preview-style card (matches collapsed card aesthetic)
+  var html = '<div class="top3-editor-preview" id="top3-editor-preview" ' +
+    'style="background-color: ' + fillColor + '; border-color: ' + strokeColor + '">';
+  html += '<input type="text" class="top3-editor-title" id="widget-editor-title" ' +
+    'value="' + esc(widget.title || "Today's Top 3") + '" placeholder="List title" maxlength="50" ' +
+    'style="color: ' + esc(color) + '">';
+  var items = widget.items || [];
+  for (var i = 0; i < 3; i++) {
+    var item = items[i] || { text: '', checked: false };
+    var checked = item.checked ? ' checked' : '';
+    var checkedCls = item.checked ? ' checked' : '';
+    html += '<div class="top3-editor-item">' +
+      '<label class="top3-checkbox">' +
+        '<input type="checkbox"' + checked + ' onchange="toggleTop3EditorItem(' + i + ', this)">' +
+        '<span class="top3-check-btn' + checkedCls + '" style="color: ' + esc(color) + '">' +
+          '<svg class="top3-check-icon" width="14" height="14" viewBox="0 0 24 24">' +
+            '<path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" fill="currentColor"/>' +
+          '</svg>' +
+        '</span>' +
+      '</label>' +
+      '<input type="text" class="widget-top3-item-input top3-editor-item-input" ' +
+        'value="' + esc(item.text || '') + '" placeholder="Task ' + (i + 1) + '" maxlength="100">' +
+    '</div>';
+  }
+  html += '</div>';
+
+  // Color picker below preview
+  html += '<div class="color-picker-row" id="widget-color-picker" style="margin-top:16px">';
   WIDGET_BRAND_COLORS.forEach(function(c) {
     var sel = c.hex.toLowerCase() === color.toLowerCase() ? ' selected' : '';
     html += '<div class="color-swatch' + sel + '" style="background-color: ' + c.hex + '" ' +
-      'onclick="selectWidgetColor(\'' + c.hex + '\')" ' +
-      'role="button" tabindex="0" onkeydown="if(event.key===\'Enter\')selectWidgetColor(\'' + c.hex + '\')" ' +
+      'onclick="selectTop3PreviewColor(\'' + c.hex + '\')" ' +
+      'role="button" tabindex="0" onkeydown="if(event.key===\'Enter\')selectTop3PreviewColor(\'' + c.hex + '\')" ' +
       'title="' + esc(c.name) + '" data-color="' + c.hex + '">' +
       (sel ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>' : '') +
     '</div>';
   });
-  html += '</div></div>';
-  html += '<div class="form-group"><label>Items</label>';
-  var items = widget.items || [];
-  for (var i = 0; i < 3; i++) {
-    var val = items[i] ? esc(items[i].text || '') : '';
-    html += '<input type="text" class="widget-top3-item-input" value="' + val + '" placeholder="Task ' + (i + 1) + '" maxlength="100" style="margin-bottom:8px">';
-  }
   html += '</div>';
   return html;
 }
 
-function selectWidgetColor(hex) {
+function toggleTop3EditorItem(index, checkbox) {
+  var label = checkbox.closest('.top3-checkbox');
+  if (!label) return;
+  var checkBtn = label.querySelector('.top3-check-btn');
+  if (checkBtn) {
+    if (checkbox.checked) checkBtn.classList.add('checked');
+    else checkBtn.classList.remove('checked');
+  }
+}
+
+function selectTop3PreviewColor(hex) {
+  // Update preview card colors
+  var preview = document.getElementById('top3-editor-preview');
+  if (preview) {
+    preview.style.backgroundColor = tintColor_(hex, 0.85);
+    preview.style.borderColor = tintColor_(hex, 0.45);
+    var title = preview.querySelector('.top3-editor-title');
+    if (title) title.style.color = hex;
+    preview.querySelectorAll('.top3-check-btn').forEach(function(btn) {
+      btn.style.color = hex;
+    });
+  }
+  // Update swatch selection
   var picker = document.getElementById('widget-color-picker');
   if (!picker) return;
   picker.querySelectorAll('.color-swatch').forEach(function(s) {
@@ -4077,9 +4197,7 @@ function selectWidgetColor(hex) {
   var swatch = picker.querySelector('[data-color="' + hex + '"]');
   if (swatch) {
     swatch.classList.add('selected');
-    var isDark = hex !== '#e8b34b' && hex !== '#FFF4D9' && hex !== '#FFE9D0' && hex !== '#E1F0DA' && hex !== '#D0F2F2' && hex !== '#E8DFF5';
-    var fill = isDark ? 'white' : 'rgba(0,0,0,0.6)';
-    swatch.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="' + fill + '"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>';
+    swatch.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>';
   }
 }
 
@@ -4140,19 +4258,18 @@ function saveWidgetFromEditor(widgetId, isNew) {
     var colorSwatch = card.querySelector('.color-swatch.selected');
     var color = colorSwatch ? colorSwatch.getAttribute('data-color') : '#C41E3A';
     var items = [];
-    card.querySelectorAll('.widget-top3-item-input').forEach(function(input) {
-      items.push({ text: input.value.trim(), checked: false });
-    });
-    // Preserve check state from existing widget
-    if (!isNew) {
-      var existing = findWidget_(widgetId);
-      if (existing && existing.items) {
-        items.forEach(function(item, i) {
-          if (existing.items[i] && existing.items[i].text === item.text) {
-            item.checked = existing.items[i].checked;
-          }
-        });
-      }
+    var itemRows = card.querySelectorAll('.top3-editor-item');
+    if (itemRows.length) {
+      itemRows.forEach(function(row) {
+        var input = row.querySelector('.widget-top3-item-input');
+        var checkbox = row.querySelector('input[type="checkbox"]');
+        items.push({ text: input ? input.value.trim() : '', checked: checkbox ? checkbox.checked : false });
+      });
+    } else {
+      // Fallback for legacy editor structure
+      card.querySelectorAll('.widget-top3-item-input').forEach(function(input) {
+        items.push({ text: input.value.trim(), checked: false });
+      });
     }
     updatedWidget = { id: widgetId, type: 'top3', title: title, color: color, items: items };
   } else {
@@ -4214,9 +4331,11 @@ function doDeleteWidget(widgetId) {
   appState.dashboardConfig.rowOrder = appState.dashboardConfig.rowOrder.filter(function(r) {
     return r !== 'widget-' + widgetId;
   });
-  // Remove DOM element
+  // Remove DOM element (individual container for top3, or grid card for sticky notes)
   var el = document.getElementById('dashboard-widget-' + widgetId);
   if (el && el.parentNode) el.parentNode.removeChild(el);
+  var stickyEl = document.querySelector('.sticky-note-card[data-widget-id="' + widgetId + '"]');
+  if (stickyEl && stickyEl.parentNode) stickyEl.parentNode.removeChild(stickyEl);
 
   persistWidgetConfig_();
   closeWidgetEditorDialog_(true);
@@ -9959,7 +10078,8 @@ function renderMyCaseload() {
     html += buildBirthdayBadge_(s.birthday);
     if (s.evalType) {
       var evalLabel = getEvalTypeLabel(s.evalType);
-      html += ' <span class="chip chip-clickable eval-badge" onclick="event.stopPropagation(); openEvalFromBadge(\'' + s.id + '\')" title="View ' + evalLabel + ' checklist">' + evalLabel + '</span>';
+      var evalBadgeCat = s.evalType === 'annual-iep' ? 'iep' : 'eval';
+      html += ' <span class="chip chip-clickable eval-badge eval-badge-' + evalBadgeCat + '" onclick="event.stopPropagation(); openEvalFromBadge(\'' + s.id + '\')" title="View ' + evalLabel + ' checklist">' + evalLabel + '</span>';
     }
     html += '</td>';
     html += '<td>' + esc(s.grade || '-') + '</td>';
