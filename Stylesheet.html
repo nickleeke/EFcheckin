@@ -3254,7 +3254,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 }
 
 /* ─── Button Ripple Effect ─── */
-.btn, .btn-icon, .btn-ghost, .btn-outlined, .action-btn, .rating-btn, .nav-drawer-item, .goal-met-btn, .eval-filter-chip, .eval-nav-btn, .dp-cal-day, .header-search-result-item, .dp-progress-checkbox-row, .dp-progress-flat-card, .email-picker-row, .eval-file-ai-btn, .widget-picker-card, .reorder-row, .dashboard-add-widget-fab, .customize-dashboard-btn, .fab-menu-item {
+.btn, .btn-icon, .btn-ghost, .btn-outlined, .action-btn, .rating-btn, .nav-drawer-item, .goal-met-btn, .eval-filter-chip, .eval-nav-btn, .dp-cal-day, .header-search-result-item, .dp-progress-checkbox-row, .dp-progress-flat-card, .email-picker-row, .eval-file-ai-btn, .widget-picker-card, .reorder-row, .dashboard-add-widget-fab, .customize-dashboard-btn, .fab-menu-item, .widget-card-delete {
   position: relative;
   overflow: hidden;
 }
@@ -7254,12 +7254,13 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 
 /* ─── Top 3 Widget Card (Collapsed) ─── */
 .top3-widget-card {
+  position: relative;
   width: 240px;
   max-height: 120px;
   overflow: hidden;
   border: 1.5px solid var(--md-outline-variant);
   border-radius: var(--md-shape-md);
-  padding: 12px 14px;
+  padding: 12px 14px 18px;
   background: var(--md-surface);
   cursor: pointer;
   transition: box-shadow var(--md-duration-short3) var(--md-easing-standard),
@@ -7268,6 +7269,36 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .top3-widget-card:hover {
   box-shadow: var(--md-elevation-1);
   transform: translateY(-1px);
+}
+/* ─── Widget Card Quick-Delete Button ─── */
+.widget-card-delete {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--md-shape-full);
+  background: var(--md-surface);
+  color: var(--md-on-surface-variant);
+  box-shadow: var(--md-elevation-1);
+  opacity: 0;
+  transform: translateX(8px);
+  transition: opacity var(--md-duration-short3) var(--md-easing-emphasized-accelerate),
+              transform var(--md-duration-short3) var(--md-easing-emphasized-accelerate);
+  pointer-events: none;
+  z-index: 2;
+}
+.top3-widget-card:hover .widget-card-delete,
+.sticky-note-card:hover .widget-card-delete {
+  opacity: 1;
+  transform: translateX(0);
+  transition: opacity var(--md-duration-short4) var(--md-easing-emphasized-decelerate),
+              transform var(--md-duration-short4) var(--md-easing-emphasized-decelerate);
+  pointer-events: auto;
+}
+.widget-card-delete:hover {
+  background: var(--md-error-container);
+  color: var(--md-on-error-container);
 }
 .widget-header {
   margin-bottom: 8px;
@@ -7286,23 +7317,93 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .top3-checkbox input[type="checkbox"] {
   display: none;
 }
-.top3-checkmark {
-  width: 20px;
-  height: 20px;
-  min-width: 20px;
-  border: 2px solid;
-  border-radius: 4px;
+/* Custom checkmark icon — dotted stroke → filled on check */
+.top3-check-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background var(--md-duration-short2) var(--md-easing-standard);
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  opacity: 0.5;
+  transition: opacity var(--md-duration-short4) var(--md-easing-standard);
 }
+.top3-check-btn.checked {
+  opacity: 1;
+}
+.top3-check-icon path {
+  fill-opacity: 0;
+  stroke-dasharray: 3 3;
+  transition: fill-opacity var(--md-duration-short4) var(--md-easing-standard),
+              stroke-dasharray var(--md-duration-short4) var(--md-easing-standard);
+}
+.top3-check-btn.checked .top3-check-icon path {
+  fill-opacity: 1;
+  stroke-dasharray: 50 0;
+}
+
+/* Animated strikethrough — left to right */
 .top3-text {
+  position: relative;
   line-height: 1.4;
+  transition: opacity var(--md-duration-short4) var(--md-easing-standard);
+}
+.top3-text::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 100%;
+  height: 1.5px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform var(--md-duration-medium2) var(--md-easing-emphasized-decelerate);
 }
 .top3-text.completed {
-  text-decoration: line-through;
   opacity: 0.5;
+}
+.top3-text.completed::after {
+  transform: scaleX(1);
+}
+
+/* ─── Top 3 Celebration Overlay ─── */
+.widget-celebration-blur {
+  position: absolute;
+  inset: 0;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: inherit;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity var(--md-duration-medium1) var(--md-easing-emphasized-accelerate);
+}
+.widget-celebration-blur.visible {
+  opacity: 1;
+  transition: opacity var(--md-duration-medium2) var(--md-easing-emphasized-decelerate);
+}
+.widget-celebration-lottie {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  opacity: 0;
+  transition: opacity var(--md-duration-medium1) var(--md-easing-emphasized-accelerate);
+}
+.widget-celebration-lottie.visible {
+  opacity: 1;
+  transition: opacity var(--md-duration-medium2) var(--md-easing-emphasized-decelerate);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .top3-check-icon path,
+  .top3-check-btn,
+  .top3-text,
+  .top3-text::after,
+  .widget-celebration-blur,
+  .widget-celebration-lottie {
+    transition: none !important;
+  }
 }
 
 /* ─── Sticky Note Widget (Collapsed) ─── */
@@ -7359,6 +7460,16 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 /* ─── Widget Editor Dialog ─── */
 .widget-editor-dialog {
   max-width: 420px;
+  position: relative;
+}
+.widget-editor-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+.widget-editor-cta {
+  width: 100%;
+  margin-top: 24px;
 }
 .widget-editor-actions {
   display: flex;
@@ -7368,10 +7479,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   padding-top: 16px;
   border-top: 1px solid var(--md-outline-variant);
   gap: 12px;
-}
-.widget-editor-actions-right {
-  display: flex;
-  gap: 8px;
 }
 
 /* ─── Color Picker (Widget Editor) ─── */
