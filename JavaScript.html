@@ -2245,6 +2245,8 @@ function buildDueProcessSkeleton_() {
 function renderDueProcess(data) {
   var container = document.getElementById('dueprocess-content');
   if (!container) return;
+  // Pre-seed completion map so already-complete students don't trigger confetti
+  seedProgressCompletionFlags_(data);
   var html = '';
   html += buildDPSummarySection_(data);
   html += buildDPEvalsSection_(data.evalSummary);
@@ -2252,6 +2254,29 @@ function renderDueProcess(data) {
   html += buildDPProgressSection_(data);
   container.innerHTML = html;
   animateContentIn(container);
+}
+
+/** Pre-populate _progressCompletionFiredFor with already-complete students
+ *  so confetti only fires on user-driven completion, not on view load. */
+function seedProgressCompletionFlags_(data) {
+  var assignments = data.progressAssignments || [];
+  var completionMap = data.completionMap || {};
+  var completionFlags = data.completionFlags || {};
+  var quarter = appState.dueProcessQuarter || data.currentQuarter || '';
+
+  var studentGoals = {};
+  assignments.forEach(function(a) {
+    if (!studentGoals[a.studentId]) studentGoals[a.studentId] = [];
+    studentGoals[a.studentId].push(a);
+  });
+
+  Object.keys(studentGoals).forEach(function(sid) {
+    var key = sid + quarter;
+    if (!_progressCompletionFiredFor[key] &&
+        isStudentFullyComplete_(sid, studentGoals[sid], completionMap, completionFlags, quarter)) {
+      _progressCompletionFiredFor[key] = true;
+    }
+  });
 }
 
 // ── Summary Stats Row ──
