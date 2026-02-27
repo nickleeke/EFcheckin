@@ -6354,13 +6354,19 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .eval-file-item--generating::before {
   content: '';
   position: absolute;
-  inset: -2px;
-  border-radius: calc(var(--md-shape-sm) + 2px);
-  background: conic-gradient(
-    #C41E3A, #CF5D35, #E8B34B, #79AF61, #4EA3A8, #21376C, #C41E3A
-  );
+  inset: -6px;
+  border-radius: calc(var(--md-shape-sm) + 6px);
+  background: #C41E3A;
   z-index: -1;
-  animation: spin 2s linear infinite;
+  animation: aiGlowColor 6s linear infinite, aiGlowPulse 2s ease-in-out infinite;
+}
+@keyframes aiGlowColor {
+  from { filter: blur(14px) hue-rotate(0deg); }
+  to   { filter: blur(14px) hue-rotate(360deg); }
+}
+@keyframes aiGlowPulse {
+  0%, 100% { opacity: 0.35; }
+  50%      { opacity: 0.6; }
 }
 .eval-file-generating-label {
   font-size: 12px;
