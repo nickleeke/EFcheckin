@@ -522,6 +522,39 @@ function saveStudentGoals(studentId, goalsJson) {
   return { success: false, error: 'Student not found' };
 }
 
+function saveStudentAccommodations(studentId, accommodationsJson) {
+  initializeSheetsIfNeeded_();
+  const ss = getSS_();
+  var ctSheet = ss.getSheetByName(SHEET_COTEACHERS);
+  var perms = getCallerPermissions_(ctSheet, getCurrentUserEmail_());
+  requirePermission_(perms, 'editGoals', 'edit accommodations');
+  const sheet = ss.getSheetByName(SHEET_STUDENTS);
+  const now = new Date().toISOString();
+
+  var parsed = [];
+  try { parsed = JSON.parse(accommodationsJson || '[]'); } catch(e) { parsed = []; }
+  var sanitized = JSON.stringify(parsed);
+
+  // Build flat text for backward compat
+  var allItems = [];
+  parsed.forEach(function(cat) {
+    (cat.items || []).forEach(function(item) { allItems.push(item); });
+  });
+  var flat = allItems.join('; ');
+
+  var found = findRowById_(sheet, studentId);
+  if (found) {
+    batchSetValues_(sheet, found.rowIndex, found.colIdx, {
+      accommodationsJson: sanitized,
+      accommodations: flat,
+      updatedAt: now
+    });
+    invalidateStudentCaches_();
+    return { success: true };
+  }
+  return { success: false, error: 'Student not found' };
+}
+
 function saveStudentContacts(studentId, contactsJson) {
   initializeSheetsIfNeeded_();
   const ss = getSS_();
@@ -3337,7 +3370,7 @@ function getDPCompletionFlags_() {
 
 // ───── Gemini AI ─────
 
-var GEMINI_MODEL_ = 'gemini-2.0-flash';
+var GEMINI_MODEL_ = 'gemini-2.5-flash-lite';
 var GEMINI_API_URL_ = 'https://generativelanguage.googleapis.com/v1beta/models/';
 
 /**

@@ -2606,6 +2606,110 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .profile-add-goal-btn { margin-top: 8px; }
 .profile-add-objective-btn { margin-top: 4px; }
 
+/* ─── IEP View ─── */
+
+/* Compact goal card for profile read-only view */
+.profile-goal-compact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-sm);
+  margin-bottom: 8px;
+}
+.profile-goal-compact-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  flex: 1;
+}
+.profile-goal-compact-text {
+  font-size: 13px;
+  color: var(--md-on-surface-variant);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.profile-goal-compact-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+/* IEP Accommodations read-only */
+.iep-acag-readonly {
+  padding: 0 16px 12px;
+}
+.iep-acag-readonly-category {
+  margin-bottom: 12px;
+}
+.iep-acag-readonly-category-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--md-on-surface);
+  margin-bottom: 4px;
+}
+.iep-acag-readonly-list {
+  list-style: disc;
+  padding-left: 20px;
+  margin: 0;
+}
+.iep-acag-readonly-item {
+  font-size: 13px;
+  color: var(--md-on-surface);
+  padding: 2px 0;
+  line-height: 1.5;
+}
+
+/* IEP Historical Progress */
+.iep-progress-goal-group {
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-md);
+  padding: 12px 16px;
+  margin: 0 16px 12px;
+}
+.iep-progress-goal-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.iep-progress-goal-text {
+  font-size: 14px;
+  color: var(--md-on-surface);
+  font-weight: 500;
+}
+.iep-progress-obj-row {
+  padding: 8px 0;
+  border-top: 1px solid var(--md-outline-variant);
+}
+.iep-progress-obj-text {
+  font-size: 13px;
+  color: var(--md-on-surface);
+  margin: 0 0 6px;
+}
+.iep-progress-timeline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.iep-progress-note {
+  font-size: 12px;
+  color: var(--md-on-surface-variant);
+  padding: 2px 0;
+  line-height: 1.4;
+}
+.iep-progress-note-quarter {
+  font-weight: 500;
+  color: var(--md-on-surface);
+}
+
 /* Goal Area input row */
 .profile-goal-area-row {
   display: flex;
@@ -6345,28 +6449,38 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   100% { filter: hue-rotate(360deg) brightness(1.1); }
 }
 
-/* Racing rainbow border on generating placeholder */
+/* Atmospheric edge glow on generating placeholder */
 .eval-file-item--generating {
   position: relative;
+  z-index: 0;
   border-color: transparent;
   border-radius: var(--md-shape-sm);
+  background: var(--md-surface);
 }
 .eval-file-item--generating::before {
   content: '';
   position: absolute;
-  inset: -6px;
-  border-radius: calc(var(--md-shape-sm) + 6px);
+  inset: -3px;
+  border-radius: calc(var(--md-shape-sm) + 3px);
   background: #C41E3A;
-  z-index: -1;
+  z-index: -2;
   animation: aiGlowColor 6s linear infinite, aiGlowPulse 2s ease-in-out infinite;
 }
+.eval-file-item--generating::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--md-shape-sm);
+  background: var(--md-surface);
+  z-index: -1;
+}
 @keyframes aiGlowColor {
-  from { filter: blur(14px) hue-rotate(0deg); }
-  to   { filter: blur(14px) hue-rotate(360deg); }
+  from { filter: blur(8px) hue-rotate(0deg); }
+  to   { filter: blur(8px) hue-rotate(360deg); }
 }
 @keyframes aiGlowPulse {
-  0%, 100% { opacity: 0.35; }
-  50%      { opacity: 0.6; }
+  0%, 100% { opacity: 0.45; }
+  50%      { opacity: 0.75; }
 }
 .eval-file-generating-label {
   font-size: 12px;

@@ -55,7 +55,12 @@ var appState = {
     caseManager: 'all',
     grade: 'all',
     search: ''
-  }
+  },
+  iepStudentId: null,
+  iepGoalsEditMode: false,
+  iepAccomEditMode: false,
+  iepProgressData: null,
+  iepExpandedGoalIds: {}
 };
 var _persistTimers = {};
 var _persistInFlight = 0;
@@ -78,6 +83,9 @@ var _progressAutosaveTimer = null;
 var _progressAutosaveInFlight = false;
 var _progressCompletionFiredFor = {};
 var _progressAutosaveDirty = false;
+var _accomAutosaveTimer = null;
+var _accomAutosaveInFlight = false;
+var _accomAutosaveDirty = false;
 var _generatingFileSummary = {};
 var _lastDashboardFetch = 0;
 var _lastEvalSummaryFetch = 0;
@@ -1040,7 +1048,7 @@ function closeConfirmDialog(overlayEl) {
 var VIEW_ORDER = {
   'auth-loading': -1, 'onboarding-view': -1,
   'dashboard-view': 0, 'dueprocess-view': 1, 'coteacher-view': 2, 'settings-view': 2,
-  'student-view': 3, 'missing-view': 4, 'eval-checklist-view': 4, 'checkin-view': 5
+  'student-view': 3, 'missing-view': 4, 'eval-checklist-view': 4, 'iep-view': 4, 'checkin-view': 5
 };
 var _currentViewId = 'auth-loading';
 
@@ -5786,6 +5794,429 @@ function removeObjective(goalId, objId) {
   scheduleGoalsAutosave();
 }
 
+// ─── IEP View (child page of student profile) ───
+
+function showIEPView(studentId) {
+  // Clean up any existing autosave timers
+  resetIEPAutosave_();
+
+  appState.iepStudentId = studentId;
+  appState.currentStudentId = studentId;
+  appState.iepGoalsEditMode = false;
+  appState.iepAccomEditMode = false;
+  appState.iepProgressData = null;
+  appState.iepExpandedGoalIds = {};
+
+  var student = getStudentById(studentId);
+  var studentName = student ? esc(student.firstName + ' ' + student.lastName) : 'Student';
+
+  document.getElementById('iep-view-title').textContent = student ? (student.firstName + ' ' + student.lastName) : 'Student';
+  document.getElementById('iep-view-actions').innerHTML = '';
+
+  // Show skeleton
+  var container = document.getElementById('iep-content');
+  if (container) {
+    container.innerHTML =
+      '<div class="profile-section-card"><div class="skeleton skeleton-block" style="height:120px;margin:16px;"></div></div>' +
+      '<div class="profile-section-card"><div class="skeleton skeleton-block" style="height:80px;margin:16px;"></div></div>' +
+      '<div class="profile-section-card"><div class="skeleton skeleton-block" style="height:100px;margin:16px;"></div></div>';
+  }
+
+  showView('iep-view');
+
+  // Fetch all-quarter progress data, then render
+  google.script.run
+    .withSuccessHandler(function(allEntries) {
+      if (appState.iepStudentId !== studentId) return; // stale guard
+      appState.iepProgressData = allEntries || [];
+      renderIEPContent_(student);
+    })
+    .withFailureHandler(function() {
+      if (appState.iepStudentId !== studentId) return;
+      appState.iepProgressData = [];
+      renderIEPContent_(student);
+    })
+    .getAllProgressForStudent(studentId);
+}
+
+function goBackFromIEP() {
+  flushIEPAutosave_();
+  resetIEPAutosave_();
+  showStudentProfile(appState.iepStudentId);
+}
+
+function resetIEPAutosave_() {
+  if (_goalsAutosaveTimer) { clearTimeout(_goalsAutosaveTimer); _goalsAutosaveTimer = null; }
+  _goalsAutosaveInFlight = false;
+  _goalsAutosaveDirty = false;
+  if (_accomAutosaveTimer) { clearTimeout(_accomAutosaveTimer); _accomAutosaveTimer = null; }
+  _accomAutosaveInFlight = false;
+  _accomAutosaveDirty = false;
+}
+
+function flushIEPAutosave_() {
+  // Flush goals
+  if (_goalsAutosaveTimer) { clearTimeout(_goalsAutosaveTimer); _goalsAutosaveTimer = null; }
+  if (_goalsAutosaveDirty && !_goalsAutosaveInFlight) {
+    performGoalsAutosave();
+  }
+  // Flush accommodations
+  if (_accomAutosaveTimer) { clearTimeout(_accomAutosaveTimer); _accomAutosaveTimer = null; }
+  if (_accomAutosaveDirty && !_accomAutosaveInFlight) {
+    performAccomAutosave_();
+  }
+}
+
+// ── IEP Content Rendering ──
+
+function renderIEPContent_(student) {
+  var container = document.getElementById('iep-content');
+  if (!container) return;
+
+  var html = '';
+  html += renderIEPGoalsSection_(student);
+  html += renderIEPAccomSection_(student);
+  html += renderIEPProgressHistory_(student);
+
+  container.innerHTML = html;
+  animateContentIn(container);
+
+  // Wire up autosave if in edit mode
+  if (appState.iepGoalsEditMode && hasPermission('editGoals')) {
+    setupGoalsAutosave();
+  }
+  if (appState.iepAccomEditMode && hasPermission('editGoals')) {
+    setupAccomAutosave_();
+  }
+}
+
+function renderIEPGoalsSection_(student) {
+  // Parse goals — backward compat with old iepGoal field
+  var goals = [];
+  if (student.goalsJson) {
+    try { goals = JSON.parse(student.goalsJson); } catch(e) { goals = []; }
+  } else if (student.goals && student.goals.length > 0) {
+    goals = student.goals;
+  }
+  if (goals.length === 0 && student.iepGoal) {
+    goals = [{ id: 'migrated-' + Date.now(), text: student.iepGoal, objectives: [] }];
+  }
+
+  appState.currentGoals = goals;
+  appState.editingGoalId = null;
+
+  var isEditing = appState.iepGoalsEditMode;
+  var html = '<div class="profile-section-card">';
+  html += '<div class="profile-section-header">' +
+    '<span class="profile-section-title">Goals &amp; Objectives</span>' +
+    '<div class="profile-section-header-right">';
+
+  if (hasPermission('editGoals')) {
+    if (isEditing) {
+      html += '<span class="goals-autosave-status" id="goals-autosave-status"></span>';
+      html += '<button class="btn btn-sm btn-secondary" onclick="toggleIEPGoalsEditMode(false)">Done</button>';
+    } else {
+      html += '<button class="btn btn-sm btn-primary" onclick="toggleIEPGoalsEditMode(true)">Edit Goals</button>';
+    }
+  }
+  html += '</div></div>';
+
+  html += '<div id="iep-goals-container">';
+  if (isEditing) {
+    html += '<div id="goals-autosave-container">';
+    if (goals.length > 0) {
+      goals.forEach(function(goal) { html += renderGoalCard(goal); });
+    } else {
+      html += '<div class="goal-card-empty-state">No goals added yet</div>';
+    }
+    html += '</div>';
+    if (hasPermission('editGoals')) {
+      html += '<button type="button" class="btn btn-sm btn-secondary profile-add-goal-btn" onclick="addGoal()">+ Add Goal</button>';
+    }
+  } else {
+    // Read-only display
+    if (goals.length === 0) {
+      html += '<div class="goal-card-empty-state">No goals added yet</div>';
+    } else {
+      goals.forEach(function(goal) {
+        html += renderIEPGoalCardReadOnly_(goal);
+      });
+    }
+  }
+  html += '</div>';
+  html += '</div>';
+  return html;
+}
+
+function renderIEPGoalCardReadOnly_(goal) {
+  var objectives = goal.objectives || [];
+  var goalArea = goal.goalArea || '';
+  var goalText = goal.text || '';
+  var expanded = !!(appState.iepExpandedGoalIds && appState.iepExpandedGoalIds[goal.id]);
+
+  var html = '<div class="goal-card" data-goal-id="' + esc(goal.id) + '">';
+
+  // Header
+  html += '<div class="goal-card-header" role="button" tabindex="0" onclick="toggleIEPGoalExpand(\'' + esc(goal.id) + '\')" onkeydown="if(event.key===\'Enter\')toggleIEPGoalExpand(\'' + esc(goal.id) + '\')">';
+  html += '<div class="goal-card-header-left">';
+  if (goalArea) {
+    html += '<span class="goal-card-area-chip">' + esc(goalArea) + '</span>';
+  }
+  if (!expanded) {
+    var previewText = goalText.length > 80 ? goalText.substring(0, 80) + '\u2026' : (goalText || 'No goal text');
+    html += '<span class="goal-card-text-preview">' + esc(previewText) + '</span>';
+  }
+  html += '</div>';
+  html += '<div class="goal-card-header-right">';
+  if (objectives.length > 0) {
+    html += '<span class="goal-card-obj-badge">' + objectives.length + ' obj.</span>';
+  }
+  html += '<svg class="goal-card-chevron' + (expanded ? ' rotated' : '') + '" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>';
+  html += '</div></div>';
+
+  // Collapsible body
+  html += '<div class="goal-card-body' + (expanded ? ' goal-card-body-open' : '') + '">';
+  html += renderGoalDisplayMode_(goal);
+  html += '</div>';
+
+  html += '</div>';
+  return html;
+}
+
+function renderIEPAccomSection_(student) {
+  var acagData = parseAcagData(student);
+  var isEditing = appState.iepAccomEditMode;
+
+  var html = '<div class="profile-section-card">';
+  html += '<div class="profile-section-header">' +
+    '<span class="profile-section-title">Accommodations at a Glance</span>' +
+    '<div class="profile-section-header-right">';
+
+  if (hasPermission('editGoals')) {
+    if (isEditing) {
+      html += '<span class="accom-autosave-status" id="accom-autosave-status"></span>';
+      html += '<button class="btn btn-sm btn-secondary" onclick="toggleIEPAccomEditMode(false)">Done</button>';
+    } else {
+      html += '<button class="btn btn-sm btn-primary" onclick="toggleIEPAccomEditMode(true)">Edit</button>';
+    }
+  }
+  html += '</div></div>';
+
+  if (isEditing) {
+    html += '<div id="acag-editor">';
+    acagData.forEach(function(cat, catIdx) {
+      html += renderAcagCategoryEditor(cat, catIdx);
+    });
+    html += '</div>';
+    html += '<button type="button" class="btn btn-sm btn-secondary" style="margin:8px 0 0 16px;" onclick="addAcagCategory()">+ Add Category</button>';
+  } else {
+    html += renderIEPAccomReadOnly_(acagData);
+  }
+  html += '</div>';
+  return html;
+}
+
+function renderIEPAccomReadOnly_(acagData) {
+  var hasAny = acagData.some(function(cat) { return cat.items && cat.items.length > 0; });
+  if (!hasAny) {
+    return '<div class="goal-card-empty-state">No accommodations added yet</div>';
+  }
+  var html = '<div class="iep-acag-readonly">';
+  acagData.forEach(function(cat) {
+    if (!cat.items || cat.items.length === 0) return;
+    html += '<div class="iep-acag-readonly-category">';
+    html += '<div class="iep-acag-readonly-category-name">' + esc(cat.category) + '</div>';
+    html += '<ul class="iep-acag-readonly-list">';
+    cat.items.forEach(function(item) {
+      html += '<li class="iep-acag-readonly-item">' + esc(item) + '</li>';
+    });
+    html += '</ul></div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+function renderIEPProgressHistory_(student) {
+  var goals = appState.currentGoals || [];
+  var allEntries = appState.iepProgressData || [];
+
+  var html = '<div class="profile-section-card">';
+  html += '<div class="profile-section-header">' +
+    '<span class="profile-section-title">Progress History</span>' +
+  '</div>';
+
+  if (goals.length === 0) {
+    html += '<div class="goal-card-empty-state">Add IEP goals to begin tracking progress.</div>';
+    html += '</div>';
+    return html;
+  }
+
+  // Build entry lookup: goalId|objectiveId|quarter -> entry
+  var entryMap = {};
+  allEntries.forEach(function(e) {
+    var key = e.goalId + '|' + e.objectiveId + '|' + e.quarter;
+    entryMap[key] = e;
+  });
+
+  var quarters = ['Q1', 'Q2', 'Q3', 'Q4'];
+
+  goals.forEach(function(goal) {
+    var objectives = goal.objectives || [];
+    var goalArea = goal.goalArea || '';
+    var goalText = goal.text || '';
+    var previewText = goalText.length > 60 ? goalText.substring(0, 60) + '\u2026' : (goalText || 'No goal text');
+
+    html += '<div class="iep-progress-goal-group">';
+    html += '<div class="iep-progress-goal-header">';
+    if (goalArea) html += '<span class="goal-card-area-chip">' + esc(goalArea) + '</span>';
+    html += '<span class="iep-progress-goal-text">' + esc(previewText) + '</span>';
+    html += '</div>';
+
+    if (objectives.length === 0) {
+      html += '<p style="color:var(--md-on-surface-variant);font-size:13px;padding:4px 0 0;">No objectives defined.</p>';
+    } else {
+      objectives.forEach(function(obj) {
+        html += '<div class="iep-progress-obj-row">';
+        html += '<p class="iep-progress-obj-text">' + esc(obj.text || 'No text') + '</p>';
+        html += '<div class="iep-progress-timeline">';
+        quarters.forEach(function(q) {
+          var key = goal.id + '|' + obj.id + '|' + q;
+          var entry = entryMap[key];
+          if (entry && entry.progressRating) {
+            var chipClass = entry.progressRating === 'Objective Met' ? 'progress-chip-met' :
+                            entry.progressRating === 'Adequate Progress' ? 'progress-chip-adequate' :
+                            entry.progressRating === 'No Progress' ? 'progress-chip-none' : '';
+            html += '<span class="progress-timeline-chip ' + chipClass + '">' + esc(q) + ': ' + esc(entry.progressRating) + '</span>';
+          } else {
+            html += '<span class="progress-timeline-chip progress-chip-empty">' + esc(q) + ': \u2014</span>';
+          }
+        });
+        html += '</div>';
+        // Show anecdotal notes for quarters that have them
+        quarters.forEach(function(q) {
+          var key = goal.id + '|' + obj.id + '|' + q;
+          var entry = entryMap[key];
+          if (entry && entry.anecdotalNotes) {
+            html += '<div class="iep-progress-note"><span class="iep-progress-note-quarter">' + esc(q) + ':</span> ' + esc(entry.anecdotalNotes) + '</div>';
+          }
+        });
+        html += '</div>';
+      });
+    }
+    html += '</div>';
+  });
+
+  html += '</div>';
+  return html;
+}
+
+// ── IEP Edit Mode Toggles ──
+
+function toggleIEPGoalsEditMode(enable) {
+  if (appState.iepGoalsEditMode && !enable) {
+    // Flush autosave before leaving edit mode
+    if (_goalsAutosaveTimer) { clearTimeout(_goalsAutosaveTimer); _goalsAutosaveTimer = null; }
+    if (_goalsAutosaveDirty && !_goalsAutosaveInFlight) {
+      performGoalsAutosave();
+    }
+  }
+  appState.iepGoalsEditMode = enable;
+  var student = getStudentById(appState.iepStudentId);
+  if (student) renderIEPContent_(student);
+}
+
+function toggleIEPAccomEditMode(enable) {
+  if (appState.iepAccomEditMode && !enable) {
+    // Flush autosave before leaving edit mode
+    if (_accomAutosaveTimer) { clearTimeout(_accomAutosaveTimer); _accomAutosaveTimer = null; }
+    if (_accomAutosaveDirty && !_accomAutosaveInFlight) {
+      performAccomAutosave_();
+    }
+  }
+  appState.iepAccomEditMode = enable;
+  var student = getStudentById(appState.iepStudentId);
+  if (student) renderIEPContent_(student);
+}
+
+function toggleIEPGoalExpand(goalId) {
+  if (!appState.iepExpandedGoalIds) appState.iepExpandedGoalIds = {};
+  appState.iepExpandedGoalIds[goalId] = !appState.iepExpandedGoalIds[goalId];
+  var student = getStudentById(appState.iepStudentId);
+  if (student) renderIEPContent_(student);
+}
+
+// ── Accommodations Autosave ──
+
+function setupAccomAutosave_() {
+  var editor = document.getElementById('acag-editor');
+  if (!editor) return;
+  editor.addEventListener('input', function() { scheduleAccomAutosave_(); });
+  editor.addEventListener('change', function() { scheduleAccomAutosave_(); });
+  _accomAutosaveDirty = false;
+  _accomAutosaveInFlight = false;
+  if (_accomAutosaveTimer) { clearTimeout(_accomAutosaveTimer); _accomAutosaveTimer = null; }
+  updateAutosaveIndicator('idle', 'accom-autosave-status');
+}
+
+function scheduleAccomAutosave_() {
+  _accomAutosaveDirty = true;
+  updateAutosaveIndicator('unsaved', 'accom-autosave-status');
+  if (_accomAutosaveTimer) clearTimeout(_accomAutosaveTimer);
+  _accomAutosaveTimer = setTimeout(function() {
+    _accomAutosaveTimer = null;
+    performAccomAutosave_();
+  }, 2000);
+}
+
+function performAccomAutosave_() {
+  if (_accomAutosaveInFlight) { scheduleAccomAutosave_(); return; }
+
+  var data = getAcagState();
+  // Canonical ordering: defaults first, then custom
+  var result = [];
+  ACAG_DEFAULT_CATEGORIES.forEach(function(defCat) {
+    var found = data.find(function(c) { return c.category === defCat; });
+    result.push(found || { category: defCat, items: [] });
+  });
+  data.forEach(function(cat) {
+    if (ACAG_DEFAULT_CATEGORIES.indexOf(cat.category) < 0) result.push(cat);
+  });
+
+  var json = JSON.stringify(result);
+  var studentId = appState.iepStudentId;
+  if (!studentId) return;
+
+  _accomAutosaveInFlight = true;
+  _accomAutosaveDirty = false;
+  updateAutosaveIndicator('saving', 'accom-autosave-status');
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      _accomAutosaveInFlight = false;
+      if (appState.iepStudentId !== studentId) return; // stale guard
+      if (res && res.success) {
+        // Update local state
+        var s = getStudentById(studentId);
+        if (s) s.accommodationsJson = json;
+        if (appState.currentStudent && appState.currentStudent.id === studentId) {
+          appState.currentStudent.accommodationsJson = json;
+        }
+        if (_accomAutosaveDirty) {
+          scheduleAccomAutosave_();
+        } else {
+          updateAutosaveIndicator('saved', 'accom-autosave-status');
+        }
+      } else {
+        updateAutosaveIndicator('error', 'accom-autosave-status');
+      }
+    })
+    .withFailureHandler(function() {
+      _accomAutosaveInFlight = false;
+      updateAutosaveIndicator('error', 'accom-autosave-status');
+    })
+    .saveStudentAccommodations(studentId, json);
+}
+
 // ─── Missing Assignments View (child page) ───
 function showMissingAssignments(studentId) {
   var student = getStudentById(studentId);
@@ -6281,6 +6712,9 @@ function showStudentProfile(studentId) {
   if (_goalsAutosaveTimer) { clearTimeout(_goalsAutosaveTimer); _goalsAutosaveTimer = null; }
   _goalsAutosaveInFlight = false;
   _goalsAutosaveDirty = false;
+  if (_accomAutosaveTimer) { clearTimeout(_accomAutosaveTimer); _accomAutosaveTimer = null; }
+  _accomAutosaveInFlight = false;
+  _accomAutosaveDirty = false;
 
   // Clean up goal edit state
   appState.editingGoalId = null;
@@ -6580,18 +7014,17 @@ function renderStudentProfileDashboard(student) {
   }
   html += '</div></div>';
 
-  // ─── Section 2: Goals & Objectives ───
+  // ─── Section 2: IEP Goals (compact read-only with Edit IEP button) ───
   html += '<div class="profile-section-card">';
   html += '<div class="profile-section-header">' +
-    '<span class="profile-section-title">Goals &amp; Objectives</span>' +
+    '<span class="profile-section-title">IEP Goals</span>' +
     '<div class="profile-section-header-right">' +
-      '<span class="goals-autosave-status" id="goals-autosave-status"></span>' +
       '<button class="btn-icon btn-icon-sm" onclick="printIepSummary()" title="Print IEP Summary">' +
         '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>' +
       '</button>' +
+      '<button class="btn btn-sm btn-primary" onclick="showIEPView(\'' + esc(student.id) + '\')">Edit IEP</button>' +
     '</div>' +
   '</div>';
-  html += '<div id="goals-autosave-container">';
 
   // Parse goals — backward compat with old iepGoal field
   var goals = [];
@@ -6604,22 +7037,15 @@ function renderStudentProfileDashboard(student) {
     goals = [{ id: 'migrated-' + Date.now(), text: student.iepGoal, objectives: [] }];
   }
 
-  // Store in appState and reset edit state
+  // Store in appState (read-only on profile)
   appState.currentGoals = goals;
-  appState.editingGoalId = null;
-  appState.expandedGoalIds = {};
 
-  if (goals.length > 0) {
-    goals.forEach(function(goal) {
-      html += renderGoalCard(goal);
-    });
-  } else {
+  if (goals.length === 0) {
     html += '<div class="goal-card-empty-state">No goals added yet</div>';
-  }
-
-  html += '</div>';
-  if (hasPermission('editGoals')) {
-    html += '<button type="button" class="btn btn-sm btn-secondary profile-add-goal-btn" onclick="addGoal()">+ Add Goal</button>';
+  } else {
+    goals.forEach(function(goal) {
+      html += renderProfileGoalCompact_(goal);
+    });
   }
   html += '</div>';
 
@@ -6648,9 +7074,6 @@ function renderStudentProfileDashboard(student) {
 
   container.innerHTML = html;
   animateContentIn(container);
-
-  // Setup goals autosave listeners (only if editGoals)
-  if (hasPermission('editGoals')) setupGoalsAutosave();
 
   // Load quarterly progress section (only if viewProgress)
   if (hasPermission('viewProgress')) loadProgressSection(student.id, goals);
@@ -6746,6 +7169,28 @@ function renderGoalDisplayMode_(goal) {
     });
     html += '</ol>';
   }
+  return html;
+}
+
+function renderProfileGoalCompact_(goal) {
+  var objectives = goal.objectives || [];
+  var goalArea = goal.goalArea || '';
+  var goalText = goal.text || '';
+  var previewText = goalText.length > 120 ? goalText.substring(0, 120) + '\u2026' : (goalText || 'No goal text');
+
+  var html = '<div class="profile-goal-compact">';
+  html += '<div class="profile-goal-compact-left">';
+  if (goalArea) {
+    html += '<span class="goal-card-area-chip">' + esc(goalArea) + '</span>';
+  }
+  html += '<span class="profile-goal-compact-text">' + esc(previewText) + '</span>';
+  html += '</div>';
+  html += '<div class="profile-goal-compact-right">';
+  if (objectives.length > 0) {
+    html += '<span class="goal-card-obj-badge">' + objectives.length + ' obj.</span>';
+  }
+  html += '</div>';
+  html += '</div>';
   return html;
 }
 
@@ -7677,6 +8122,8 @@ function rerenderAcagEditor(data) {
     html += renderAcagCategoryEditor(cat, catIdx);
   });
   editor.innerHTML = html;
+  // Trigger accommodations autosave if on IEP page
+  if (appState.iepAccomEditMode) scheduleAccomAutosave_();
 }
 
 function collectAccommodations() {
