@@ -7493,13 +7493,24 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
               border-color var(--md-duration-short4) var(--md-easing-standard),
               border-style var(--md-duration-short4) var(--md-easing-standard),
               color var(--md-duration-short4) var(--md-easing-standard),
+              filter var(--md-duration-short3) var(--md-easing-standard),
               transform var(--md-duration-short3) var(--md-easing-standard);
+}
+.top3-check-btn:hover {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  border-color: currentColor;
+  transform: scale(1.08);
 }
 .top3-check-btn.checked {
   border-style: solid;
   border-color: currentColor;
   background: currentColor;
   transform: scale(1.1);
+}
+.top3-check-btn.checked:hover {
+  background: currentColor;
+  filter: brightness(1.15);
+  transform: scale(1.18);
 }
 .top3-check-icon path {
   fill: currentColor;
