@@ -11423,14 +11423,21 @@ function rebuildEvalItemsCard(evalId) {
 // ─── Eval Edit Mode ───
 
 function enterEvalEditMode(itemId) {
+  var dueDateChanged = false;
   if (appState.editingEvalItemId) {
-    saveEvalEditModeChanges(appState.editingEvalItemId);
+    dueDateChanged = saveEvalEditModeChanges(appState.editingEvalItemId);
     var prevId = appState.editingEvalItemId;
-    appState.editingEvalItemId = null;
-    rerenderEvalItem(prevId);
+    appState.editingEvalItemId = itemId;
+    if (dueDateChanged && appState.currentEvaluation) {
+      rebuildEvalItemsCard(appState.currentEvaluation.id);
+    } else {
+      rerenderEvalItem(prevId);
+      rerenderEvalItem(itemId);
+    }
+  } else {
+    appState.editingEvalItemId = itemId;
+    rerenderEvalItem(itemId);
   }
-  appState.editingEvalItemId = itemId;
-  rerenderEvalItem(itemId);
   var textInput = document.getElementById('eval-edit-text-' + itemId);
   if (textInput) {
     textInput.focus();
@@ -11442,9 +11449,13 @@ function enterEvalEditMode(itemId) {
 function exitEvalEditMode() {
   var itemId = appState.editingEvalItemId;
   if (!itemId) return;
-  saveEvalEditModeChanges(itemId);
+  var dueDateChanged = saveEvalEditModeChanges(itemId);
   appState.editingEvalItemId = null;
-  rerenderEvalItem(itemId);
+  if (dueDateChanged && appState.currentEvaluation) {
+    rebuildEvalItemsCard(appState.currentEvaluation.id);
+  } else {
+    rerenderEvalItem(itemId);
+  }
   updateEvalProgress();
 }
 
@@ -11461,9 +11472,10 @@ function autoResizeEvalTextarea_(el) {
 function saveEvalEditModeChanges(itemId) {
   var textInput = document.getElementById('eval-edit-text-' + itemId);
   var dueInput = document.getElementById('eval-edit-due-' + itemId);
-  if (!appState.currentEvaluation) return;
+  if (!appState.currentEvaluation) return false;
 
   var changed = false;
+  var dueDateChanged = false;
   appState.currentEvaluation.items.forEach(function(it) {
     if (it.id === itemId) {
       if (textInput) {
@@ -11472,12 +11484,13 @@ function saveEvalEditModeChanges(itemId) {
       }
       if (dueInput) {
         var newDue = dueInput.value || null;
-        if (newDue !== it.dueDate) { it.dueDate = newDue; changed = true; }
+        if (newDue !== it.dueDate) { it.dueDate = newDue; changed = true; dueDateChanged = true; }
       }
     }
   });
 
   if (changed) scheduleEvalAutosave();
+  return dueDateChanged;
 }
 
 function rerenderEvalItem(itemId) {
@@ -11600,6 +11613,11 @@ function performEvalAutosave() {
   }
   var eval_ = appState.currentEvaluation;
   if (!eval_ || !eval_.id || !eval_.items) return;
+
+  // Persist sorted order: incomplete sorted by urgency, completed at bottom
+  var incomplete = eval_.items.filter(function(it) { return !it.checked; });
+  var completed = eval_.items.filter(function(it) { return it.checked; });
+  eval_.items = sortEvalItems_(incomplete).concat(completed);
 
   _evalAutosaveInFlight = true;
   _evalAutosaveDirty = false;
