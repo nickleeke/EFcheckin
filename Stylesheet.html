@@ -3463,6 +3463,35 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   background: var(--md-tertiary, #755A2F);
   color: var(--md-on-tertiary, #FFF);
 }
+/* Per-type eval badge colors (RPS brand palette) */
+.eval-badge[data-eval-type="annual-iep"] {
+  background: #D6E4F0;
+  color: #21376c;
+}
+.eval-badge[data-eval-type="annual-iep"]:hover {
+  background: #21376c;
+  color: #FFF;
+}
+.eval-badge[data-eval-type="3-year-reeval"],
+.eval-badge[data-eval-type="reeval"] {
+  background: #D4EFEF;
+  color: #2A6B6E;
+}
+.eval-badge[data-eval-type="3-year-reeval"]:hover,
+.eval-badge[data-eval-type="reeval"]:hover {
+  background: #4ea3a8;
+  color: #FFF;
+}
+.eval-badge[data-eval-type="initial-eval"],
+.eval-badge[data-eval-type="eval"] {
+  background: #FDDDD0;
+  color: #7A3218;
+}
+.eval-badge[data-eval-type="initial-eval"]:hover,
+.eval-badge[data-eval-type="eval"]:hover {
+  background: #cf5d35;
+  color: #FFF;
+}
 
 /* ─── Online Badge ─── */
 .online-badge {
@@ -4218,12 +4247,10 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   text-overflow: ellipsis;
 }
 .eval-carousel-card-type {
-  font-size: 12px;
-  color: var(--md-on-surface-variant);
-  margin-top: 2px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  margin-top: 4px;
+}
+.eval-carousel-card-type .eval-badge {
+  margin-left: 0;
 }
 .eval-carousel-card-progress {
   display: flex;

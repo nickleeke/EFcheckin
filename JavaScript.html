@@ -1383,7 +1383,7 @@ function renderDashboard(data, opts) {
     html += buildBirthdayBadge_(s.birthday);
     if (s.evalType) {
       var evalLabel = getEvalTypeLabel(s.evalType);
-      html += ' <span class="chip chip-clickable eval-badge" onclick="event.stopPropagation(); openEvalFromBadge(\'' + s.id + '\')" title="View ' + evalLabel + ' checklist">' + evalLabel + '</span>';
+      html += ' <span class="chip chip-clickable eval-badge" data-eval-type="' + esc(s.evalType) + '" onclick="event.stopPropagation(); openEvalFromBadge(\'' + s.id + '\')" title="View ' + evalLabel + ' checklist">' + evalLabel + '</span>';
     }
     html += '</td>';
     html += '<td>' + esc(s.grade || '-') + '</td>';
@@ -1858,7 +1858,7 @@ function buildEvalCarouselHtml_(activeEvals) {
 
     html += '<div class="eval-carousel-card' + alertClass + '" role="button" tabindex="0" onclick="navigateToEvalTask(\'' + esc(ev.studentId) + '\')" onkeydown="if(event.key===\'Enter\')navigateToEvalTask(\'' + esc(ev.studentId) + '\')" aria-label="' + esc(ev.studentName) + ', ' + esc(getEvalTypeLabel(ev.type)) + ', ' + pct + '% complete' + (ev.overdueCount > 0 ? ', ' + ev.overdueCount + ' overdue' : '') + '">' +
       '<div class="eval-carousel-card-name">' + esc(ev.studentName) + '</div>' +
-      '<div class="eval-carousel-card-type">' + esc(getEvalTypeLabel(ev.type)) + '</div>' +
+      '<div class="eval-carousel-card-type"><span class="eval-badge" data-eval-type="' + esc(ev.type) + '">' + esc(getEvalTypeLabel(ev.type)) + '</span></div>' +
       '<div class="eval-carousel-card-progress">' +
         '<div class="eval-carousel-bar"><div class="eval-carousel-bar-fill" style="width:' + pct + '%"></div></div>' +
         '<span class="eval-carousel-card-pct">' + ev.done + '/' + ev.total + '</span>' +
@@ -7926,7 +7926,7 @@ function renderMyCaseload() {
     html += buildBirthdayBadge_(s.birthday);
     if (s.evalType) {
       var evalLabel = getEvalTypeLabel(s.evalType);
-      html += ' <span class="chip chip-clickable eval-badge" onclick="event.stopPropagation(); openEvalFromBadge(\'' + s.id + '\')" title="View ' + evalLabel + ' checklist">' + evalLabel + '</span>';
+      html += ' <span class="chip chip-clickable eval-badge" data-eval-type="' + esc(s.evalType) + '" onclick="event.stopPropagation(); openEvalFromBadge(\'' + s.id + '\')" title="View ' + evalLabel + ' checklist">' + evalLabel + '</span>';
     }
     html += '</td>';
     html += '<td>' + esc(s.grade || '-') + '</td>';
