@@ -5806,6 +5806,29 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 .eval-item-checked .eval-item-actions {
   color: var(--md-outline);
 }
+/* Completion animation: Phase 1 — green highlight + strikethrough */
+.eval-item-completing {
+  background: rgba(27, 94, 32, 0.10);
+  transition: background var(--md-duration-short4) var(--md-easing-emphasized-decelerate);
+}
+.eval-item-completing .eval-item-text {
+  text-decoration: line-through;
+  color: var(--md-on-surface-variant);
+  transition: color var(--md-duration-short4) var(--md-easing-standard);
+}
+/* Completion animation: Phase 2 — collapse row */
+.eval-item-collapsing {
+  overflow: hidden;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-bottom-color: transparent;
+  max-height: 0 !important;
+  transition: max-height var(--md-duration-medium2) var(--md-easing-emphasized-accelerate),
+              opacity var(--md-duration-short4) var(--md-easing-standard),
+              padding var(--md-duration-medium2) var(--md-easing-emphasized-accelerate),
+              border-bottom-color var(--md-duration-short3) var(--md-easing-standard);
+}
 .eval-item-editing {
   background: var(--md-surface-container-low);
   box-shadow: inset 3px 0 0 0 var(--md-on-surface);

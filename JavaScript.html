@@ -8691,18 +8691,43 @@ function toggleEvalItem(evalId, itemId, checked) {
     });
   }
 
-  // Rebuild items card to move item between sections
-  rebuildEvalItemsCard(evalId);
+  // Update progress ring and counts immediately
   updateEvalProgress();
   scheduleEvalAutosave();
 
-  // Show undo toast when marking complete
   if (checked) {
+    // Animated completion: highlight → collapse → rebuild
+    var row = document.querySelector('.eval-item[data-item-id="' + itemId + '"]');
+    if (row) {
+      // Phase 1: green highlight + strikethrough
+      row.style.maxHeight = row.offsetHeight + 'px';
+      row.classList.add('eval-item-completing');
+
+      setTimeout(function() {
+        // Phase 2: collapse the row
+        row.classList.add('eval-item-collapsing');
+        var rebuilt = false;
+        var doRebuild = function() {
+          if (rebuilt) return;
+          rebuilt = true;
+          rebuildEvalItemsCard(evalId);
+        };
+        row.addEventListener('transitionend', doRebuild, { once: true });
+        setTimeout(doRebuild, 350); // fallback
+      }, 500);
+    } else {
+      rebuildEvalItemsCard(evalId);
+    }
+
+    // Show undo toast
     var capturedEvalId = evalId;
     var capturedItemId = itemId;
     showToast('Task marked complete', 'Undo', function() {
       toggleEvalItem(capturedEvalId, capturedItemId, false);
     });
+  } else {
+    // Unchecking (undo) — instant rebuild
+    rebuildEvalItemsCard(evalId);
   }
 }
 
