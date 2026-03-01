@@ -7474,7 +7474,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 }
 .top3-checkbox {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   cursor: pointer;
   font-size: 14px;
@@ -7488,6 +7488,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   display: flex;
   align-items: center;
   justify-content: center;
+  margin-top: 1px;
   width: 22px;
   min-width: 22px;
   height: 22px;
@@ -7526,29 +7527,17 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   fill: #FFFFFF;
 }
 
-/* Animated strikethrough — left to right */
+/* Animated strikethrough — fades in across all lines */
 .top3-text {
-  position: relative;
   line-height: 1.4;
-  transition: opacity var(--md-duration-short4) var(--md-easing-standard);
-}
-.top3-text::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 45%;
-  width: 100%;
-  height: 1.5px;
-  background: currentColor;
-  transform: scaleX(0);
-  transform-origin: left center;
-  transition: transform var(--md-duration-medium2) var(--md-easing-emphasized-decelerate);
+  text-decoration: line-through transparent;
+  text-decoration-thickness: 1.5px;
+  transition: opacity var(--md-duration-short4) var(--md-easing-standard),
+              text-decoration-color var(--md-duration-medium2) var(--md-easing-emphasized-decelerate);
 }
 .top3-text.completed {
   opacity: 0.5;
-}
-.top3-text.completed::after {
-  transform: scaleX(1);
+  text-decoration-color: currentColor;
 }
 
 /* ─── Top 3 Celebration Overlay ─── */
@@ -7587,7 +7576,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   .top3-check-btn,
   .top3-check-icon path,
   .top3-text,
-  .top3-text::after,
   .widget-celebration-blur,
   .widget-celebration-lottie {
     transition: none !important;
