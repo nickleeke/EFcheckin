@@ -71,6 +71,10 @@ var _progressAutosaveDirty = false;
 var _lastDashboardFetch = 0;
 var _lastEvalSummaryFetch = 0;
 var _lastDueProcessFetch = 0;
+var _ccmSelectedStudentId = null;
+var _ccmSelectedType = null;
+var _ccmActiveEvalStudentIds = {};
+var _ccmSearchTimer = null;
 var DATA_FRESH_MS = 30000; // 30s — frontend staleness window for navigation
 
 var onboardingState = {
@@ -2016,6 +2020,194 @@ function buildDueProcessSkeleton_() {
   html += '</div>';
 
   return html;
+}
+
+// ── Create Checklist Modal (FAB) ──
+
+function openCreateChecklistModal() {
+  var activeEvalStudentIds = {};
+  var evalSrc = appState.dueProcessData && appState.dueProcessData.evalSummary
+    ? appState.dueProcessData.evalSummary.activeEvals
+    : (appState.evalSummary ? appState.evalSummary.activeEvals : []);
+  (evalSrc || []).forEach(function(ev) {
+    activeEvalStudentIds[ev.studentId] = getEvalTypeLabel(ev.type);
+  });
+
+  var hasStudents = appState.dashboardData && appState.dashboardData.length > 0;
+
+  var bodyHtml;
+  if (!hasStudents) {
+    bodyHtml = '<div class="ccm-body"><div class="ccm-loading">Loading students&#x2026;</div></div>';
+  } else {
+    bodyHtml = buildCreateChecklistModalBody_(activeEvalStudentIds);
+  }
+
+  var overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+  overlay.id = 'ccm-overlay';
+  overlay.innerHTML =
+    '<div class="confirm-dialog" style="max-width:480px;">' +
+      '<h3>Create Checklist</h3>' +
+      '<div id="ccm-body-container">' + bodyHtml + '</div>' +
+      '<div class="confirm-actions">' +
+        '<button class="btn btn-outlined" onclick="closeConfirmDialog(this.closest(\'.confirm-overlay\'))">Cancel</button>' +
+        '<button class="btn" id="ccm-create-btn" disabled onclick="handleCreateChecklistModalSubmit()">Create</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+
+  if (!hasStudents) {
+    google.script.run
+      .withSuccessHandler(function(data) {
+        appState.dashboardData = data || [];
+        _lastDashboardFetch = Date.now();
+        var container = document.getElementById('ccm-body-container');
+        if (!container) return;
+        container.innerHTML = buildCreateChecklistModalBody_(activeEvalStudentIds);
+        var input = document.getElementById('ccm-search');
+        if (input) input.focus();
+      })
+      .withFailureHandler(function() {
+        var container = document.getElementById('ccm-body-container');
+        if (!container) return;
+        container.innerHTML = '<div class="ccm-body"><p style="color:var(--md-error);">Failed to load students.</p></div>';
+      })
+      .getDashboardData();
+  } else {
+    setTimeout(function() {
+      var input = document.getElementById('ccm-search');
+      if (input) input.focus();
+    }, 50);
+  }
+}
+
+function buildCreateChecklistModalBody_(activeEvalStudentIds) {
+  _ccmSelectedStudentId = null;
+  _ccmSelectedType = null;
+  _ccmActiveEvalStudentIds = activeEvalStudentIds;
+
+  var html = '<div class="ccm-body">';
+
+  html += '<div class="ccm-search-wrap">' +
+    '<svg class="ccm-search-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>' +
+    '<input type="text" id="ccm-search" class="ccm-search-input" placeholder="Search for a student&#x2026;" oninput="filterCCMStudents(this.value)" autocomplete="off">' +
+  '</div>';
+
+  html += '<div id="ccm-student-list" class="ccm-student-list" role="listbox" aria-label="Students">';
+  html += buildCCMStudentListHtml_('');
+  html += '</div>';
+
+  html += '<div class="ccm-type-selector">' +
+    '<span class="ccm-type-label">Checklist type</span>' +
+    '<div class="ccm-type-chips">';
+  EVAL_TYPES.forEach(function(et) {
+    html += '<button class="ccm-type-chip" data-type="' + esc(et.value) + '" ' +
+      'onclick="selectCCMType(this, \'' + esc(et.value) + '\')" ' +
+      'aria-pressed="false">' + esc(et.label) + '</button>';
+  });
+  html += '</div></div>';
+
+  html += '<div id="ccm-summary" class="ccm-selected-summary"></div>';
+  html += '</div>';
+  return html;
+}
+
+function buildCCMStudentListHtml_(query) {
+  var students = (appState.dashboardData || []).slice();
+  students.sort(function(a, b) {
+    var cmp = (a.lastName || '').localeCompare(b.lastName || '');
+    return cmp !== 0 ? cmp : (a.firstName || '').localeCompare(b.firstName || '');
+  });
+
+  if (query) {
+    var q = query.toLowerCase();
+    students = students.filter(function(s) {
+      var full = ((s.firstName || '') + ' ' + (s.lastName || '')).toLowerCase();
+      return full.indexOf(q) !== -1;
+    });
+  }
+
+  if (students.length === 0) {
+    return '<div class="ccm-no-results">No students found</div>';
+  }
+
+  var html = '';
+  students.forEach(function(s) {
+    var hasEval = _ccmActiveEvalStudentIds[s.id];
+    var evalClass = hasEval ? ' ccm-student-has-eval' : '';
+    var selectedClass = (s.id === _ccmSelectedStudentId) ? ' ccm-student-selected' : '';
+    var onclick = hasEval ? '' : ' onclick="selectCCMStudent(\'' + esc(s.id) + '\')"';
+    var ariaDisabled = hasEval ? ' aria-disabled="true"' : '';
+
+    html += '<div class="ccm-student-item' + evalClass + selectedClass + '"' +
+      onclick + ariaDisabled +
+      ' role="option" aria-selected="' + (s.id === _ccmSelectedStudentId ? 'true' : 'false') + '"' +
+      (hasEval ? '' : ' tabindex="0" onkeydown="if(event.key===\'Enter\')selectCCMStudent(\'' + esc(s.id) + '\')"') +
+      '>' +
+      '<span class="ccm-student-name">' + esc(s.lastName) + ', ' + esc(s.firstName) + '</span>' +
+      (s.grade ? '<span class="ccm-student-grade">Gr. ' + esc(String(s.grade)) + '</span>' : '') +
+      (hasEval ? '<span class="ccm-student-eval-badge">' + esc(hasEval) + '</span>' : '') +
+    '</div>';
+  });
+  return html;
+}
+
+function filterCCMStudents(query) {
+  if (_ccmSearchTimer) clearTimeout(_ccmSearchTimer);
+  _ccmSearchTimer = setTimeout(function() {
+    var listEl = document.getElementById('ccm-student-list');
+    if (!listEl) return;
+    listEl.innerHTML = buildCCMStudentListHtml_(query.trim());
+  }, 150);
+}
+
+function selectCCMStudent(studentId) {
+  _ccmSelectedStudentId = studentId;
+  var searchEl = document.getElementById('ccm-search');
+  var query = searchEl ? searchEl.value.trim() : '';
+  var listEl = document.getElementById('ccm-student-list');
+  if (listEl) listEl.innerHTML = buildCCMStudentListHtml_(query);
+  updateCCMSummaryAndButton_();
+}
+
+function selectCCMType(chipEl, type) {
+  _ccmSelectedType = type;
+  var chips = chipEl.parentElement.querySelectorAll('.ccm-type-chip');
+  chips.forEach(function(c) {
+    c.classList.remove('ccm-type-selected');
+    c.setAttribute('aria-pressed', 'false');
+  });
+  chipEl.classList.add('ccm-type-selected');
+  chipEl.setAttribute('aria-pressed', 'true');
+  updateCCMSummaryAndButton_();
+}
+
+function updateCCMSummaryAndButton_() {
+  var createBtn = document.getElementById('ccm-create-btn');
+  var summaryEl = document.getElementById('ccm-summary');
+  var ready = _ccmSelectedStudentId && _ccmSelectedType;
+
+  if (createBtn) createBtn.disabled = !ready;
+
+  if (summaryEl) {
+    if (ready) {
+      var student = getStudentById(_ccmSelectedStudentId);
+      var name = student ? (student.firstName + ' ' + student.lastName) : 'Student';
+      var typeLabel = getEvalTypeLabel(_ccmSelectedType);
+      summaryEl.textContent = name + ' \u2014 ' + typeLabel;
+    } else {
+      summaryEl.textContent = '';
+    }
+  }
+}
+
+function handleCreateChecklistModalSubmit() {
+  if (!_ccmSelectedStudentId || !_ccmSelectedType) return;
+
+  var overlay = document.getElementById('ccm-overlay');
+  if (overlay) closeConfirmDialog(overlay);
+
+  doCreateEvalChecklist(_ccmSelectedStudentId, _ccmSelectedType);
 }
 
 function renderDueProcess(data) {
@@ -9307,7 +9499,7 @@ function createRipple(target, clientX, clientY) {
   ripple.addEventListener('animationend', function() { ripple.remove(); });
 }
 document.addEventListener('click', function(e) {
-  var btn = e.target.closest('.btn, .btn-icon, .btn-ghost, .action-btn, .rating-btn, .nav-drawer-item, .header-search-result-item');
+  var btn = e.target.closest('.btn, .btn-icon, .btn-ghost, .action-btn, .rating-btn, .nav-drawer-item, .header-search-result-item, .dp-fab, .ccm-type-chip');
   if (btn) createRipple(btn, e.clientX, e.clientY);
 });
 </script>

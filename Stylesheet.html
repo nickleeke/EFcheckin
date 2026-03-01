@@ -3018,7 +3018,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
 }
 
 /* ─── Button Ripple Effect ─── */
-.btn, .btn-icon, .btn-ghost, .btn-outlined, .action-btn, .rating-btn, .nav-drawer-item, .goal-met-btn, .eval-filter-chip, .eval-nav-btn, .dp-cal-day, .header-search-result-item, .dp-progress-checkbox-row, .dp-progress-flat-card {
+.btn, .btn-icon, .btn-ghost, .btn-outlined, .action-btn, .rating-btn, .nav-drawer-item, .goal-met-btn, .eval-filter-chip, .eval-nav-btn, .dp-cal-day, .header-search-result-item, .dp-progress-checkbox-row, .dp-progress-flat-card, .dp-fab, .ccm-type-chip {
   position: relative;
   overflow: hidden;
 }
@@ -5278,6 +5278,190 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   outline: none;
 }
 
+/* ─── Due Process FAB ─── */
+.dp-fab {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--md-shape-lg);
+  border: none;
+  background: var(--md-primary-container);
+  color: var(--md-on-primary-container);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--md-elevation-3);
+  z-index: 10;
+  transition: box-shadow var(--md-duration-short3) var(--md-easing-standard),
+              filter var(--md-duration-short3) var(--md-easing-standard);
+  -webkit-appearance: none;
+  appearance: none;
+}
+.dp-fab:hover {
+  filter: brightness(0.95);
+}
+.dp-fab:active {
+  box-shadow: var(--md-elevation-1);
+}
+
+/* ─── Create Checklist Modal ─── */
+.ccm-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.ccm-search-wrap {
+  position: relative;
+}
+.ccm-search-input {
+  width: 100%;
+  box-sizing: border-box;
+  height: 48px;
+  padding: 0 16px 0 44px;
+  border: 1px solid var(--md-outline);
+  border-radius: var(--md-shape-sm);
+  font-family: 'Roboto', sans-serif;
+  font-size: 16px;
+  color: var(--md-on-surface);
+  background: var(--md-surface-container-lowest);
+  outline: none;
+  transition: border-color var(--md-duration-short3) var(--md-easing-standard);
+}
+.ccm-search-input:focus {
+  border-color: var(--md-primary);
+  border-width: 2px;
+  padding-left: 43px;
+}
+.ccm-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--md-on-surface-variant);
+  pointer-events: none;
+}
+.ccm-student-list {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: var(--md-shape-sm);
+  background: var(--md-surface-container-lowest);
+}
+.ccm-student-list:empty {
+  display: none;
+}
+.ccm-student-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  cursor: pointer;
+  border: none;
+  background: none;
+  width: 100%;
+  font-family: 'Roboto', sans-serif;
+  font-size: 14px;
+  color: var(--md-on-surface);
+  text-align: left;
+  transition: background var(--md-duration-short3) var(--md-easing-standard);
+}
+.ccm-student-item:hover {
+  background: var(--md-surface-container);
+}
+.ccm-student-item.ccm-student-selected {
+  background: var(--md-primary-container);
+  color: var(--md-on-primary-container);
+}
+.ccm-student-item.ccm-student-selected:hover {
+  background: var(--md-primary-container);
+}
+.ccm-student-item.ccm-student-has-eval {
+  opacity: 0.5;
+  cursor: default;
+  pointer-events: none;
+}
+.ccm-student-name {
+  flex: 1;
+}
+.ccm-student-grade {
+  font-size: 12px;
+  color: var(--md-on-surface-variant);
+}
+.ccm-student-eval-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: var(--md-shape-full);
+  background: var(--md-surface-container-high);
+  color: var(--md-on-surface-variant);
+  white-space: nowrap;
+}
+.ccm-no-results {
+  padding: 16px;
+  text-align: center;
+  color: var(--md-on-surface-variant);
+  font-size: 14px;
+}
+.ccm-loading {
+  padding: 24px;
+  text-align: center;
+  color: var(--md-on-surface-variant);
+  font-size: 14px;
+}
+.ccm-type-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ccm-type-label {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  color: var(--md-on-surface-variant);
+  margin-bottom: 4px;
+}
+.ccm-type-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ccm-type-chip {
+  height: 32px;
+  padding: 0 16px;
+  border-radius: var(--md-shape-full);
+  border: 1px solid var(--md-outline);
+  background: none;
+  color: var(--md-on-surface);
+  font-family: 'Roboto', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  transition: background var(--md-duration-short3) var(--md-easing-standard),
+              border-color var(--md-duration-short3) var(--md-easing-standard);
+  -webkit-appearance: none;
+  appearance: none;
+}
+.ccm-type-chip:hover {
+  background: var(--md-surface-container);
+}
+.ccm-type-chip.ccm-type-selected {
+  background: var(--md-secondary-container);
+  color: var(--md-on-secondary-container);
+  border-color: transparent;
+}
+.ccm-type-chip.ccm-type-selected:hover {
+  background: var(--md-secondary-container);
+}
+.ccm-selected-summary {
+  font-size: 13px;
+  color: var(--md-on-surface-variant);
+  min-height: 20px;
+}
+
 /* ─── Eval Checklist: Profile Task List ─── */
 .eval-card-tasks {
   list-style: none;
@@ -6791,6 +6975,7 @@ main { max-width: 1200px; margin: 0 auto; padding: 24px; }
   .dp-section-header-row { flex-direction: column; align-items: flex-start; }
   .dp-progress-flat-card { flex-wrap: wrap; }
   .dp-upcoming-date { min-width: 70px; font-size: 11px; }
+  .dp-fab { bottom: 16px; right: 16px; }
   .dp-upcoming-row { padding: 8px 12px; gap: 8px; }
   /* Swap staleness text to compact MM/DD in narrow viewports */
   .staleness-relative { display: none; }
