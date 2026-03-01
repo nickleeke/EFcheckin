@@ -2377,7 +2377,7 @@ function buildDPCalendarDays_(data) {
   var meetings = data.meetings || [];
   var evalSummary = data.evalSummary || {};
   var timeline = evalSummary.timeline || [];
-  var numWeeks = appState.dueProcessCalendarWeeks;
+  var numWeeks = 4; // Always generate 4 weeks; CSS controls visibility
 
   var now = new Date();
   var today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
