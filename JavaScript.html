@@ -1952,24 +1952,70 @@ function refreshDueProcess() {
 }
 
 function buildDueProcessSkeleton_() {
-  // Summary stats row skeleton
-  return '<div class="dp-section"><div class="dp-summary-row">' +
-    '<div class="skeleton" style="height:80px;border-radius:12px;"></div>' +
-    '<div class="skeleton" style="height:80px;border-radius:12px;"></div>' +
-    '<div class="skeleton" style="height:80px;border-radius:12px;"></div>' +
-    '<div class="skeleton" style="height:80px;border-radius:12px;"></div></div></div>' +
-    // Evals carousel skeleton
-    '<div class="dp-section"><div class="skeleton skeleton-title" style="width:180px;margin-bottom:12px;"></div>' +
-    '<div style="display:flex;gap:12px;">' +
-    '<div class="skeleton" style="width:200px;height:100px;border-radius:12px;"></div>' +
-    '<div class="skeleton" style="width:200px;height:100px;border-radius:12px;"></div>' +
-    '<div class="skeleton" style="width:200px;height:100px;border-radius:12px;"></div></div></div>' +
-    // Calendar skeleton
-    '<div class="dp-section"><div class="skeleton skeleton-title" style="width:140px;margin-bottom:12px;"></div>' +
-    '<div class="skeleton" style="width:100%;height:80px;border-radius:12px;"></div></div>' +
-    // Progress reports skeleton
-    '<div class="dp-section"><div class="skeleton skeleton-title" style="width:160px;margin-bottom:12px;"></div>' +
-    '<div class="skeleton" style="width:100%;height:120px;border-radius:12px;"></div></div>';
+  // 1. Summary stats row — 4 metric cards
+  var html = '<div class="dp-section"><div class="dp-summary-row">';
+  for (var i = 0; i < 4; i++) {
+    html += '<div class="eval-metric-card-wrapper">' +
+      '<div class="skeleton-card" style="display:flex;align-items:center;gap:12px;padding:16px;margin-bottom:0;">' +
+        '<div class="skeleton" style="width:48px;height:48px;border-radius:var(--md-shape-md);flex-shrink:0;"></div>' +
+        '<div style="flex:1;">' +
+          '<div class="skeleton skeleton-text w-50" style="margin-bottom:6px;"></div>' +
+          '<div class="skeleton" style="width:40px;height:24px;border-radius:var(--md-shape-xs);"></div>' +
+        '</div>' +
+      '</div></div>';
+  }
+  html += '</div></div>';
+
+  // 2. Evaluations in Progress — section title + 3 carousel cards
+  html += '<div class="dp-section">' +
+    '<div class="skeleton skeleton-heading" style="width:200px;"></div>' +
+    '<div style="display:flex;gap:12px;overflow:hidden;">';
+  for (var j = 0; j < 3; j++) {
+    html += '<div class="skeleton-card" style="min-width:200px;flex-shrink:0;margin-bottom:0;">' +
+      '<div class="skeleton skeleton-text w-75" style="margin-bottom:8px;"></div>' +
+      '<div class="skeleton skeleton-text w-50" style="margin-bottom:8px;"></div>' +
+      '<div class="skeleton" style="width:100%;height:6px;border-radius:var(--md-shape-full);"></div>' +
+    '</div>';
+  }
+  html += '</div></div>';
+
+  // 3. At a Glance — section title + 5 calendar day buttons
+  html += '<div class="dp-section">' +
+    '<div class="skeleton skeleton-heading" style="width:130px;"></div>' +
+    '<div style="display:flex;gap:8px;">';
+  for (var k = 0; k < 5; k++) {
+    html += '<div class="skeleton" style="flex:1;height:72px;border-radius:var(--md-shape-md);"></div>';
+  }
+  html += '</div></div>';
+
+  // 4. Progress Reports — header row with quarter buttons + progress bar + 2 student cards
+  html += '<div class="dp-section">' +
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">' +
+      '<div class="skeleton skeleton-heading" style="width:160px;margin-bottom:0;"></div>' +
+      '<div style="display:flex;gap:6px;margin-left:auto;">';
+  for (var q = 0; q < 4; q++) {
+    html += '<div class="skeleton skeleton-btn" style="width:40px;"></div>';
+  }
+  html += '</div></div>' +
+    '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">' +
+      '<div class="skeleton skeleton-text w-25" style="margin-bottom:0;"></div>' +
+      '<div class="skeleton" style="flex:1;height:8px;border-radius:var(--md-shape-full);"></div>' +
+    '</div>' +
+    '<div style="display:flex;gap:8px;margin-bottom:16px;">';
+  for (var f = 0; f < 3; f++) {
+    html += '<div class="skeleton skeleton-chip"></div>';
+  }
+  html += '</div>';
+  for (var s = 0; s < 2; s++) {
+    html += '<div class="skeleton-card">' +
+      '<div class="skeleton skeleton-text w-40" style="margin-bottom:10px;"></div>' +
+      '<div class="skeleton skeleton-text w-75"></div>' +
+      '<div class="skeleton skeleton-text w-50"></div>' +
+    '</div>';
+  }
+  html += '</div>';
+
+  return html;
 }
 
 function renderDueProcess(data) {
